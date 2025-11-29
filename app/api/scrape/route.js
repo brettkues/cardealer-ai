@@ -12,15 +12,22 @@ export async function POST(request) {
 
     const res = await fetch(url);
     const html = await res.text();
-
     const $ = cheerio.load(html);
 
     const images = [];
 
     $("img").each((i, el) => {
       const src = $(el).attr("src");
-      if (src && images.length < 20) {
-        images.push(src);
+
+      // Only include true vehicle images
+      if (src && src.includes("inventoryphotos")) {
+        // Fix relative paths if needed
+        if (src.startsWith("http")) {
+          images.push(src);
+        } else {
+          const base = new URL(url).origin;
+          images.push(base + src);
+        }
       }
     });
 
