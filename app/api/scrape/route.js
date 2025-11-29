@@ -10,13 +10,11 @@ export async function POST(request) {
       });
     }
 
-    // Fetch the HTML
     const res = await fetch(url);
     const html = await res.text();
 
     const $ = cheerio.load(html);
 
-    // Find all image URLs
     const images = [];
 
     $("img").each((i, el) => {
