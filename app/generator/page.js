@@ -17,6 +17,7 @@ export default function GeneratorPage() {
       });
 
       const data = await res.json();
+console.log("API Response:", data);
 
       if (data.images) {
         setImages(data.images);
