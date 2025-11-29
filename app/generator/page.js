@@ -50,11 +50,23 @@ console.log("API Response:", data);
         {loading ? "Fetching..." : "Fetch Images"}
       </button>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
-        {images.map((src, i) => (
-          <img key={i} src={src} className="w-full h-auto border" />
-        ))}
+     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
+  {images.map((src, i) => {
+    const isSelected = selected.includes(src);
+    return (
+      <div
+        key={i}
+        onClick={() => toggleSelect(src)}
+        className={`cursor-pointer border-4 ${
+          isSelected ? "border-blue-600" : "border-transparent"
+        }`}
+      >
+        <img src={src} className="w-full h-auto" />
       </div>
+    );
+  })}
+</div>
+
     </div>
   );
 }
