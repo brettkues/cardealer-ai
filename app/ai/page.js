@@ -1,102 +1,171 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { auth } from "@/app/firebase";
 import { watchSubscription } from "@/app/utils/checkSubscription";
-import { auth, db } from "@/app/firebase";
-import { signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
-export default function AIPage() {
+export default function AIChatPage() {
   const router = useRouter();
-  const [sub, setSub] = useState(null);
+
+  const [subReady, setSubReady] = useState(false);
+  const [uid, setUid] = useState(null);
+
+  const [messages, setMessages] = useState([
+    {
+      role: "assistant",
+      content:
+        "Welcome back! I'm the Dealer AI Assistant. Ask me anything—advertising rules, disclosures, social media posts, inventory insights, or anything about your dealership operations.",
+    },
+  ]);
+
   const [input, setInput] = useState("");
-  const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // -------------------------
-  // SUBSCRIPTION ENFORCEMENT
-  // -------------------------
+  const chatEndRef = useRef(null);
+
+  // Auto-scroll handler
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+  };
+
+  useEffect(scrollToBottom, [messages]);
+
+  // -------------------------------------
+  // LOGIN + SUBSCRIPTION ENFORCEMENT
+  // -------------------------------------
   useEffect(() => {
     const unsub = watchSubscription((status) => {
-      if (!status.loggedIn) {
-        router.push("/login");
-        return;
-      }
+      if (!status.loggedIn) return router.push("/login");
+      if (!status.active) return router.push("/subscribe");
 
-      if (!status.active) {
-        router.push("/subscribe");
-        return;
-      }
-
-      setSub(status);
+      setUid(status.uid);
+      setSubReady(true);
     });
 
     return () => unsub();
-  }, [router]);
+  }, []);
 
-  if (!sub) {
+  if (!subReady) {
     return (
-      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
-        Checking subscription…
+      <div className="h-screen bg-gray-900 text-white flex items-center justify-center">
+        Checking account…
       </div>
     );
   }
 
-  // -------------------------
-  // DUMMY AI HANDLER (Replace later)
-  // -------------------------
-  const handleSend = async () => {
+  // -------------------------------------
+  // SEND MESSAGE → API
+  // -------------------------------------
+  const sendMessage = async () => {
     if (!input.trim()) return;
+
+    const userMessage = input.trim();
+
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setInput("");
+    scrollToBottom();
     setLoading(true);
 
-    // Placeholder response
-    setTimeout(() => {
-      setResponse("AI response coming soon…");
-      setLoading(false);
-    }, 800);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          userMessage,
+          uid,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "There was an error generating the response. Try again or rephrase your question.",
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: data.answer },
+        ]);
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Network error. Unable to reach the AI server. Please try again.",
+        },
+      ]);
+    }
+
+    setLoading(false);
+    scrollToBottom();
   };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* Header */}
-      <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Dealer AI Assistant</h1>
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !loading) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
 
-        <button
-          onClick={() => signOut(auth)}
-          className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
-        >
-          Sign Out
-        </button>
+  // -------------------------------------
+  // UI
+  // -------------------------------------
+  return (
+    <div className="flex flex-col h-screen bg-gray-900 text-white">
+      {/* HEADER */}
+      <div className="p-5 text-3xl font-bold bg-gray-800 border-b border-gray-700">
+        Dealer AI Assistant
       </div>
 
-      {/* AI Content */}
-      <div className="flex-1 p-6">
-        <div className="max-w-3xl mx-auto">
-          <p className="text-gray-300 mb-4">
-            Ask dealership questions, sales strategy, advertising rules, inventory analysis, scripts, anything.
-          </p>
+      {/* CHAT WINDOW */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 
-          <textarea
-            className="w-full h-40 p-4 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
-            placeholder="Ask the AI anything..."
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`max-w-[80%] p-4 rounded-xl ${
+              msg.role === "user"
+                ? "ml-auto bg-blue-600 text-white"
+                : "mr-auto bg-gray-800 border border-gray-700 text-gray-200"
+            }`}
+          >
+            {msg.content}
+          </div>
+        ))}
+
+        <div ref={chatEndRef}></div>
+      </div>
+
+      {/* INPUT AREA */}
+      <div className="p-5 bg-gray-800 border-t border-gray-700">
+        <div className="flex space-x-3">
+          <input
+            type="text"
+            className="flex-1 p-4 rounded-xl bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Ask your dealership AI anything..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
           />
 
           <button
-            onClick={handleSend}
+            onClick={sendMessage}
             disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold mb-6"
+            className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
           >
-            {loading ? "Thinking…" : "Ask AI"}
+            {loading ? "Thinking…" : "Send"}
           </button>
-
-          {response && (
-            <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
-              {response}
-            </div>
-          )}
         </div>
       </div>
     </div>
