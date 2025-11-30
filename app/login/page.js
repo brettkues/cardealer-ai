@@ -1,0 +1,165 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { auth, db } from "@/app/firebase";
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Check subscription or role
+        const ref = doc(db, "users", user.uid);
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          const data = snap.data();
+
+          if (data.role === "admin" || data.subscriptionActive) {
+            router.push("/dashboard");
+          } else {
+            router.push("/subscribe");
+          }
+        } else {
+          // If user exists but no Firestore record, create default
+          await setDoc(ref, {
+            email: user.email,
+            role: "user",
+            subscriptionActive: false,
+            subscriptionSource: null,
+            trialEnds: null,
+          });
+          router.push("/subscribe");
+        }
+      }
+    });
+    return () => unsub();
+  }, [router]);
+
+  const loginEmailPassword = async () => {
+    setErr("");
+    setLoading(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      setErr(error.message);
+    }
+
+    setLoading(false);
+  };
+
+  const loginGoogle = async () => {
+    setErr("");
+    setLoading(true);
+
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+
+      const user = result.user;
+      const ref = doc(db, "users", user.uid);
+      const snap = await getDoc(ref);
+
+      // Create Firestore record on first login
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          email: user.email,
+          role: "user",
+          subscriptionActive: false,
+          subscriptionSource: null,
+          trialEnds: null,
+        });
+      }
+    } catch (error) {
+      setErr(error.message);
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-6">
+      <div className="bg-gray-800 p-10 rounded-2xl w-full max-w-md shadow-xl border border-gray-700">
+        <h1 className="text-3xl font-bold text-white text-center mb-6">
+          Welcome Back
+        </h1>
+
+        {err && (
+          <div className="bg-red-600 text-white p-3 rounded mb-4 text-center">
+            {err}
+          </div>
+        )}
+
+        {/* Email Input */}
+        <input
+          type="email"
+          placeholder="Email"
+          className="w-full p-3 mb-4 bg-gray-700 text-white rounded"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+
+        {/* Password Input */}
+        <input
+          type="password"
+          placeholder="Password"
+          className="w-full p-3 mb-6 bg-gray-700 text-white rounded"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        {/* Login Button */}
+        <button
+          onClick={loginEmailPassword}
+          disabled={loading}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg mb-4"
+        >
+          {loading ? "Signing in..." : "Sign In"}
+        </button>
+
+        {/* Google Login */}
+        <button
+          onClick={loginGoogle}
+          disabled={loading}
+          className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg"
+        >
+          {loading ? "Please wait..." : "Continue with Google"}
+        </button>
+
+        {/* Links */}
+        <div className="text-center mt-6 text-gray-400">
+          <p
+            className="underline cursor-pointer"
+            onClick={() => router.push("/reset")}
+          >
+            Forgot password?
+          </p>
+          <p className="mt-2">
+            New user?{" "}
+            <span
+              className="underline cursor-pointer"
+              onClick={() => router.push("/register")}
+            >
+              Create an account
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
