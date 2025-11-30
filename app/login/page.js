@@ -1,163 +1,84 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { auth, db } from "@/app/firebase";
-import {
-  signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged,
-} from "firebase/auth";
+import { useState } from "react";
+import { auth } from "@/app/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Check subscription or role
-        const ref = doc(db, "users", user.uid);
-        const snap = await getDoc(ref);
-
-        if (snap.exists()) {
-          const data = snap.data();
-
-          if (data.role === "admin" || data.subscriptionActive) {
-            router.push("/dashboard");
-          } else {
-            router.push("/subscribe");
-          }
-        } else {
-          // If user exists but no Firestore record, create default
-          await setDoc(ref, {
-            email: user.email,
-            role: "user",
-            subscriptionActive: false,
-            subscriptionSource: null,
-            trialEnds: null,
-          });
-          router.push("/subscribe");
-        }
-      }
-    });
-    return () => unsub();
-  }, [router]);
-
-  const loginEmailPassword = async () => {
-    setErr("");
+  const handleLogin = async () => {
+    setError("");
     setLoading(true);
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      setErr(error.message);
+      router.push("/ai"); // AI home page
+    } catch (err) {
+      setError(err.message || "Login failed. Check your credentials.");
     }
 
     setLoading(false);
   };
 
-  const loginGoogle = async () => {
-    setErr("");
-    setLoading(true);
-
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-
-      const user = result.user;
-      const ref = doc(db, "users", user.uid);
-      const snap = await getDoc(ref);
-
-      // Create Firestore record on first login
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          email: user.email,
-          role: "user",
-          subscriptionActive: false,
-          subscriptionSource: null,
-          trialEnds: null,
-        });
-      }
-    } catch (error) {
-      setErr(error.message);
-    }
-
-    setLoading(false);
+  const handleKey = (e) => {
+    if (e.key === "Enter") handleLogin();
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-6">
-      <div className="bg-gray-800 p-10 rounded-2xl w-full max-w-md shadow-xl border border-gray-700">
-        <h1 className="text-3xl font-bold text-white text-center mb-6">
-          Welcome Back
-        </h1>
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-6">
+      <div className="bg-gray-800 p-10 rounded-2xl w-full max-w-md border border-gray-700">
 
-        {err && (
-          <div className="bg-red-600 text-white p-3 rounded mb-4 text-center">
-            {err}
+        <h1 className="text-3xl font-bold mb-6">Login</h1>
+
+        {/* Email */}
+        <label className="block mb-2">Email</label>
+        <input
+          type="email"
+          className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 mb-4"
+          placeholder="you@dealership.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={handleKey}
+        />
+
+        {/* Password */}
+        <label className="block mb-2">Password</label>
+        <input
+          type="password"
+          className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 mb-4"
+          placeholder="********"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={handleKey}
+        />
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-600 text-white p-3 rounded-lg mt-2 mb-4 text-sm">
+            {error}
           </div>
         )}
 
-        {/* Email Input */}
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full p-3 mb-4 bg-gray-700 text-white rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        {/* Password Input */}
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full p-3 mb-6 bg-gray-700 text-white rounded"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {/* Login Button */}
         <button
-          onClick={loginEmailPassword}
+          onClick={handleLogin}
           disabled={loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg mb-4"
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-lg font-semibold disabled:opacity-50"
         >
-          {loading ? "Signing in..." : "Sign In"}
-        </button>
-
-        {/* Google Login */}
-        <button
-          onClick={loginGoogle}
-          disabled={loading}
-          className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg"
-        >
-          {loading ? "Please wait..." : "Continue with Google"}
+          {loading ? "Logging in…" : "Login"}
         </button>
 
         {/* Links */}
-        <div className="text-center mt-6 text-gray-400">
-          <p
-            className="underline cursor-pointer"
-            onClick={() => router.push("/reset")}
-          >
-            Forgot password?
-          </p>
-          <p className="mt-2">
-            New user?{" "}
-            <span
-              className="underline cursor-pointer"
-              onClick={() => router.push("/register")}
-            >
-              Create an account
-            </span>
-          </p>
+        <div className="flex justify-between text-sm mt-6 text-blue-400">
+          <button onClick={() => router.push("/reset")}>Forgot Password?</button>
+          <button onClick={() => router.push("/register")}>Create Account</button>
         </div>
       </div>
     </div>
