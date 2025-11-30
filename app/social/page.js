@@ -1,228 +1,225 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth, db, storage } from "../firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ref, getDownloadURL } from "firebase/storage";
+import { useRouter } from "next/navigation";
+import { watchSubscription } from "@/app/utils/checkSubscription";
+import { auth } from "@/app/firebase";
+import { signOut } from "firebase/auth";
 
-export default function SocialGenerator() {
-  const [uid, setUid] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default function SocialPage() {
+  const router = useRouter();
+  const [sub, setSub] = useState(null);
 
-  // Dealer data
-  const [dealer, setDealer] = useState(null);
-  const [websites, setWebsites] = useState([]);
-  const [selectedWebsite, setSelectedWebsite] = useState("");
+  const [url, setUrl] = useState("");
+  const [images, setImages] = useState([]);
+  const [desc, setDesc] = useState("");
+  const [logo, setLogo] = useState(null);
+  const [generated, setGenerated] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Inputs
-  const [vehicleUrl, setVehicleUrl] = useState("");
-  const [description, setDescription] = useState("");
-  const [seasonalRibbon, setSeasonalRibbon] = useState("");
-  const [generatedImage, setGeneratedImage] = useState(null);
-
-  // ========== AUTH ==========
+  // -----------------------------
+  // SUBSCRIPTION ENFORCEMENT
+  // -----------------------------
   useEffect(() => {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUid(user.uid);
-        await loadDealerData(user.uid);
+    const unsub = watchSubscription((status) => {
+      if (!status.loggedIn) {
+        router.push("/login");
+        return;
       }
-      setLoading(false);
-    });
-  }, []);
 
-  // ========== LOAD DEALER SETTINGS ==========
-  async function loadDealerData(uid) {
-    const dealerRef = doc(db, "users", uid, "settings", "dealer");
-    const snap = await getDoc(dealerRef);
+      if (!status.active) {
+        router.push("/subscribe");
+        return;
+      }
 
-    if (snap.exists()) {
-      const data = snap.data();
-      setDealer(data);
-      setWebsites(data.websites || []);
-    }
-  }
-
-  // ========== SCRAPE IMAGES ==========
-  async function scrapeImages() {
-    const res = await fetch("/api/scrape", {
-      method: "POST",
-      body: JSON.stringify({ url: vehicleUrl }),
+      setSub(status);
     });
 
-    const data = await res.json();
-    return data.images || [];
-  }
+    return () => unsub();
+  }, [router]);
 
-  // ========== DETERMINE SEASON / HOLIDAY ==========
-  function determineSeasonOrHoliday() {
-    const now = new Date();
-    const month = now.getMonth() + 1;
-    const day = now.getDate();
-
-    // Holiday detection (±10 days)
-    const holidays = [
-      { name: "christmas", month: 12, day: 25 },
-      { name: "newyear", month: 1, day: 1 },
-      { name: "4thofjuly", month: 7, day: 4 },
-      { name: "thanksgiving", month: 11, day: 25 },
-      { name: "memorial", month: 5, day: 27 },
-      { name: "labor", month: 9, day: 2 },
-    ];
-
-    for (const h of holidays) {
-      const holidayDate = new Date(now.getFullYear(), h.month - 1, h.day);
-      const diff = Math.abs((now - holidayDate) / (1000 * 60 * 60 * 24));
-      if (diff <= 10) return h.name;
-    }
-
-    // Seasonal fallback
-    if (month === 12 || month <= 2) return "winter";
-    if (month >= 3 && month <= 5) return "spring";
-    if (month >= 6 && month <= 8) return "summer";
-    return "fall";
-  }
-
-  // ========== DETECT YMM FROM TITLE ==========
-  function extractYMM(vehicleUrl) {
-    const parts = vehicleUrl.split("-");
-    const year = parts.find((x) => /^\d{4}$/.test(x)) || "";
-    const make = parts[parts.indexOf(year) + 1] || "";
-    const model = parts[parts.indexOf(year) + 2] || "";
-    return `${year} ${make} ${model}`;
-  }
-
-  // ========== DISCLOSURE GENERATION ==========
-  async function generateDisclosure(text) {
-    const triggers = ["$", "price", "payment", "apr", "finance", "%", "down"];
-
-    const needsDisclosure = triggers.some((t) =>
-      text.toLowerCase().includes(t.toLowerCase())
+  if (!sub) {
+    return (
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+        Checking subscription…
+      </div>
     );
+  }
 
-    if (!needsDisclosure) return "";
+  // -----------------------------
+  // SCRAPE VEHICLE IMAGES
+  // -----------------------------
+  const fetchImages = async () => {
+    setLoading(true);
+    setImages([]);
 
-    // Load WI law PDF pointer
-    const wiPdf = dealer?.laws?.wiAdvertising;
+    try {
+      const res = await fetch("/api/scrape", {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      });
 
-    let lawText = "";
+      const data = await res.json();
 
-    if (wiPdf) {
-      const pdfUrl = wiPdf;
-      const pdfText = await fetch(`/api/readpdf?url=${encodeURIComponent(pdfUrl)}`).then((r) =>
-        r.text()
-      );
-      lawText = pdfText;
-    } else {
-      // Default WI law fallback
-      lawText = `
-        All offers plus tax, title, license & doc fee. 
-        With approved credit. 
-        See dealer for complete details.
-      `;
+      if (data.images) {
+        setImages(data.images.slice(0, 4));
+      }
+    } catch (err) {
+      console.error(err);
     }
 
-    return lawText.trim();
-  }
+    setLoading(false);
+  };
 
-  // ========== GENERATE FULL COLLAGE ==========
-  async function generateImage() {
-    const images = await scrapeImages();
-    if (!images.length) return alert("Could not scrape images.");
+  // -----------------------------
+  // UPLOAD LOGO → BASE64
+  // -----------------------------
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    const season = determineSeasonOrHoliday();
-    setSeasonalRibbon(season);
+    const reader = new FileReader();
+    reader.onloadend = () => setLogo(reader.result);
+    reader.readAsDataURL(file);
+  };
 
-    const ymm = extractYMM(vehicleUrl);
-    const disclosure = await generateDisclosure(description);
+  // -----------------------------
+  // GENERATE COLLAGE
+  // -----------------------------
+  const generateCollage = async () => {
+    if (images.length !== 4) {
+      alert("You must have exactly 4 images selected.");
+      return;
+    }
 
-    const res = await fetch("/api/collage", {
-      method: "POST",
-      body: JSON.stringify({
-        images: images.slice(0, 4),
-        ribbon: season,
-        logo: dealer.logoUrl,
-        description,
-        ymm,
-        disclosure,
-      }),
-    });
+    setLoading(true);
+    setGenerated(null);
 
-    const blob = await res.blob();
-    setGeneratedImage(URL.createObjectURL(blob));
-  }
+    try {
+      const res = await fetch("/api/collage", {
+        method: "POST",
+        body: JSON.stringify({
+          images,
+          description: desc,
+          logo: logo || null,
+          url: url,
+        }),
+      });
 
-  if (loading) return <div className="p-10 text-xl">Loading…</div>;
-  if (!uid) return <div className="p-10 text-xl">Please log in.</div>;
-  if (!dealer) return <div className="p-10 text-xl">Loading dealer settings…</div>;
+      const blob = await res.blob();
+      const urlObj = URL.createObjectURL(blob);
+      setGenerated(urlObj);
+    } catch (err) {
+      console.error(err);
+    }
+
+    setLoading(false);
+  };
 
   return (
-    <div className="p-10 max-w-3xl mx-auto text-xl">
-      <h1 className="text-4xl font-bold mb-8">Social Media Generator</h1>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      {/* HEADER */}
+      <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Social Image Generator</h1>
 
-      {/* VEHICLE URL */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-2">Vehicle URL</h2>
-        <input
-          className="border w-full p-3 rounded"
-          placeholder="Paste ANY vehicle URL"
-          value={vehicleUrl}
-          onChange={(e) => setVehicleUrl(e.target.value)}
-        />
-      </div>
-
-      {/* DESCRIPTION */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-2">Description</h2>
-        <textarea
-          className="border w-full p-3 rounded h-32"
-          placeholder="What do you want this post to say?"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-
-      {/* WEBSITE DROPDOWN */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-2">Select Website</h2>
-        <select
-          className="border p-3 rounded w-full"
-          value={selectedWebsite}
-          onChange={(e) => setSelectedWebsite(e.target.value)}
+        <button
+          onClick={() => signOut(auth)}
+          className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
         >
-          <option value="">Choose website…</option>
-          {websites.map((site, i) => (
-            <option key={i} value={site}>
-              {site}
-            </option>
-          ))}
-        </select>
+          Sign Out
+        </button>
       </div>
 
-      {/* GENERATE BUTTON */}
-      <button
-        onClick={generateImage}
-        className="bg-blue-600 text-white px-6 py-3 rounded text-xl"
-      >
-        Generate Image
-      </button>
+      {/* BODY */}
+      <div className="p-6 max-w-4xl mx-auto w-full">
+        <p className="text-gray-300 mb-6">
+          Enter a vehicle VDP URL to automatically generate a 4-image collage with
+          dealer branding, description, and seasonal ribbon.
+        </p>
 
-      {/* OUTPUT */}
-      {generatedImage && (
-        <div className="mt-10">
-          <h2 className="text-2xl font-bold mb-4">Generated Image</h2>
-          <img src={generatedImage} className="w-full border" />
+        {/* URL Input */}
+        <input
+          type="text"
+          className="w-full p-3 bg-gray-800 border border-gray-700 rounded mb-4"
+          placeholder="Paste vehicle URL here..."
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
 
-          <a
-            href={generatedImage}
-            download="social-image.png"
-            className="block mt-4 bg-green-600 text-white px-4 py-2 rounded text-center"
-          >
-            Download Image
-          </a>
+        <button
+          onClick={fetchImages}
+          disabled={!url || loading}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold mb-6"
+        >
+          {loading ? "Scraping…" : "Fetch Vehicle Images"}
+        </button>
+
+        {/* Show scraped images */}
+        {images.length > 0 && (
+          <>
+            <h2 className="text-xl font-semibold mb-3">Selected Images</h2>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {images.map((img, i) => (
+                <img
+                  key={i}
+                  src={img}
+                  className="rounded border border-gray-700"
+                  alt="Vehicle"
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Description input */}
+        <textarea
+          className="w-full h-32 p-3 bg-gray-800 border border-gray-700 rounded mb-4"
+          placeholder="Write a short description for the ribbon…"
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+        />
+
+        {/* Logo upload */}
+        <div className="mb-6">
+          <label className="block mb-2 text-gray-300 font-semibold">
+            Dealer Logo (optional)
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            className="text-gray-300"
+            onChange={handleLogoUpload}
+          />
         </div>
-      )}
+
+        <button
+          onClick={generateCollage}
+          disabled={loading || images.length !== 4}
+          className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold"
+        >
+          {loading ? "Generating…" : "Generate Collage"}
+        </button>
+
+        {/* Output */}
+        {generated && (
+          <div className="mt-10">
+            <h3 className="text-2xl font-bold mb-4">Generated Collage</h3>
+            <img
+              src={generated}
+              className="w-full border border-gray-700 rounded-lg"
+              alt="Collage Result"
+            />
+
+            <a
+              href={generated}
+              download="collage.png"
+              className="block w-full text-center mt-4 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+            >
+              Download Image
+            </a>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
