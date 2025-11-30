@@ -1,142 +1,103 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { auth } from "@/app/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-
-// Helper for streaming text
-async function streamChat(uid, messages, onChunk) {
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    body: JSON.stringify({ uid, messages }),
-  });
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    onChunk(decoder.decode(value));
-  }
-}
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { watchSubscription } from "@/app/utils/checkSubscription";
+import { auth, db } from "@/app/firebase";
+import { signOut } from "firebase/auth";
 
 export default function AIPage() {
-  const [uid, setUid] = useState(null);
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content:
-        "Alright, I'm online. What do you want to build, fix, or tear apart today?",
-    },
-  ]);
+  const router = useRouter();
+  const [sub, setSub] = useState(null);
   const [input, setInput] = useState("");
+  const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const bottomRef = useRef(null);
-
+  // -------------------------
+  // SUBSCRIPTION ENFORCEMENT
+  // -------------------------
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) setUid(user.uid);
+    const unsub = watchSubscription((status) => {
+      if (!status.loggedIn) {
+        router.push("/login");
+        return;
+      }
+
+      if (!status.active) {
+        router.push("/subscribe");
+        return;
+      }
+
+      setSub(status);
     });
+
     return () => unsub();
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  if (!uid) {
+  if (!sub) {
     return (
-      <div className="p-10 text-center text-xl">
-        <p>You need to log in first.</p>
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+        Checking subscription…
       </div>
     );
   }
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
-
-    const newMessage = {
-      role: "user",
-      content: input,
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
-    setInput("");
+  // -------------------------
+  // DUMMY AI HANDLER (Replace later)
+  // -------------------------
+  const handleSend = async () => {
+    if (!input.trim()) return;
     setLoading(true);
 
-    let streamed = "";
-
-    // Temporary placeholder assistant message
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-    try {
-      await streamChat(
-        uid,
-        [...messages, newMessage],
-        (chunk) => {
-          streamed += chunk;
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1].content = streamed;
-            return updated;
-          });
-        }
-      );
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Something broke. Here's the error: ${err.message}`,
-        },
-      ]);
-    }
-
-    setLoading(false);
+    // Placeholder response
+    setTimeout(() => {
+      setResponse("AI response coming soon…");
+      setLoading(false);
+    }, 800);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-white">
-      {/* HEADER */}
-      <div className="p-4 bg-gray-800 text-2xl font-bold border-b border-gray-700">
-        Dealer AI Portal
-      </div>
-
-      {/* CHAT WINDOW */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`max-w-[80%] p-3 rounded-lg ${
-              msg.role === "assistant"
-                ? "bg-blue-700 self-start"
-                : "bg-gray-700 self-end ml-auto"
-            }`}
-          >
-            {msg.content}
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* INPUT BAR */}
-      <div className="p-4 bg-gray-800 border-t border-gray-700 flex gap-3">
-        <textarea
-          className="flex-1 bg-gray-700 p-2 rounded text-white resize-none h-16"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask something…"
-        />
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      {/* Header */}
+      <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Dealer AI Assistant</h1>
 
         <button
-          onClick={sendMessage}
-          disabled={loading}
-          className="bg-blue-600 hover:bg-blue-500 px-6 h-16 rounded text-lg font-semibold"
+          onClick={() => signOut(auth)}
+          className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
         >
-          {loading ? "…" : "Send"}
+          Sign Out
         </button>
+      </div>
+
+      {/* AI Content */}
+      <div className="flex-1 p-6">
+        <div className="max-w-3xl mx-auto">
+          <p className="text-gray-300 mb-4">
+            Ask dealership questions, sales strategy, advertising rules, inventory analysis, scripts, anything.
+          </p>
+
+          <textarea
+            className="w-full h-40 p-4 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
+            placeholder="Ask the AI anything..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+
+          <button
+            onClick={handleSend}
+            disabled={loading}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold mb-6"
+          >
+            {loading ? "Thinking…" : "Ask AI"}
+          </button>
+
+          {response && (
+            <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+              {response}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
