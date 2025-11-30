@@ -1,237 +1,141 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db, storage } from "../firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-} from "firebase/firestore";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "firebase/storage";
-import { onAuthStateChanged } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { watchSubscription } from "@/app/utils/checkSubscription";
+import { auth } from "@/app/firebase";
+import { signOut } from "firebase/auth";
 
 export default function DashboardPage() {
-  const [uid, setUid] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const [sub, setSub] = useState(null);
 
-  // Dealer data fields
-  const [logoUrl, setLogoUrl] = useState("");
-  const [dealerDescription, setDealerDescription] = useState("");
-  const [websites, setWebsites] = useState([]);
-  const [trainingDocs, setTrainingDocs] = useState([]);
-  const [aiNotes, setAiNotes] = useState("");
-  const [address, setAddress] = useState("");
-
-  // temp website input
-  const [newWebsite, setNewWebsite] = useState("");
-
-  // ========== AUTH WATCHER ==========
+  // ----------------------------------------
+  // SUBSCRIPTION + LOGIN ENFORCEMENT
+  // ----------------------------------------
   useEffect(() => {
-    return onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUid(user.uid);
-        await loadDealerData(user.uid);
+    const unsub = watchSubscription((status) => {
+      if (!status.loggedIn) {
+        router.push("/login");
+        return;
       }
-      setLoading(false);
+
+      if (!status.active) {
+        router.push("/subscribe");
+        return;
+      }
+
+      setSub(status);
     });
-  }, []);
 
-  // ========== LOAD DATA FROM FIRESTORE ==========
-  async function loadDealerData(uid) {
-    const dealerRef = doc(db, "users", uid, "settings", "dealer");
-    const snap = await getDoc(dealerRef);
+    return () => unsub();
+  }, [router]);
 
-    if (snap.exists()) {
-      const data = snap.data();
-      setLogoUrl(data.logoUrl || "");
-      setDealerDescription(data.dealerDescription || "");
-      setWebsites(data.websites || []);
-      setTrainingDocs(data.trainingDocs || []);
-      setAiNotes(data.aiNotes || "");
-      setAddress(data.address || "");
-    }
-  }
-
-  // ========== SAVE DATA TO FIRESTORE ==========
-  async function saveDealerData() {
-    if (!uid) return;
-
-    const dealerRef = doc(db, "users", uid, "settings", "dealer");
-
-    await setDoc(
-      dealerRef,
-      {
-        logoUrl,
-        dealerDescription,
-        websites,
-        trainingDocs,
-        aiNotes,
-        address,
-        updatedAt: new Date(),
-      },
-      { merge: true }
+  // Loading UI while checking subscription
+  if (!sub) {
+    return (
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+        Checking subscription…
+      </div>
     );
-
-    alert("Dealer settings saved!");
   }
 
-  // ========== LOGO UPLOAD ==========
-  async function handleLogoUpload(e) {
-    const file = e.target.files[0];
-    if (!file || !uid) return;
-
-    const storageRef = ref(storage, `dealer/${uid}/logo.png`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    setLogoUrl(url);
+  // Trial Status
+  let trialMessage = null;
+  if (sub.trialEnds) {
+    const now = new Date();
+    const end = new Date(sub.trialEnds);
+    const days = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+    trialMessage = days > 0 ? `${days} days remaining in free trial` : null;
   }
-
-  // ========== TRAINING DOC UPLOAD ==========
-  async function handleTrainingUpload(e) {
-    const file = e.target.files[0];
-    if (!file || !uid) return;
-
-    const storageRef = ref(
-      storage,
-      `dealer/${uid}/training/${file.name}`
-    );
-
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-
-    setTrainingDocs((prev) => [...prev, url]);
-  }
-
-  // ========== WEBSITE MANAGEMENT ==========
-  function addWebsite() {
-    if (!newWebsite.trim()) return;
-    setWebsites((prev) => [...prev, newWebsite.trim()]);
-    setNewWebsite("");
-  }
-
-  function removeWebsite(i) {
-    setWebsites((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  if (loading) return <div className="p-10 text-xl">Loading…</div>;
-  if (!uid) return <div className="p-10 text-xl">Please log in.</div>;
 
   return (
-    <div className="p-10 max-w-3xl mx-auto text-xl">
-      <h1 className="text-4xl font-bold mb-8">Dealer Knowledge Center</h1>
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      {/* HEADER */}
+      <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Dealer Dashboard</h1>
 
-      {/* ========== LOGO UPLOAD SECTION ========== */}
-      <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-2">Dealer Logo</h2>
+        <button
+          onClick={() => signOut(auth)}
+          className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
+        >
+          Sign Out
+        </button>
+      </div>
 
-        {logoUrl && (
-          <img
-            src={logoUrl}
-            alt="Dealer Logo"
-            className="w-48 mb-4 border"
-          />
-        )}
+      {/* BODY */}
+      <div className="p-8 max-w-4xl mx-auto w-full">
+        {/* Subscription Info Box */}
+        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
+          <h2 className="text-2xl font-semibold mb-4">Account Status</h2>
 
-        <input type="file" accept="image/*" onChange={handleLogoUpload} />
-      </section>
+          <p>
+            <span className="font-semibold text-green-400">Status:</span>{" "}
+            {sub.role === "admin"
+              ? "Admin Access"
+              : sub.active
+              ? "Active Subscription"
+              : "Inactive"}
+          </p>
 
-      {/* ========== DEALER DESCRIPTION ========== */}
-      <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-2">Dealer Description</h2>
-        <textarea
-          value={dealerDescription}
-          onChange={(e) => setDealerDescription(e.target.value)}
-          className="border w-full p-3 rounded h-32"
-        />
-      </section>
+          {trialMessage && (
+            <p className="mt-2 text-yellow-300">{trialMessage}</p>
+          )}
 
-      {/* ========== ADDRESS ========== */}
-      <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-2">Physical Address</h2>
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          className="border w-full p-3 rounded"
-          placeholder="123 Main St, La Crosse, WI"
-        />
-      </section>
-
-      {/* ========== WEBSITES ========== */}
-      <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-2">Websites</h2>
-
-        {websites.map((site, i) => (
-          <div key={i} className="flex items-center mb-2">
-            <div className="flex-1">{site}</div>
-            <button
-              onClick={() => removeWebsite(i)}
-              className="text-red-600"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-
-        <div className="flex gap-2 mt-4">
-          <input
-            value={newWebsite}
-            onChange={(e) => setNewWebsite(e.target.value)}
-            className="border p-3 rounded flex-1"
-            placeholder="https://www.example.com"
-          />
-          <button
-            onClick={addWebsite}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Add
-          </button>
+          {sub.subscriptionSource && (
+            <p className="mt-2 text-gray-300">
+              Source: {sub.subscriptionSource}
+            </p>
+          )}
         </div>
-      </section>
 
-      {/* ========== TRAINING DOCS ========== */}
-      <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-2">
-          Training PDFs / Documents
-        </h2>
+        {/* NAVIGATION */}
+        <h2 className="text-2xl font-semibold mb-4">Tools</h2>
 
-        {trainingDocs.length > 0 &&
-          trainingDocs.map((docUrl, i) => (
-            <div key={i} className="mb-2">
-              <a
-                href={docUrl}
-                target="_blank"
-                className="text-blue-600 underline"
-              >
-                {docUrl}
-              </a>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* AI */}
+          <div
+            onClick={() => router.push("/ai")}
+            className="p-6 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl cursor-pointer transition"
+          >
+            <h3 className="text-xl font-bold mb-2">Dealer AI Assistant</h3>
+            <p className="text-gray-300">
+              Get answers, scripts, advertising advice, compliance rules,
+              pricing help, and more.
+            </p>
+          </div>
 
-        <input type="file" accept="application/pdf" onChange={handleTrainingUpload} />
-      </section>
+          {/* SOCIAL GENERATOR */}
+          <div
+            onClick={() => router.push("/social")}
+            className="p-6 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl cursor-pointer transition"
+          >
+            <h3 className="text-xl font-bold mb-2">Social Image Generator</h3>
+            <p className="text-gray-300">
+              Create 4-image collages with seasonal ribbons, your logo, simple
+              disclaimers, and the Year/Make/Model.
+            </p>
+          </div>
 
-      {/* ========== AI NOTES ========== */}
-      <section className="mb-10">
-        <h2 className="text-2xl font-bold mb-2">AI Training Notes</h2>
-        <textarea
-          value={aiNotes}
-          onChange={(e) => setAiNotes(e.target.value)}
-          className="border w-full p-3 rounded h-32"
-          placeholder="Extra knowledge your AI assistant should know..."
-        />
-      </section>
+          {/* FUTURE — TRAINING DASHBOARD */}
+          <div className="p-6 bg-gray-800 border border-gray-700 rounded-xl opacity-40 cursor-not-allowed">
+            <h3 className="text-xl font-bold mb-2">Dealer Training Library</h3>
+            <p className="text-gray-300">
+              Upload PDFs, websites, and documents to train the AI (coming
+              soon).
+            </p>
+          </div>
 
-      {/* ========== SAVE BUTTON ========== */}
-      <button
-        onClick={saveDealerData}
-        className="bg-green-600 text-white px-6 py-3 rounded text-xl"
-      >
-        Save Settings
-      </button>
+          {/* FUTURE — ADVERTISING RULES */}
+          <div className="p-6 bg-gray-800 border border-gray-700 rounded-xl opacity-40 cursor-not-allowed">
+            <h3 className="text-xl font-bold mb-2">Advertising Compliance</h3>
+            <p className="text-gray-300">
+              Manage state-specific advertising laws and generate auto
+              disclosures (coming soon).
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
