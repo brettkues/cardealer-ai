@@ -1,170 +1,171 @@
-import { NextResponse } from "next/server";
-import OpenAI from "openai";
-import { db, storage } from "@/app/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { corsHeaders, handleCors } from "@/app/utils/cors";
+import { db, storage, auth } from "@/app/firebase";
+import { getDocs, collection, query, where, doc, getDoc } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
 
-// PDF text loader utility (calls your readpdf route)
-async function loadPdfText(url) {
-  try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/api/readpdf?url=${encodeURIComponent(
-        url
-      )}`
-    );
-    return await res.text();
-  } catch {
-    return "";
-  }
-}
+// OPENAI — replace with your key stored in env vars if needed
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
-export async function POST(req) {
+export async function POST(request) {
+  // ============================
+  // CORS PREFLIGHT
+  // ============================
+  const preflight = handleCors(request);
+  if (preflight) return preflight;
+
   try {
-    const body = await req.json();
-    const { uid, messages } = body;
+    // ============================
+    // READ REQUEST BODY
+    // ============================
+    const { userMessage, uid } = await request.json();
 
     if (!uid) {
-      return NextResponse.json({ error: "Missing UID" }, { status: 400 });
-    }
-
-    // ============================
-    // 1. LOAD DEALER SETTINGS
-    // ============================
-    const dealerRef = doc(db, "users", uid, "settings", "dealer");
-    const snap = await getDoc(dealerRef);
-
-    if (!snap.exists()) {
-      return NextResponse.json(
-        { error: "Dealer settings not found" },
-        { status: 404 }
+      return new Response(
+        JSON.stringify({ error: "Missing user ID." }),
+        { status: 400, headers: corsHeaders() }
       );
     }
 
-    const dealer = snap.data();
-
-    // Deconstruct settings
-    const {
-      dealerDescription = "",
-      aiNotes = "",
-      address = "",
-      websites = [],
-      trainingDocs = [],
-      laws = {},
-    } = dealer;
-
-    // ============================
-    // 2. LOAD PDF TRAINING DOCS
-    // ============================
-    let trainingText = "";
-    for (const pdfUrl of trainingDocs) {
-      trainingText += `\n\n--- TRAINING DOC ---\n`;
-      trainingText += await loadPdfText(pdfUrl);
+    if (!userMessage || userMessage.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Message cannot be empty." }),
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     // ============================
-    // 3. LOAD ADVERTISING LAWS
+    // LOAD DEALER KNOWLEDGE
+    // (Logo, Websites, Laws, PDFs)
     // ============================
-    let stateLawText = "";
+    let knowledge = "";
 
-    // If dealer uploaded a law PDF for their state
-    if (laws && laws.stateAdvertising) {
-      stateLawText = await loadPdfText(laws.stateAdvertising);
+    // ----------------------------
+    // 1. LAW TEXT (Primary)
+    // ----------------------------
+    const lawDoc = await getDoc(doc(db, "lawText", `${uid}_WI`));
+    if (lawDoc.exists()) {
+      knowledge += `\n\n[WISCONSIN ADVERTISING LAWS]\n${lawDoc.data().text}\n\n`;
     }
 
-    // If empty → load Wisconsin default
-    if (!stateLawText.trim()) {
-      if (laws?.wiAdvertising) {
-        stateLawText = await loadPdfText(laws.wiAdvertising);
-      }
+    // ----------------------------
+    // 2. LAW PDFs (Fallback)
+    // ----------------------------
+    const pdfQuery = query(
+      collection(db, "lawLibrary"),
+      where("owner", "==", uid),
+      where("state", "==", "WI")
+    );
+    const pdfSnap = await getDocs(pdfQuery);
+
+    if (!pdfSnap.empty) {
+      knowledge += `\n\n[WISCONSIN LAW PDFs]\nDealer has uploaded advertising law PDFs. You must reference them when forming disclosures.\n\n`;
+    }
+
+    // ----------------------------
+    // 3. DEALER LOGO INFO
+    // ----------------------------
+    try {
+      const logoRef = ref(storage, `logos/${uid}/logo.png`);
+      const logoUrl = await getDownloadURL(logoRef);
+      knowledge += `\n\n[DEALER LOGO AVAILABLE]\nLogo URL: ${logoUrl}\n\n`;
+    } catch {
+      knowledge += `\n\n[NO DEALER LOGO UPLOADED]\n\n`;
+    }
+
+    // ----------------------------
+    // 4. DEALER WEBSITES
+    // ----------------------------
+    const siteQuery = query(
+      collection(db, "dealerWebsites"),
+      where("owner", "==", uid)
+    );
+    const siteSnap = await getDocs(siteQuery);
+
+    if (!siteSnap.empty) {
+      knowledge += "\n\n[DEALER WEBSITES]\n";
+      siteSnap.forEach(d => {
+        knowledge += `• ${d.data().url}\n`;
+      });
+      knowledge += "\n";
+    }
+
+    // ----------------------------
+    // 5. FALLBACK WISCONSIN RULE
+    // ----------------------------
+    if (!lawDoc.exists() && pdfSnap.empty) {
+      knowledge += `
+[DEFAULT WISCONSIN DISCLOSURE RULE]
+If any advertisement mentions price, APR, or payment, 
+you MUST add a disclosure such as:
+"All offers subject to tax, title, license & fees. See dealer for details."
+`;
     }
 
     // ============================
-    // 4. BUILD SYSTEM PROMPT (YOUR PERSONALITY)
+    // BUILD SYSTEM PROMPT
     // ============================
     const systemPrompt = `
-You are the dealership AI assistant for a multi-dealer platform.
-Your personality:
-- forward-thinking
-- blunt honesty
-- clever, quick humor
-- no sugarcoating
-- efficient, clear, and direct
+You are the AI assistant for a car dealership.
+You MUST answer using the dealer’s own rules, laws, PDFs, policies, knowledge, and website data.
 
-You must follow these rules:
+You MUST obey:
+1. Wisconsin advertising law (fallback if no dealer laws uploaded).
+2. Dealer-uploaded law text.
+3. Dealer-uploaded PDFs (assume they contain rules).
+4. Dealer websites and inventory structures.
+5. The fact that the user is a dealership employee, not a retail consumer.
 
-1. Use the dealership's stored knowledge to generate extremely accurate answers.
-2. Use the dealer's uploaded advertising laws to ensure legal compliance.
-3. Generate the SHORTEST LEGAL DISCLOSURE NECESSARY when asked.
-4. If the dealer uploads multiple training docs, use them as reference intelligence.
-5. If the user asks for creative content (ads, posts, scripts, etc.), produce high-quality, polished output.
-6. NEVER bullshit — if the dealer didn't upload something, say so plainly.
+THE MOST IMPORTANT RULE:
+If the user asks anything involving PRICE, APR, PAYMENT, DISCLAIMERS, or SOCIAL POSTS —
+you MUST follow Wisconsin ad law OR the dealer’s uploaded law PDFs/text.
 
-===== DEALER DESCRIPTION =====
-${dealerDescription}
-
-===== DEALER NOTES =====
-${aiNotes}
-
-===== DEALER ADDRESS =====
-${address}
-
-===== DEALER WEBSITES =====
-${websites.join(", ")}
-
-===== TRAINING DOCUMENTS (TEXT EXTRACTED) =====
-${trainingText}
-
-===== STATE ADVERTISING LAWS =====
-${stateLawText}
-
-Respond exactly like Brett:
-- no fake politeness
-- no corporate fluff
-- quick, clever truth
-- always accurate
+Here is the dealer’s knowledge base:
+${knowledge}
 `;
 
     // ============================
-    // 5. CALL OPENAI (GPT-4.1)
+    // SEND TO OPENAI
     // ============================
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const completion = await client.chat.completions.create({
-      model: "gpt-4.1",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages,
-      ],
-      temperature: 0.4,
-      stream: true,
-    });
-
-    // Stream output
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of completion) {
-            const text = chunk.choices[0]?.delta?.content || "";
-            controller.enqueue(encoder.encode(text));
-          }
-        } catch (err) {
-          controller.error(err);
-        } finally {
-          controller.close();
-        }
+    const openaiResponse = await fetch(OPENAI_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
       },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",  // lightweight + powerful
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage }
+        ],
+        max_tokens: 500,
+      }),
     });
 
-    return new Response(stream, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
+    const data = await openaiResponse.json();
+
+    // If OpenAI fails
+    if (!data.choices || !data.choices[0]) {
+      return new Response(
+        JSON.stringify({ error: "AI response failed." }),
+        { status: 500, headers: corsHeaders() }
+      );
+    }
+
+    const answer = data.choices[0].message.content;
+
+    // ============================
+    // RETURN ANSWER
+    // ============================
+    return new Response(
+      JSON.stringify({ answer }),
+      { status: 200, headers: corsHeaders() }
+    );
+
   } catch (err) {
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: corsHeaders() }
     );
   }
 }
