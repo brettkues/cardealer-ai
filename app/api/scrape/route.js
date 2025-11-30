@@ -1,91 +1,114 @@
 import * as cheerio from "cheerio";
 
+/**
+ * Extracts images from the HTML
+ */
+function extractImages($, url) {
+  const images = [];
+  const base = new URL(url).origin;
+
+  $("img").each((i, el) => {
+    const src = $(el).attr("src");
+
+    if (!src) return;
+
+    // Only include true vehicle images
+    if (src.includes("inventoryphotos") || src.includes("photos") || src.includes("vehicle")) {
+      if (src.startsWith("http")) {
+        images.push(src);
+      } else {
+        images.push(base + src);
+      }
+    }
+  });
+
+  // Deduplicate
+  return [...new Set(images)];
+}
+
+/**
+ * Extracts vehicle description text
+ */
+function extractDescription($) {
+  let description = "";
+
+  // Common containers on dealership sites
+  const selectors = [
+    ".vehicle-summary",
+    ".description",
+    ".vehicle-description",
+    "#description",
+    ".col-md-8 p",
+    ".col-md-8 div",
+    "p",
+    "div",
+  ];
+
+  for (const sel of selectors) {
+    $(sel).each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 40 && text.length < 1500) {
+        // Reasonable size for vehicle summary
+        description = text;
+      }
+    });
+    if (description) break;
+  }
+
+  return description || "No description found.";
+}
+
 export async function POST(request) {
   try {
-    const { url } = await request.json();
+    const { url, descriptionOnly } = await request.json();
+
     if (!url) {
-      return new Response(JSON.stringify({ error: "No URL provided" }), {
-        status: 400,
-      });
+      return new Response(
+        JSON.stringify({ error: "No URL provided." }),
+        { status: 400 }
+      );
     }
 
     const res = await fetch(url);
     const html = await res.text();
+
     const $ = cheerio.load(html);
 
-    const images = [];
-    const base = new URL(url).origin;
+    // DESCRIPTION-ONLY PATH
+    if (descriptionOnly) {
+      const description = extractDescription($);
 
-    $("img").each((i, el) => {
-      let src = $(el).attr("src") || $(el).attr("data-src") || "";
+      return new Response(
+        JSON.stringify({ description }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
 
-      if (!src) return;
+    // FULL SCRAPE PATH
+    const images = extractImages($, url).slice(0, 8); // fetch up to 8 (Social uses 4)
+    const description = extractDescription($);
 
-      // Convert relative → absolute
-      if (!src.startsWith("http")) {
-        src = base + src;
+    return new Response(
+      JSON.stringify({ images, description }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
       }
+    );
 
-      // FILTER OUT garbage images (logos, icons, social media, low-res)
-      const lower = src.toLowerCase();
-
-      const blacklist = [
-        "logo",
-        "icon",
-        "favicon",
-        "sprite",
-        "placeholder",
-        "thumbnail",
-        "thumb",
-        "badge",
-        "banner",
-        "arrow",
-        "pixel",
-        "tracker",
-        ".svg",
-        "facebook",
-        "twitter",
-        "apple-touch",
-        "google",
-      ];
-
-      if (blacklist.some((b) => lower.includes(b))) return;
-
-      // FILTER IN large meaningful vehicle images
-      const whitelist = [
-        "inventory",
-        "photos",
-        "vehicle",
-        "autotrader",
-        "cars.com",
-        "carfax",
-        "cdn",
-        "images",
-        "photo",
-        "media",
-        "dealer",
-        "uploads",
-      ];
-
-      if (!whitelist.some((w) => lower.includes(w))) return;
-
-      // Basic size filter (avoid tiny icons)
-      const width = parseInt($(el).attr("width") || "0");
-      const height = parseInt($(el).attr("height") || "0");
-
-      if (width && height && (width < 300 || height < 200)) return;
-
-      // FINAL: push it
-      images.push(src);
-    });
-
-    // Return first 20 just in case page has duplicates
-    const unique = [...new Set(images)].slice(0, 20);
-
-    return new Response(JSON.stringify({ images: unique }), { status: 200 });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-    });
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500 }
+    );
   }
 }
