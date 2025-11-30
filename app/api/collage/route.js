@@ -1,8 +1,9 @@
 import sharp from "sharp";
+import { corsHeaders, handleCors } from "@/app/utils/cors";
 
-/**
- * Helper: Auto Season Ribbon
- */
+// -------------------------------------------
+// SEASON → RIBBON COLOR
+// -------------------------------------------
 function getSeasonAssets(season) {
   const seasonMap = {
     christmas: "#C00000",
@@ -17,16 +18,14 @@ function getSeasonAssets(season) {
     newyear: "#111111",
     generic: "#333333",
   };
-
   return seasonMap[season] || "#333333";
 }
 
-/**
- * Helper: Extract Year/Make/Model from description or URL
- */
+// -------------------------------------------
+// Extract Year/Make/Model
+// -------------------------------------------
 function extractYMM(description, url) {
   try {
-    // First attempt: URL pattern "2023-Nissan-Altima"
     const urlParts = url.split("/");
     const last = urlParts[urlParts.length - 1];
     const segments = last.replace(/-/g, " ").split(" ");
@@ -35,15 +34,10 @@ function extractYMM(description, url) {
     const make = segments[segments.indexOf(year) + 1];
     const model = segments.slice(segments.indexOf(make) + 1, segments.indexOf(make) + 3).join(" ");
 
-    if (year && make && model) {
-      return `${year} ${make} ${model}`;
-    }
+    if (year && make && model) return `${year} ${make} ${model}`;
 
-    // Second attempt: description-based fallback
     const match = description.match(/(20\d{2})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
-    if (match) {
-      return `${match[1]} ${match[2]} ${match[3]}`;
-    }
+    if (match) return `${match[1]} ${match[2]} ${match[3]}`;
 
     return "Vehicle";
   } catch {
@@ -51,9 +45,9 @@ function extractYMM(description, url) {
   }
 }
 
-/**
- * Helper: Generate Disclosure
- */
+// -------------------------------------------
+// Disclosure
+// -------------------------------------------
 function generateDisclosure(description, laws) {
   const triggers = {
     price: /\$[\d,]+/i,
@@ -71,33 +65,31 @@ function generateDisclosure(description, laws) {
     return "See dealer for details.";
   }
 
-  // Base WI fallback language
   const wiDisclosure =
     "All offers subject to tax, title, license & fees. See dealer for details.";
 
-  if (laws.type === "text") {
-    // We could parse the text someday; for now we return the concise WI-safe disclosure.
-    return wiDisclosure;
-  }
+  if (laws.type === "text") return wiDisclosure;
 
   return wiDisclosure;
 }
 
 export async function POST(request) {
+  // CORS preflight
+  const preflight = handleCors(request);
+  if (preflight) return preflight;
+
   try {
     const body = await request.json();
-
     const { images, description, season, logoUrl, laws, url } = body;
 
     if (!images || images.length !== 4) {
       return new Response(JSON.stringify({ error: "4 images required" }), {
         status: 400,
+        headers: corsHeaders(),
       });
     }
 
-    // -----------------------------------------------------
-    // FETCH IMAGE BUFFERS
-    // -----------------------------------------------------
+    // Load vehicle images
     const buffers = await Promise.all(
       images.map(async (img) => {
         const res = await fetch(img);
@@ -105,18 +97,14 @@ export async function POST(request) {
       })
     );
 
-    // -----------------------------------------------------
-    // RESIZE EACH VEHICLE IMAGE INTO 800×800
-    // -----------------------------------------------------
+    // Resize to quadrants
     const resized = await Promise.all(
       buffers.map((buf) =>
         sharp(buf).resize(800, 800, { fit: "cover" }).toBuffer()
       )
     );
 
-    // -----------------------------------------------------
-    // CANVAS 1600×1600
-    // -----------------------------------------------------
+    // Base canvas 1600x1600
     const canvas = sharp({
       create: {
         width: 1600,
@@ -126,83 +114,55 @@ export async function POST(request) {
       },
     });
 
-    // -----------------------------------------------------
-    // AUTO SEASON RIBBON COLOR
-    // -----------------------------------------------------
+    // Ribbon
     const ribbonColor = getSeasonAssets(season);
-
-    const ribbon = {
+    const ribbon = await sharp({
       create: {
         width: 1600,
         height: 200,
         channels: 3,
         background: ribbonColor,
       },
-    };
+    })
+      .png()
+      .toBuffer();
 
-    const ribbonBuffer = await sharp(ribbon).png().toBuffer();
-
-    // -----------------------------------------------------
-    // GENERATE DISCLOSURE
-    // -----------------------------------------------------
+    // Disclosure
     const disclosure = generateDisclosure(description, laws);
 
-    // -----------------------------------------------------
-    // EXTRACT YMM
-    // -----------------------------------------------------
+    // YMM
     const ymm = extractYMM(description, url);
 
-    // -----------------------------------------------------
-    // LOAD LOGO (if exists)
-    // -----------------------------------------------------
+    // Logo load
     let logoBuffer = null;
-
     if (logoUrl) {
       try {
         const logoRes = await fetch(logoUrl);
-        const logoArr = await logoRes.arrayBuffer();
-        logoBuffer = await sharp(Buffer.from(logoArr))
+        logoBuffer = await sharp(Buffer.from(await logoRes.arrayBuffer()))
           .resize(180, 180, { fit: "contain" })
           .png()
           .toBuffer();
-      } catch (err) {
+      } catch {
         logoBuffer = null;
       }
     }
 
-    // -----------------------------------------------------
-    // COMPOSITE EVERYTHING
-    // -----------------------------------------------------
+    // Composite layers
     let composite = canvas.composite([
-      // Quadrants
       { input: resized[0], top: 0, left: 0 },
       { input: resized[1], top: 0, left: 800 },
       { input: resized[2], top: 800, left: 0 },
       { input: resized[3], top: 800, left: 800 },
-
-      // Ribbon
-      { input: ribbonBuffer, top: 700, left: 0 },
+      { input: ribbon, top: 700, left: 0 },
     ]);
 
-    // -----------------------------------------------------
-    // Logo (left of ribbon)
-    // -----------------------------------------------------
     if (logoBuffer) {
-      composite = composite.composite([
-        { input: logoBuffer, top: 710, left: 40 },
-      ]);
+      composite = composite.composite([{ input: logoBuffer, top: 710, left: 40 }]);
     }
 
-    // -----------------------------------------------------
-    // Add YMM + description text
-    // -----------------------------------------------------
-    composite = composite.png();
+    const temp = await composite.png().toBuffer();
 
-    const temp = await composite.toBuffer();
-
-    // -----------------------------------------------------
-    // ADD TEXT USING SHARP SVG OVERLAY
-    // -----------------------------------------------------
+    // Add SVG text overlay
     const svg = `
       <svg width="1600" height="1600">
         <style>
@@ -224,16 +184,18 @@ export async function POST(request) {
       .png()
       .toBuffer();
 
-    // -----------------------------------------------------
-    // RETURN IMAGE
-    // -----------------------------------------------------
     return new Response(finalImage, {
       status: 200,
-      headers: { "Content-Type": "image/png" },
+      headers: {
+        ...corsHeaders(),
+        "Content-Type": "image/png",
+      },
     });
+
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
+      headers: corsHeaders(),
     });
   }
 }
