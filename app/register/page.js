@@ -1,14 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth, db } from "@/app/firebase";
-import {
-  createUserWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged,
-} from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
@@ -16,146 +11,117 @@ export default function RegisterPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
+  const [confirm, setConfirm] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // If already logged in, move to dashboard or subscribe
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const ref = doc(db, "users", user.uid);
-        const snap = await getDoc(ref);
+  const handleRegister = async () => {
+    setError("");
 
-        if (snap.exists()) {
-          const data = snap.data();
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
 
-          if (data.role === "admin" || data.subscriptionActive) {
-            router.push("/dashboard");
-          } else {
-            router.push("/subscribe");
-          }
-        }
-      }
-    });
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
 
-    return () => unsub();
-  }, [router]);
-
-  const registerEmailPassword = async () => {
-    setErr("");
     setLoading(true);
 
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      const user = result.user;
-
-      // Create Firestore record
-      await setDoc(doc(db, "users", user.uid), {
+      // Create user in Firebase Auth
+      const userCred = await createUserWithEmailAndPassword(
+        auth,
         email,
-        role: "user",
-        subscriptionActive: false,
-        subscriptionSource: null,
-        trialEnds: null,
+        password
+      );
+
+      const uid = userCred.user.uid;
+
+      // Create Firestore profile
+      await setDoc(doc(db, "users", uid), {
+        email,
+        role: "dealer",               // default role
+        subscriptionActive: false,    // must subscribe
+        subscriptionSource: "none",   // until paid or promo
+        createdAt: serverTimestamp(),
       });
 
+      // Send user to Subscribe page
       router.push("/subscribe");
-    } catch (error) {
-      setErr(error.message);
+    } catch (err) {
+      setError(err.message || "Registration failed.");
     }
 
     setLoading(false);
   };
 
-  const registerGoogle = async () => {
-    setErr("");
-    setLoading(true);
-
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-
-      const user = result.user;
-      const ref = doc(db, "users", user.uid);
-      const snap = await getDoc(ref);
-
-      // Create Firestore record only if new user
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          email: user.email,
-          role: "user",
-          subscriptionActive: false,
-          subscriptionSource: null,
-          trialEnds: null,
-        });
-      }
-
-      router.push("/subscribe");
-    } catch (error) {
-      setErr(error.message);
-    }
-
-    setLoading(false);
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleRegister();
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-6">
-      <div className="bg-gray-800 p-10 rounded-2xl w-full max-w-md shadow-xl border border-gray-700">
-        <h1 className="text-3xl font-bold text-white text-center mb-6">
-          Create Your Account
-        </h1>
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-6">
+      <div className="bg-gray-800 p-10 rounded-2xl w-full max-w-md border border-gray-700">
 
-        {err && (
-          <div className="bg-red-600 text-white p-3 rounded mb-4 text-center">
-            {err}
+        <h1 className="text-3xl font-bold mb-6">Create Your Account</h1>
+
+        {/* Email */}
+        <label className="block mb-2">Email</label>
+        <input
+          type="email"
+          className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 mb-4"
+          placeholder="you@dealership.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+
+        {/* Password */}
+        <label className="block mb-2">Password</label>
+        <input
+          type="password"
+          className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 mb-4"
+          placeholder="********"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+
+        {/* Confirm Password */}
+        <label className="block mb-2">Confirm Password</label>
+        <input
+          type="password"
+          className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 mb-4"
+          placeholder="********"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-600 text-white p-3 rounded-lg mt-2 mb-4 text-sm">
+            {error}
           </div>
         )}
 
-        {/* Email Input */}
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full p-3 mb-4 bg-gray-700 text-white rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        {/* Password Input */}
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full p-3 mb-6 bg-gray-700 text-white rounded"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {/* Register Button */}
         <button
-          onClick={registerEmailPassword}
+          onClick={handleRegister}
           disabled={loading}
-          className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg mb-4"
+          className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg text-lg font-semibold disabled:opacity-50"
         >
-          {loading ? "Creating account..." : "Sign Up"}
+          {loading ? "Creating..." : "Create Account"}
         </button>
 
-        {/* Google Signup */}
-        <button
-          onClick={registerGoogle}
-          disabled={loading}
-          className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg"
-        >
-          {loading ? "Please wait..." : "Sign Up with Google"}
-        </button>
-
-        <div className="text-center mt-6 text-gray-400">
-          <p>
-            Already have an account?{" "}
-            <span
-              className="underline cursor-pointer"
-              onClick={() => router.push("/login")}
-            >
-              Sign in
-            </span>
-          </p>
+        {/* Login link */}
+        <div className="mt-6 text-sm text-blue-400 text-center">
+          <button onClick={() => router.push("/login")}>
+            Already have an account? Login
+          </button>
         </div>
       </div>
     </div>
