@@ -1,82 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { watchSubscription } from "@/app/utils/checkSubscription";
-import { auth, db, storage } from "@/app/firebase";
-import { signOut } from "firebase/auth";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from "firebase/storage";
+import { auth, storage, db } from "@/app/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   doc,
-  setDoc,
-  deleteDoc,
   getDoc,
+  updateDoc,
   collection,
-  query,
-  where,
-  getDocs,
   addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
-// Tooltip Component
-function Tooltip({ text }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span
-      className="relative inline-block"
-      onClick={() => setOpen(!open)}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <span className="ml-2 cursor-pointer text-blue-400 text-sm">ⓘ</span>
-
-      {open && (
-        <div className="absolute z-20 left-0 mt-2 w-64 bg-gray-800 text-gray-200 
-                        text-sm p-3 rounded-xl border border-gray-700 shadow-xl">
-          {text}
-        </div>
-      )}
-    </span>
-  );
-}
+import { watchSubscription } from "@/app/utils/checkSubscription";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [sub, setSub] = useState(null);
 
+  const [subInfo, setSubInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Upload states
   const [logoFile, setLogoFile] = useState(null);
-  const [logoUrl, setLogoUrl] = useState(null);
-
+  const [website, setWebsite] = useState("");
   const [lawFile, setLawFile] = useState(null);
-  const [textLaw, setTextLaw] = useState("");
-  const [state, setState] = useState("WI");
+  const [lawText, setLawText] = useState("");
 
-  const [lawDocs, setLawDocs] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  // ----------------------------------------------------
-  // AUTH + SUBSCRIPTION ENFORCEMENT
-  // ----------------------------------------------------
+  // --------------------------------------
+  // WATCH LOGIN + SUBSCRIPTION
+  // --------------------------------------
   useEffect(() => {
     const unsub = watchSubscription(async (status) => {
       if (!status.loggedIn) return router.push("/login");
-      if (!status.active) return router.push("/subscribe");
 
-      setSub(status);
-      await loadLogo();
-      await loadLawDocs();
+      setSubInfo(status);
+      setLoading(false);
     });
 
     return () => unsub();
-  }, [router]);
+  }, []);
 
-  if (!sub) {
+  if (loading || !subInfo) {
     return (
       <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
         Loading dashboard…
@@ -84,316 +51,243 @@ export default function DashboardPage() {
     );
   }
 
-  const uid = auth.currentUser.uid;
-
-  // ----------------------------------------------------
-  // LOAD LOGO
-  // ----------------------------------------------------
-  const loadLogo = async () => {
-    const logoRef = ref(storage, `logos/${uid}/logo.png`);
-
+  // --------------------------------------
+  // BILLING PORTAL
+  // --------------------------------------
+  const openBillingPortal = async () => {
     try {
-      const url = await getDownloadURL(logoRef);
-      setLogoUrl(url);
-    } catch {
-      setLogoUrl(null);
+      const res = await fetch("/api/portal", {
+        method: "POST",
+        body: JSON.stringify({ uid: subInfo.uid }),
+      });
+
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert("Unable to open billing portal.");
+      }
+    } catch (err) {
+      alert("Billing portal error.");
     }
   };
 
-  // ----------------------------------------------------
-  // UPLOAD LOGO
-  // ----------------------------------------------------
+  // --------------------------------------
+  // LOGO UPLOAD
+  // --------------------------------------
   const uploadLogo = async () => {
-    if (!logoFile) {
-      alert("Please select a logo file first.");
-      return;
-    }
+    if (!logoFile) return;
 
-    if (!["image/png", "image/jpeg"].includes(logoFile.type)) {
-      alert("Logo must be PNG or JPG.");
-      return;
-    }
-
-    setLoading(true);
     try {
-      const fileRef = ref(storage, `logos/${uid}/logo.png`);
+      const fileRef = ref(storage, `logos/${subInfo.uid}/logo.png`);
       await uploadBytes(fileRef, logoFile);
 
-      const url = await getDownloadURL(fileRef);
-      setLogoUrl(url);
-      setLogoFile(null);
-
-      alert("Logo uploaded successfully!");
+      setMessage("Logo uploaded successfully.");
     } catch (err) {
-      alert("Upload failed: " + err.message);
-    }
-    setLoading(false);
-  };
-
-  // ----------------------------------------------------
-  // DELETE LOGO
-  // ----------------------------------------------------
-  const deleteLogo = async () => {
-    if (!confirm("Delete logo?")) return;
-
-    try {
-      await deleteObject(ref(storage, `logos/${uid}/logo.png`));
-      setLogoUrl(null);
-    } catch (err) {
-      alert("Error deleting logo.");
+      setMessage("Logo upload failed.");
     }
   };
 
-  // ----------------------------------------------------
-  // LOAD LAW DOCUMENTS
-  // ----------------------------------------------------
-  const loadLawDocs = async () => {
-    let q =
-      sub.role === "admin"
-        ? query(collection(db, "lawLibrary"))
-        : query(collection(db, "lawLibrary"), where("owner", "==", uid));
+  // --------------------------------------
+  // WEBSITE ADD
+  // --------------------------------------
+  const addWebsite = async () => {
+    if (!website.trim()) return;
 
-    const snap = await getDocs(q);
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setLawDocs(list);
+    try {
+      await addDoc(collection(db, "dealerWebsites"), {
+        owner: subInfo.uid,
+        url: website.trim(),
+        createdAt: serverTimestamp(),
+      });
+
+      setWebsite("");
+      setMessage("Website added.");
+    } catch (err) {
+      setMessage("Website add failed.");
+    }
   };
 
-  // ----------------------------------------------------
-  // UPLOAD PDF LAW
-  // ----------------------------------------------------
-  const uploadPDF = async () => {
-    if (!lawFile) return alert("Please select a PDF.");
+  // --------------------------------------
+  // LAW PDF UPLOAD
+  // --------------------------------------
+  const uploadLawPdf = async () => {
+    if (!lawFile) return;
 
-    setLoading(true);
     try {
-      const path = `laws/${uid}/${Date.now()}_${lawFile.name}`;
-      const fileRef = ref(storage, path);
-
+      const fileRef = ref(
+        storage,
+        `laws/${subInfo.uid}/WI-${Date.now()}.pdf`
+      );
       await uploadBytes(fileRef, lawFile);
+
       const url = await getDownloadURL(fileRef);
 
       await addDoc(collection(db, "lawLibrary"), {
-        owner: uid,
-        type: "pdf",
-        state,
+        owner: subInfo.uid,
+        state: "WI",
         url,
-        filename: lawFile.name,
-        uploadedAt: new Date(),
-        storagePath: path,
+        uploadedAt: Date.now(),
       });
 
-      setLawFile(null);
-      await loadLawDocs();
-      alert("PDF uploaded successfully.");
+      setMessage("Law PDF uploaded.");
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      setMessage("Law PDF upload failed.");
     }
-    setLoading(false);
   };
 
-  // ----------------------------------------------------
-  // SAVE TEXT LAW (ONE PER STATE)
-  // ----------------------------------------------------
-  const saveTextLaw = async () => {
-    if (!textLaw.trim()) {
-      alert("Text cannot be empty.");
-      return;
-    }
+  // --------------------------------------
+  // LAW TEXT UPLOAD
+  // --------------------------------------
+  const uploadLawText = async () => {
+    if (!lawText.trim()) return;
 
-    setLoading(true);
     try {
-      await setDoc(doc(db, "lawText", `${uid}_${state}`), {
-        owner: uid,
-        type: "text",
-        state,
-        text: textLaw.trim(),
-        updatedAt: new Date(),
+      await updateDoc(doc(db, "lawText", `${subInfo.uid}_WI`), {
+        text: lawText.trim(),
+        updatedAt: serverTimestamp()
+      }).catch(async () => {
+        await setDoc(doc(db, "lawText", `${subInfo.uid}_WI`), {
+          text: lawText.trim(),
+          updatedAt: serverTimestamp()
+        });
       });
 
-      setTextLaw("");
-      alert("Text law saved.");
+      setMessage("Law text saved.");
     } catch (err) {
-      alert("Error saving text: " + err.message);
+      setMessage("Law text save failed.");
     }
-    setLoading(false);
   };
 
-  // ----------------------------------------------------
-  // DELETE PDF
-  // ----------------------------------------------------
-  const deletePDF = async (item) => {
-    if (!confirm("Delete this document?")) return;
+  // --------------------------------------
+  // UI COMPONENTS
+  // --------------------------------------
+  const subscriptionStatus = subInfo.active
+    ? "Active"
+    : subInfo.subscriptionSource === "promo"
+    ? "Promo Access"
+    : "Inactive";
 
-    try {
-      await deleteObject(ref(storage, item.storagePath));
-    } catch {}
+  const statusColor = subInfo.active
+    ? "text-green-400"
+    : subInfo.subscriptionSource === "promo"
+    ? "text-purple-400"
+    : "text-red-400";
 
-    await deleteDoc(doc(db, "lawLibrary", item.id));
-    loadLawDocs();
-  };
-
-  // ----------------------------------------------------
-  // UI STARTS HERE
-  // ----------------------------------------------------
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <div className="flex justify-between items-center mb-10">
-        <h1 className="text-4xl font-bold">Dealer Dashboard</h1>
+    <div className="min-h-screen bg-gray-900 text-white p-8 space-y-10">
+
+      <h1 className="text-4xl font-bold mb-2">Dealer Dashboard</h1>
+
+      <p className="text-gray-300">
+        Manage your AI system, logos, websites, laws, and billing settings.
+      </p>
+
+      {/* Billing Card */}
+      <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700">
+        <h2 className="text-2xl font-bold mb-4">Billing Overview</h2>
+
+        <div className="mb-4">
+          <span className="font-semibold">Subscription Status: </span>
+          <span className={statusColor}>{subscriptionStatus}</span>
+        </div>
+
+        <div className="mb-4">
+          <span className="font-semibold">Plan: </span>
+          {subInfo.subscriptionSource === "promo"
+            ? "Promo Access"
+            : subInfo.subscriptionSource === "stripe"
+            ? "Stripe Subscription"
+            : "None"}
+        </div>
 
         <button
-          onClick={() => signOut(auth)}
-          className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-500"
+          onClick={openBillingPortal}
+          className="mt-4 bg-blue-600 hover:bg-blue-500 px-5 py-3 rounded-xl font-semibold"
         >
-          Sign Out
+          Manage Billing (Stripe Portal)
         </button>
       </div>
 
-      {/* LOGO SECTION */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-12">
-        <h2 className="text-2xl font-semibold mb-3">
-          Dealer Logo
-          <Tooltip text="Upload your dealership logo (PNG or JPG). This will be used in the Social Generator ribbon." />
-        </h2>
-
-        {logoUrl ? (
-          <div className="mb-4">
-            <img
-              src={logoUrl}
-              alt="Dealer Logo"
-              className="w-40 h-auto mb-4 border border-gray-700 rounded-xl"
-            />
-
-            <button
-              className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-500"
-              onClick={deleteLogo}
-            >
-              Delete Logo
-            </button>
-          </div>
-        ) : (
-          <p className="text-gray-400 mb-4">No logo uploaded yet.</p>
-        )}
+      {/* LOGO Upload */}
+      <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 space-y-4">
+        <h2 className="text-2xl font-bold">Dealer Logo</h2>
 
         <input
           type="file"
-          accept="image/png,image/jpeg"
           onChange={(e) => setLogoFile(e.target.files[0])}
-          className="text-gray-300 mb-4"
+          className="bg-gray-700 p-3 rounded-lg border border-gray-600"
         />
 
         <button
           onClick={uploadLogo}
-          disabled={!logoFile || loading}
-          className="px-6 py-3 bg-blue-600 rounded-lg hover:bg-blue-500 w-full"
+          className="bg-green-600 hover:bg-green-500 px-5 py-3 rounded-xl"
         >
-          {loading ? "Uploading…" : "Upload Logo"}
+          Upload Logo
         </button>
       </div>
 
-      {/* STATE SELECT */}
-      <label className="text-gray-300 font-semibold">
-        Select State for Law Upload
-        <Tooltip text="Choose Wisconsin for default system behavior. Choose Other only if you operate outside WI." />
-      </label>
+      {/* WEBSITE Add */}
+      <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 space-y-4">
+        <h2 className="text-2xl font-bold">Dealer Websites</h2>
 
-      <select
-        value={state}
-        onChange={(e) => setState(e.target.value)}
-        className="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 mt-2 mb-8"
-      >
-        <option value="WI">Wisconsin (WI)</option>
-        <option value="OTHER">Other State</option>
-      </select>
+        <input
+          type="text"
+          placeholder="https://www.exampledealer.com"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+          className="bg-gray-700 p-3 rounded-lg w-full border border-gray-600"
+        />
 
-      {/* PDF LAW UPLOAD */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-12">
-        <h2 className="text-2xl font-semibold mb-4">
-          Upload PDF Law Document
-          <Tooltip text="Upload advertising law PDFs from your OEM, dealer association, or attorney." />
-        </h2>
+        <button
+          onClick={addWebsite}
+          className="bg-blue-600 hover:bg-blue-500 px-5 py-3 rounded-xl"
+        >
+          Add Website
+        </button>
+      </div>
 
+      {/* LAWS Upload */}
+      <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 space-y-4">
+        <h2 className="text-2xl font-bold">Advertising Laws (Wisconsin)</h2>
+
+        {/* PDF */}
+        <label className="block text-gray-300">Upload Law PDF</label>
         <input
           type="file"
           accept="application/pdf"
-          className="text-gray-300 mb-4"
           onChange={(e) => setLawFile(e.target.files[0])}
+          className="bg-gray-700 p-3 rounded-lg border border-gray-600"
         />
-
         <button
-          onClick={uploadPDF}
-          disabled={!lawFile || loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+          onClick={uploadLawPdf}
+          className="bg-purple-600 hover:bg-purple-500 px-5 py-3 rounded-xl"
         >
-          {loading ? "Uploading…" : "Upload PDF"}
+          Upload PDF
         </button>
-      </div>
 
-      {/* TEXT LAW */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-12">
-        <h2 className="text-2xl font-semibold mb-4">
-          Paste Law Text
-          <Tooltip text="If you cannot provide a PDF, paste the complete advertising law text here. This will be used for disclosure generation." />
-        </h2>
-
+        {/* TEXT */}
+        <label className="block text-gray-300 mt-6">Paste Law Text</label>
         <textarea
-          value={textLaw}
-          onChange={(e) => setTextLaw(e.target.value)}
-          className="w-full h-48 bg-gray-700 text-white p-3 rounded-lg border border-gray-600"
-        />
+          className="bg-gray-700 p-3 rounded-lg w-full border border-gray-600 h-40"
+          value={lawText}
+          onChange={(e) => setLawText(e.target.value)}
+        ></textarea>
 
         <button
-          onClick={saveTextLaw}
-          disabled={loading}
-          className="w-full py-3 mt-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold"
+          onClick={uploadLawText}
+          className="bg-green-600 hover:bg-green-500 px-5 py-3 rounded-xl"
         >
-          {loading ? "Saving…" : "Save Text Law"}
+          Save Text
         </button>
       </div>
 
-      {/* LAW DOCS LIST */}
-      <h2 className="text-2xl font-semibold mb-4">
-        Uploaded Law Documents
-        <Tooltip text="These are the uploaded law documents for this dealer. The newest document is used automatically." />
-      </h2>
-
-      {lawDocs.length === 0 && (
-        <p className="text-gray-400 mb-6">No law documents uploaded.</p>
+      {/* STATUS MESSAGE */}
+      {message && (
+        <div className="p-4 bg-gray-700 text-white rounded-xl border border-gray-600">
+          {message}
+        </div>
       )}
-
-      <div className="space-y-4">
-        {lawDocs.map((item) => (
-          <div
-            key={item.id}
-            className="p-4 bg-gray-800 border border-gray-700 rounded-xl flex justify-between items-center"
-          >
-            <div>
-              <p className="font-semibold">{item.filename}</p>
-              <p className="text-gray-400 text-sm">State: {item.state}</p>
-            </div>
-
-            <div className="flex gap-3">
-              <a
-                href={item.url}
-                target="_blank"
-                className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg"
-              >
-                View
-              </a>
-              <button
-                onClick={() => deletePDF(item)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <p className="text-gray-400 text-sm mt-10">
-        If you operate outside Wisconsin, upload your state’s laws
-        to avoid relying on Wisconsin’s default requirements.
-      </p>
     </div>
   );
 }
