@@ -16,6 +16,8 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
+auth.useDeviceLanguage(); // REQUIRED FOR CONSISTENCY ON VERCEL
+
 const db = getFirestore(app);
 const storage = getStorage(app);
 
