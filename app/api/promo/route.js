@@ -1,9 +1,23 @@
+export const runtime = "nodejs";          // REQUIRED for Firestore Admin SDK
+export const dynamic = "force-dynamic";   // Prevent static optimization
+export const maxDuration = 60;            // Avoid Vercel timeouts
+
 import { corsHeaders, handleCors } from "@/app/utils/cors";
-import { db } from "@/app/firebase";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
+
+// ------------------------------------
+// Initialize Firebase Admin
+// ------------------------------------
+if (!getApps().length) {
+  initializeApp({
+    credential: cert(JSON.parse(process.env.FIREBASE_ADMIN_KEY)),
+  });
+}
+
+const adminDb = getFirestore();
 
 export async function POST(request) {
-  // CORS preflight
   const preflight = handleCors(request);
   if (preflight) return preflight;
 
@@ -19,7 +33,7 @@ export async function POST(request) {
 
     const normalized = code.trim().toLowerCase();
 
-    // Only valid promo
+    // Only valid code
     if (normalized !== "dealerpass") {
       return new Response(JSON.stringify({ error: "Invalid promo code." }), {
         status: 400,
@@ -27,11 +41,10 @@ export async function POST(request) {
       });
     }
 
-    // Load user record
-    const userRef = doc(db, "users", uid);
-    const snap = await getDoc(userRef);
+    const userRef = adminDb.collection("users").doc(uid);
+    const snap = await userRef.get();
 
-    if (!snap.exists()) {
+    if (!snap.exists) {
       return new Response(JSON.stringify({ error: "User not found." }), {
         status: 404,
         headers: corsHeaders(),
@@ -40,7 +53,7 @@ export async function POST(request) {
 
     const data = snap.data();
 
-    // Prevent using promo twice
+    // Prevent reuse
     if (data.promoUsed === "dealerpass") {
       return new Response(JSON.stringify({ error: "Promo code already used." }), {
         status: 400,
@@ -48,18 +61,19 @@ export async function POST(request) {
       });
     }
 
-    // Activate subscription
-    await updateDoc(userRef, {
+    // Activate promo subscription
+    await userRef.update({
       subscriptionActive: true,
       subscriptionSource: "promo",
       promoUsed: "dealerpass",
-      activatedAt: serverTimestamp(),
+      activatedAt: Timestamp.now(),
     });
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: corsHeaders(),
     });
+
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
