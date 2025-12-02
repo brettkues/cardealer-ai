@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: false,
 
+  // Needed for your API routes (scraper, collage, chat, stripe)
   api: {
     responseLimit: "20mb",
     bodyParser: {
@@ -9,13 +10,13 @@ const nextConfig = {
     },
   },
 
-  // Force Node.js runtime for all API routes (needed for Stripe, Firebase, scraping)
+  // Next 14: remove deprecated serverActions
   experimental: {
     serverMinify: false,
   },
 
+  // Prevent Vercel build errors with Node polyfills
   webpack: (config) => {
-    // Remove Node polyfills that are unnecessary in Vercel
     config.resolve.fallback = {
       fs: false,
       path: false,
