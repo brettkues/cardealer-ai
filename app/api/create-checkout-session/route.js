@@ -1,14 +1,25 @@
+export const runtime = "nodejs";         // Stripe requires Node.js runtime
+export const dynamic = "force-dynamic";  // Prevent static optimization
+export const maxDuration = 60;           // Prevent Vercel timeout on cold-start
+
 import { corsHeaders, handleCors } from "@/app/utils/cors";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function POST(request) {
-  // Handle preflight
   const preflight = handleCors(request);
   if (preflight) return preflight;
 
   try {
+    const contentType = request.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      return new Response(JSON.stringify({ error: "Invalid content type." }), {
+        status: 400,
+        headers: corsHeaders(),
+      });
+    }
+
     const { uid, plan } = await request.json();
 
     if (!uid) {
@@ -25,14 +36,12 @@ export async function POST(request) {
       });
     }
 
-    // Stripe price IDs (replace with your live/test IDs when ready)
     const PRICE_IDS = {
       monthly: process.env.STRIPE_PRICE_MONTHLY,
       annual: process.env.STRIPE_PRICE_ANNUAL,
     };
 
     const priceId = PRICE_IDS[plan];
-
     if (!priceId) {
       return new Response(JSON.stringify({ error: "Missing Stripe price ID." }), {
         status: 500,
@@ -40,9 +49,6 @@ export async function POST(request) {
       });
     }
 
-    // ------------------------------
-    // CREATE STRIPE CHECKOUT SESSION
-    // ------------------------------
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
@@ -54,7 +60,6 @@ export async function POST(request) {
         },
       ],
 
-      // Important: link subscription to the dealer UID
       metadata: {
         uid,
         plan,
@@ -67,7 +72,6 @@ export async function POST(request) {
         },
       },
 
-      // Where Stripe returns dealer after payment success
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/ai?checkout=success`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscribe?checkout=cancel`,
     });
@@ -76,6 +80,7 @@ export async function POST(request) {
       status: 200,
       headers: corsHeaders(),
     });
+
   } catch (err) {
     console.error("Stripe Checkout Error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
