@@ -15,6 +15,15 @@ const nextConfig = {
     },
   },
 
+  // Enable external image domains
+  images: {
+    domains: [
+      'lh3.googleusercontent.com',
+      'firebasestorage.googleapis.com',
+      'cardealer-ai.firebasestorage.app'
+    ],
+  },
+
   // Fixes issues with sharp + wasm imports on Vercel
   webpack: (config) => {
     config.resolve.fallback = {
