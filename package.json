@@ -22,11 +22,15 @@
 
     "cheerio": "^1.0.0",
     "jimp": "^0.22.10",
-    "formdata-node": "^6.0.2"
+    "formdata-node": "^6.0.2",
+
+    "sharp": "^0.32.6",
+    "pdfjs-dist": "^3.10.111"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.0",
     "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0"
+    "autoprefixer": "^10.4.0",
+    "@types/node": "^20.11.0"
   }
 }
