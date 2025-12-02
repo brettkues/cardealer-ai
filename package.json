@@ -8,22 +8,18 @@
     "start": "next start"
   },
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   },
   "dependencies": {
     "next": "14.0.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-
     "firebase": "^9.22.0",
     "firebase-admin": "^11.10.0",
-
     "stripe": "^12.15.0",
-
     "cheerio": "^1.0.0",
     "jimp": "^0.22.10",
     "formdata-node": "^6.0.2",
-
     "sharp": "^0.32.6",
     "pdfjs-dist": "^3.10.111"
   },
