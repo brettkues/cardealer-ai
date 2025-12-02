@@ -1,6 +1,5 @@
-// /app/firebase.js
-
-import { initializeApp } from "firebase/app";
+// app/utils/firebase.js
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -9,13 +8,15 @@ const firebaseConfig = {
   apiKey: "AIzaSyB2B08TUUYJwLTGiT1dTlowc64-aJAXjjE",
   authDomain: "cardealer-ai.firebaseapp.com",
   projectId: "cardealer-ai",
-  storageBucket: "cardealer-ai.appspot.com",
+  storageBucket: "cardealer-ai.firebasestorage.app",
   messagingSenderId: "886575208060",
   appId: "1:886575208060:web:23e5ff2001e9a518e09bf9"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+export { auth, db, storage };
