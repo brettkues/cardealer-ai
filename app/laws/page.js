@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { watchSubscription } from "@/app/utils/checkSubscription";
+import { checkSubscription } from "@/app/utils/checkSubscription";
 import { auth, db, storage } from "@/app/firebase";
 import { signOut } from "firebase/auth";
 import {
@@ -59,18 +59,20 @@ export default function LawsPage() {
   // ENFORCE LOGIN + SUBSCRIPTION
   // ----------------------------------------
   useEffect(() => {
-    const unsub = watchSubscription((status) => {
-      if (!status.loggedIn) {
+    const unsub = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
         router.push("/login");
         return;
       }
 
-      if (!status.active) {
+      const active = await checkSubscription(user.uid);
+
+      if (!active) {
         router.push("/subscribe");
         return;
       }
 
-      setSub(status);
+      setSub({ loggedIn: true, active, uid: user.uid });
     });
 
     return () => unsub();
