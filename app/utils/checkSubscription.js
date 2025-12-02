@@ -1,37 +1,22 @@
-// /app/utils/checkSubscription.js
-
-import { onAuthStateChanged } from "firebase/auth";
+// app/utils/checkSubscription.js
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/app/firebase";
+import { db } from "./firebase";
 
-// Watches login state + subscription status for dashboard pages
-export function watchSubscription(callback) {
-  return onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      callback({
-        loggedIn: false,
-        active: false,
-        subscriptionSource: null,
-        uid: null,
-      });
-      return;
-    }
+export const checkSubscription = async (userId) => {
+  if (!userId) return false;
 
-    // User logged in — pull subscription record
-    const subRef = doc(db, "subscriptions", user.uid);
-    const subSnap = await getDoc(subRef);
+  try {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
 
-    if (subSnap.exists()) {
-      const data = subSnap.data();
-
-      callback({
-        loggedIn: true,
-        active: data.active ?? false,
-        subscriptionSource: data.source ?? null,
-        uid: user.uid,
-      });
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      return data.subscriptionActive === true;
     } else {
-      callback({
-        loggedIn: true,
-        active: false,
-        subscriptionSource: null,
+      return false;
+    }
+  } catch (error) {
+    console.error("Error checking subscription:", error);
+    return false;
+  }
+};
