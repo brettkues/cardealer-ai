@@ -1,3 +1,6 @@
+export const runtime = "nodejs";          // REQUIRED for cheerio
+export const dynamic = "force-dynamic";   // REQUIRED so Vercel doesn't optimize it
+
 import * as cheerio from "cheerio";
 import { corsHeaders, handleCors } from "@/app/utils/cors";
 
@@ -46,7 +49,6 @@ function extractDescription($) {
 }
 
 export async function POST(request) {
-  // Handle OPTIONS preflight
   const preflight = handleCors(request);
   if (preflight) return preflight;
 
@@ -65,7 +67,6 @@ export async function POST(request) {
 
     const $ = cheerio.load(html);
 
-    // Description-only mode
     if (descriptionOnly) {
       const description = extractDescription($);
       return new Response(JSON.stringify({ description }), {
@@ -74,7 +75,6 @@ export async function POST(request) {
       });
     }
 
-    // Full scrape
     const images = extractImages($, url).slice(0, 8);
     const description = extractDescription($);
 
