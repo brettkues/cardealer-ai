@@ -1,10 +1,17 @@
-import { PDFDocument } from "pdf-lib";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// Utility: Fetch a PDF as ArrayBuffer
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
+
+// Required to avoid worker errors
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "pdfjs-dist/legacy/build/pdf.worker.js";
+
+// Utility: Fetch PDF buffer
 async function fetchPdfBuffer(url) {
   const res = await fetch(url);
-  const arrayBuffer = await res.arrayBuffer();
-  return arrayBuffer;
+  if (!res.ok) throw new Error("Unable to fetch PDF");
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 export async function GET(request) {
@@ -17,29 +24,23 @@ export async function GET(request) {
     }
 
     // Load PDF
-    const pdfBuffer = await fetchPdfBuffer(url);
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const data = await fetchPdfBuffer(url);
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
 
     let fullText = "";
 
-    const pages = pdfDoc.getPages();
+    // Extract text from each page
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
 
-    for (const page of pages) {
-      const text = await page.getTextContent?.();
-      if (text && text.items) {
-        const pageText = text.items.map((i) => i.str).join(" ");
-        fullText += pageText + "\n\n";
-      }
+      const pageText = content.items
+        .map((item) => item.str)
+        .join(" ");
+
+      fullText += pageText + "\n\n";
     }
 
     return new Response(fullText, {
       status: 200,
-      headers: { "Content-Type": "text/plain" }
-    });
-
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-    });
-  }
-}
+      headers: { "Content-Typ
