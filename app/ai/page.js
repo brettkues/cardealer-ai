@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkSubscription } from "@/utils/checkSubscription";   // ← ALIAS FIXED
-import { auth, db } from "@/app/firebase";
+
+// RELATIVE IMPORT — REQUIRED FOR VERCEL
+import { checkSubscription } from "../utils/checkSubscription";
+
+// RELATIVE IMPORT — REQUIRED FOR VERCEL
+import { auth } from "../firebase";
+
 import { signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 
 export default function AIPage() {
   const router = useRouter();
@@ -16,7 +20,7 @@ export default function AIPage() {
   const [loading, setLoading] = useState(false);
 
   // ---------------------------------------------------
-  // ENFORCE LOGIN + SUBSCRIPTION
+  // LOGIN + SUBSCRIPTION ENFORCEMENT
   // ---------------------------------------------------
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
