@@ -2,46 +2,50 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { watchSubscription } from "@/app/utils/checkSubscription";
-import { auth, storage, db } from "@/app/firebase";
+
+// FIXED — RELATIVE IMPORTS (REQUIRED FOR VERCEL)
+import { watchSubscription } from "../utils/checkSubscription";
+import { auth, storage, db } from "../firebase";
+
 import { ref, getDownloadURL } from "firebase/storage";
 import {
   collection,
+  addDoc,
   query,
   where,
   getDocs,
-  doc,
-  getDoc,
 } from "firebase/firestore";
 
-export default function SocialGenerator() {
+export default function SocialPage() {
   const router = useRouter();
 
+  const [sub, setSub] = useState(null);
   const [url, setUrl] = useState("");
-  const [vehicleImages, setVehicleImages] = useState([]);
-  const [description, setDescription] = useState("");
-  const [generatedImage, setGeneratedImage] = useState(null);
+  const [desc, setDesc] = useState("");
+  const [logoUrl, setLogoUrl] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const [subReady, setSubReady] = useState(false);
-
-  // ------------------------------------------------------
-  // ENFORCE LOGIN + SUBSCRIPTION
-  // ------------------------------------------------------
+  // -------------------------------
+  // SUBSCRIPTION ENFORCEMENT
+  // -------------------------------
   useState(() => {
     const unsub = watchSubscription((status) => {
-      if (!status.loggedIn) return router.push("/login");
-      if (!status.active) return router.push("/subscribe");
-
-      setSubReady(true);
+      if (!status.loggedIn) {
+        router.push("/login");
+        return;
+      }
+      if (!status.active) {
+        router.push("/subscribe");
+        return;
+      }
+      setSub(status);
     });
-
     return () => unsub();
   }, []);
 
-  if (!subReady) {
+  if (!sub) {
     return (
-      <div className="h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
         Checking subscription…
       </div>
     );
@@ -49,227 +53,96 @@ export default function SocialGenerator() {
 
   const uid = auth.currentUser.uid;
 
-  // ------------------------------------------------------
-  // AUTO-SEASON DETECTION
-  // ------------------------------------------------------
-  function getSeasonRibbon() {
-    const month = new Date().getMonth() + 1;
+  // -------------------------------
+  // LOAD USER LOGO
+  // -------------------------------
+  const loadLogo = async () => {
+    try {
+      const logoRef = ref(storage, `logos/${uid}/logo.png`);
+      const url = await getDownloadURL(logoRef);
+      setLogoUrl(url);
+    } catch {
+      setLogoUrl(null);
+    }
+  };
 
-    if (month === 12) return "christmas";
-    if (month === 11) return "thanksgiving";
-    if (month === 10) return "halloween";
-    if (month === 9) return "fall";
-    if ([7, 8].includes(month)) return "summer";
-    if (month === 6) return "july4";
-    if (month === 5) return "memorial";
-    if (month === 4) return "spring";
-    if (month === 3) return "spring";
-    if (month === 2) return "winter";
-    if (month === 1) return "newyear";
+  // -------------------------------
+  // GENERATE COLLAGE
+  // -------------------------------
+  const generate = async () => {
+    if (!url.trim()) {
+      alert("Enter the URL of the vehicle listing.");
+      return;
+    }
 
-    return "generic";
-  }
-
-  // ------------------------------------------------------
-  // SCRAPE VEHICLE PAGE
-  // ------------------------------------------------------
-  const scrapeVehicle = async () => {
     setLoading(true);
-    setVehicleImages([]);
-    setDescription("");
 
     try {
       const res = await fetch("/api/scrape", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
 
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
 
-      if (!data.images || data.images.length < 4) {
-        alert("Unable to find 4 valid vehicle images.");
+      if (data.error) {
+        alert(data.error);
         setLoading(false);
         return;
       }
 
-      setVehicleImages(data.images.slice(0, 4));
-
-      // Scrape description
-      const descRes = await fetch("/api/scrape", {
+      const collageRes = await fetch("/api/collage", {
         method: "POST",
-        body: JSON.stringify({ url, descriptionOnly: true }),
-      });
-
-      const descData = await descRes.json();
-      setDescription(descData.description || "");
-
-    } catch (err) {
-      alert("Scrape failed: " + err.message);
-    }
-
-    setLoading(false);
-  };
-
-  // ------------------------------------------------------
-  // LOAD DEALER LOGO
-  // ------------------------------------------------------
-  const getDealerLogo = async () => {
-    try {
-      const logoRef = ref(storage, `logos/${uid}/logo.png`);
-      return await getDownloadURL(logoRef);
-    } catch {
-      return null; // no logo
-    }
-  };
-
-  // ------------------------------------------------------
-  // LOAD ADVERTISING LAWS (PDF or TEXT)
-  // ------------------------------------------------------
-  const getDealerLaws = async () => {
-    // 1) text laws take priority
-    const textDoc = await getDoc(doc(db, "lawText", `${uid}_WI`));
-    if (textDoc.exists()) return { type: "text", text: textDoc.data().text };
-
-    // 2) most recent PDF for WI
-    const q = query(
-      collection(db, "lawLibrary"),
-      where("owner", "==", uid),
-      where("state", "==", "WI")
-    );
-
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      // pick newest document
-      const newest = snap.docs.sort(
-        (a, b) => b.data().uploadedAt - a.data().uploadedAt
-      )[0].data();
-
-      return {
-        type: "pdf",
-        url: newest.url,
-      };
-    }
-
-    // Default: WI fallback (dealer has nothing uploaded)
-    return {
-      type: "fallback",
-      text: "Wisconsin advertising law fallback active. Use legally required disclosures for price, payment, APR, availability, and qualifications.",
-    };
-  };
-
-  // ------------------------------------------------------
-  // GENERATE COLLAGE
-  // ------------------------------------------------------
-  const generateCollage = async () => {
-    setLoading(true);
-
-    try {
-      const logoUrl = await getDealerLogo();
-      const laws = await getDealerLaws();
-
-      const res = await fetch("/api/collage", {
-        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          images: vehicleImages,
-          description,
-          season: getSeasonRibbon(),
+          images: data.images,
+          description: data.description,
+          season: "generic",
           logoUrl,
-          laws,
           url,
         }),
       });
 
-      const blob = await res.blob();
-      const imgUrl = URL.createObjectURL(blob);
-      setGeneratedImage(imgUrl);
+      const blob = await collageRes.blob();
+      const imageUrl = URL.createObjectURL(blob);
+
+      setDesc("Image generated. Right-click to save.");
+      setUrl(imageUrl);
     } catch (err) {
-      alert("Collage failed: " + err.message);
+      alert("Error: " + err.message);
     }
 
     setLoading(false);
   };
 
-  // ------------------------------------------------------
-  // UI
-  // ------------------------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-4xl font-bold mb-6">Social Image Generator</h1>
 
-      {/* URL INPUT */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
-        <label className="block mb-3 text-xl font-semibold">
-          Vehicle URL
-        </label>
+      <h1 className="text-3xl font-bold mb-6">Social Media Generator</h1>
 
+      <div className="max-w-3xl mx-auto bg-gray-800 p-6 rounded-xl border border-gray-700">
+
+        <label className="block mb-3 font-semibold">Vehicle URL</label>
         <input
           type="text"
+          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg mb-4"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="Paste vehicle URL"
-          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
         />
 
         <button
-          onClick={scrapeVehicle}
-          disabled={!url || loading}
-          className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg"
+          onClick={generate}
+          disabled={loading}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
         >
-          {loading ? "Scraping…" : "Scrape Vehicle"}
+          {loading ? "Generating..." : "Generate Social Image"}
         </button>
+
+        {desc && (
+          <p className="text-gray-300 mt-4">{desc}</p>
+        )}
       </div>
-
-      {/* IMAGE PREVIEW */}
-      {vehicleImages.length === 4 && (
-        <div className="grid grid-cols-2 gap-4 mb-10">
-          {vehicleImages.map((img, i) => (
-            <img
-              key={i}
-              src={img}
-              className="w-full h-auto rounded-xl border border-gray-700"
-            />
-          ))}
-        </div>
-      )}
-
-      {/* DESCRIPTION PREVIEW */}
-      {description && (
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
-          <h2 className="text-xl font-semibold mb-2">Detected Description</h2>
-          <p className="text-gray-300">{description}</p>
-        </div>
-      )}
-
-      {/* GENERATE COLLAGE BUTTON */}
-      {vehicleImages.length === 4 && (
-        <button
-          onClick={generateCollage}
-          className="w-full py-4 bg-green-600 hover:bg-green-500 text-xl rounded-xl"
-        >
-          {loading ? "Generating…" : "Generate Social Image"}
-        </button>
-      )}
-
-      {/* OUTPUT IMAGE */}
-      {generatedImage && (
-        <div className="mt-10">
-          <h2 className="text-2xl font-semibold mb-4">Final Image</h2>
-
-          <img
-            src={generatedImage}
-            className="w-full max-w-xl border border-gray-700 rounded-xl"
-          />
-
-          <a
-            href={generatedImage}
-            download="collage.png"
-            className="mt-4 block text-center px-6 py-3 bg-blue-600 rounded-lg hover:bg-blue-500"
-          >
-            Download Image
-          </a>
-        </div>
-      )}
     </div>
   );
 }
