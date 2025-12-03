@@ -3,11 +3,11 @@ export const dynamic = "force-dynamic";
 
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
 
-// Required to avoid worker errors
+// Required worker
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "pdfjs-dist/legacy/build/pdf.worker.js";
 
-// Utility: Fetch PDF buffer
+// Fetch PDF as buffer
 async function fetchPdfBuffer(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Unable to fetch PDF");
@@ -43,4 +43,16 @@ export async function GET(request) {
 
     return new Response(fullText, {
       status: 200,
-      headers: { "Content-Typ
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+      },
+    });
+  } catch (err) {
+    return new Response(`Error reading PDF: ${err.message}`, {
+      status: 500,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+      },
+    });
+  }
+}
