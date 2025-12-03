@@ -1,92 +1,59 @@
-export const runtime = "nodejs";          // REQUIRED for cheerio
 export const dynamic = "force-dynamic";   // REQUIRED so Vercel doesn't optimize it
 
 import * as cheerio from "cheerio";
-import { corsHeaders, handleCors } from "@/app/utils/cors";
+import { corsHeaders, handleCors } from "../../utils/cors";
 
-/** Extracts vehicle images */
 function extractImages($, url) {
   const images = [];
-  const base = new URL(url).origin;
 
-  $("img").each((i, el) => {
+  $("img").each((_, el) => {
     const src = $(el).attr("src");
-    if (!src) return;
-
-    if (src.includes("inventoryphotos") || src.includes("photos") || src.includes("vehicle")) {
-      if (src.startsWith("http")) images.push(src);
-      else images.push(base + src);
+    if (src && src.startsWith("http")) {
+      images.push(src);
     }
   });
 
-  return [...new Set(images)];
+  return images.slice(0, 10); // limit for safety
 }
 
-/** Extracts vehicle description */
 function extractDescription($) {
-  let description = "";
+  const title = $("h1, .title, .vehicle-title").first().text().trim();
+  const price = $(".price, .vehicle-price").first().text().trim();
+  const details = $(".description, .vehicle-info").first().text().trim();
 
-  const selectors = [
-    ".vehicle-summary",
-    ".description",
-    ".vehicle-description",
-    "#description",
-    ".col-md-8 p",
-    ".col-md-8 div",
-    "p",
-    "div"
-  ];
-
-  for (const sel of selectors) {
-    $(sel).each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 40 && text.length < 1500) description = text;
-    });
-    if (description) break;
-  }
-
-  return description || "No description found.";
+  return [title, price, details].filter(Boolean).join(" | ");
 }
 
-export async function POST(request) {
-  const preflight = handleCors(request);
+export async function POST(req) {
+  const preflight = handleCors(req);
   if (preflight) return preflight;
 
   try {
-    const { url, descriptionOnly } = await request.json();
+    const { url } = await req.json();
 
     if (!url) {
-      return new Response(JSON.stringify({ error: "No URL provided." }), {
-        status: 400,
-        headers: corsHeaders(),
-      });
+      return new Response(
+        JSON.stringify({ error: "Missing URL" }),
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     const res = await fetch(url);
     const html = await res.text();
-
     const $ = cheerio.load(html);
 
-    if (descriptionOnly) {
-      const description = extractDescription($);
-      return new Response(JSON.stringify({ description }), {
-        status: 200,
-        headers: corsHeaders(),
-      });
-    }
-
-    const images = extractImages($, url).slice(0, 8);
+    const images = extractImages($, url);
     const description = extractDescription($);
 
-    return new Response(JSON.stringify({ images, description }), {
-      status: 200,
-      headers: corsHeaders(),
-    });
+    return new Response(
+      JSON.stringify({ images, description }),
+      { status: 200, headers: corsHeaders() }
+    );
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: corsHeaders(),
-    });
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: corsHeaders() }
+    );
   }
 }
