@@ -1,50 +1,63 @@
-import { NextResponse } from "next/server";
-import OpenAI from "openai";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// CORRECT FIREBASE IMPORT
-import { db } from "@/app/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { corsHeaders, handleCors } from "@/app/utils/cors";
 
-export async function POST(req) {
+export async function POST(request) {
+  const preflight = handleCors(request);
+  if (preflight) return preflight;
+
   try {
-    const { uid, userMessage } = await req.json();
+    const { userMessage } = await request.json();
 
-    if (!uid || !userMessage) {
-      return NextResponse.json(
-        { error: "Missing uid or userMessage" },
-        { status: 400 }
+    if (!userMessage || userMessage.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Message cannot be empty." }),
+        { status: 400, headers: corsHeaders() }
       );
     }
 
-    // Confirm subscription is active
-    const userRef = doc(db, "users", uid);
-    const snap = await getDoc(userRef);
+    const systemPrompt = `
+You are Dealer AI Assistant. 
+Answer clearly and professionally, using your knowledge of car sales, service, leasing, 
+inventory, financing, customer handling, and automotive retail operations.
+Keep responses accurate, direct, and relevant.
+    `;
 
-    if (!snap.exists()) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const data = snap.data();
-
-    if (!data.subscriptionActive) {
-      return NextResponse.json(
-        { error: "Subscription not active" },
-        { status: 403 }
-      );
-    }
-
-    // Send message to OpenAI
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: userMessage }],
+    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage }
+        ],
+        max_tokens: 300
+      })
     });
 
-    const answer = completion.choices?.[0]?.message?.content || "";
+    const data = await openaiRes.json();
 
-    return NextResponse.json({ answer });
+    if (!data.choices || !data.choices[0]) {
+      return new Response(
+        JSON.stringify({ error: "AI did not return a response." }),
+        { status: 500, headers: corsHeaders() }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ answer: data.choices[0].message.content }),
+      { status: 200, headers: corsHeaders() }
+    );
+
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: corsHeaders() }
+    );
   }
 }
