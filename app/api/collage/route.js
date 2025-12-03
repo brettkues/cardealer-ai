@@ -1,4 +1,4 @@
-export const runtime = "nodejs";         
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -30,14 +30,15 @@ function extractYMM(description, url) {
 
     const year = segments.find((x) => /^\d{4}$/.test(x));
     const make = segments[segments.indexOf(year) + 1];
-    const model = segments.slice(
-      segments.indexOf(make) + 1,
-      segments.indexOf(make) + 3
-    ).join(" ");
+    const model = segments
+      .slice(segments.indexOf(make) + 1, segments.indexOf(make) + 3)
+      .join(" ");
 
     if (year && make && model) return `${year} ${make} ${model}`;
 
-    const match = description.match(/(20\d{2})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
+    const match = description.match(
+      /(20\d{2})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/
+    );
     if (match) return `${match[1]} ${match[2]} ${match[3]}`;
 
     return "Vehicle";
@@ -81,6 +82,7 @@ export async function POST(request) {
       });
     }
 
+    // Fetch image buffers
     const buffers = await Promise.all(
       images.map(async (img) => {
         const res = await fetch(img);
@@ -88,12 +90,14 @@ export async function POST(request) {
       })
     );
 
+    // Resize each image
     const resized = await Promise.all(
       buffers.map((buf) =>
         sharp(buf).resize(800, 800, { fit: "cover" }).toBuffer()
       )
     );
 
+    // Base canvas for the 4-image collage
     const canvas = sharp({
       create: {
         width: 1600,
@@ -103,6 +107,7 @@ export async function POST(request) {
       },
     });
 
+    // Ribbon bar
     const ribbonColor = getSeasonAssets(season);
     const ribbon = await sharp({
       create: {
@@ -118,7 +123,20 @@ export async function POST(request) {
     const disclosure = generateDisclosure(description);
     const ymm = extractYMM(description, url);
 
+    // LOAD LOGO
     let logoBuffer = null;
     if (logoUrl) {
       try {
-        const logoRes = aw
+        const logoRes = await fetch(logoUrl);
+        logoBuffer = Buffer.from(await logoRes.arrayBuffer());
+      } catch (err) {
+        console.error("Logo fetch failed:", err);
+      }
+    }
+
+    // Compose the collage
+    let composite = await canvas
+      .composite([
+        { input: resized[0], top: 0, left: 0 },
+        { input: resized[1], top: 0, left: 800 },
+        { input: resized[2], t
