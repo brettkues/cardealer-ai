@@ -2,13 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkSubscription } from "@/utils/checkSubscription";
-import { auth } from "@/app/firebase";
+
+// RELATIVE PATH — SAFE FOR VERCEL
+import { checkSubscription } from "../utils/checkSubscription";
+
+// RELATIVE PATH — SAFE FOR VERCEL
+import { auth } from "../firebase";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [sub, setSub] = useState(null);
 
+  // -------------------------------------------
+  // LOGIN + SUBSCRIPTION CHECK
+  // -------------------------------------------
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -44,7 +51,9 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-10">
       <h1 className="text-3xl font-bold">Dashboard</h1>
-      <p className="mt-4 text-gray-300">Your subscription is active.</p>
+      <p className="mt-4 text-gray-300">
+        Your subscription is active.
+      </p>
     </div>
   );
 }
