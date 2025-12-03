@@ -1,4 +1,3 @@
-
 // app/utils/firebase.js
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
