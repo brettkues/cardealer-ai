@@ -1,57 +1,79 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/app/utils/firebase';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword } from "firebase/auth";
+
+// RELATIVE IMPORT — REQUIRED FOR VERCEL
+import { auth } from "../firebase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = async () => {
+    setError("");
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push('/dashboard');
+      router.push("/dashboard");
     } catch (err) {
-      setError('Invalid email or password');
-      console.error('Login error:', err);
+      setError(err.message || "Login failed.");
     }
   };
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen px-4 bg-gray-100 text-center">
-      <h1 className="text-3xl font-bold mb-6">Login</h1>
-      <form onSubmit={handleLogin} className="space-y-4 w-full max-w-sm">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col justify-center items-center">
+      <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-96">
+
+        <h1 className="text-3xl font-bold mb-6 text-center">Dealer Login</h1>
+
         <input
           type="email"
           placeholder="Email"
+          className="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2 border rounded"
-          required
         />
+
         <input
           type="password"
           placeholder="Password"
+          className="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-2 border rounded"
-          required
         />
-        {error && <p className="text-red-600">{error}</p>}
+
+        {error && (
+          <div className="bg-red-700 p-2 rounded-lg text-center mb-4">
+            {error}
+          </div>
+        )}
+
         <button
-          type="submit"
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+          onClick={handleLogin}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
         >
-          Login
+          Sign In
         </button>
-      </form>
-    </main>
+
+        <p
+          className="text-blue-400 text-center mt-4 cursor-pointer"
+          onClick={() => router.push("/reset")}
+        >
+          Forgot Password?
+        </p>
+
+        <p
+          className="text-blue-400 text-center mt-2 cursor-pointer"
+          onClick={() => router.push("/register")}
+        >
+          Create Account
+        </p>
+      </div>
+    </div>
   );
 }
