@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkSubscription } from "../utils/checkSubscription";  // ← FIXED HERE
+import { checkSubscription } from "@/app/utils/checkSubscription";
 import { auth, db, storage } from "@/app/firebase";
 import { signOut } from "firebase/auth";
 import {
@@ -22,7 +22,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 
-// Tooltip component (hover on desktop, tap-to-open on mobile)
+// Tooltip component
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
 
@@ -36,7 +36,7 @@ function Tooltip({ text }) {
       <span className="ml-2 cursor-pointer text-blue-400 text-sm">ⓘ</span>
 
       {open && (
-        <div className="absolute z-20 left-0 mt-2 w-64 bg-gray-800 text-gray-200 
+        <div className="absolute z-20 left-0 mt-2 w-64 bg-gray-800 text-gray-200
                         text-sm p-3 rounded-xl border border-gray-700 shadow-xl">
           {text}
         </div>
@@ -55,9 +55,7 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ----------------------------------------
-  // ENFORCE LOGIN + SUBSCRIPTION
-  // ----------------------------------------
+  // LOGIN + SUBSCRIPTION ENFORCEMENT
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -72,9 +70,12 @@ export default function LawsPage() {
         return;
       }
 
-      setSub({ loggedIn: true, active, uid: user.uid });
+      setSub({
+        loggedIn: true,
+        active,
+        uid: user.uid,
+      });
     });
-
     return () => unsub();
   }, [router]);
 
@@ -86,36 +87,32 @@ export default function LawsPage() {
     );
   }
 
-  const uid = auth.currentUser.uid;
+  const uid = sub.uid;
 
-  // ----------------------------------------
-  // LOAD UPLOADED LAWS
-  // ----------------------------------------
+  // LOAD UPLOADED DOCS
   const loadDocs = async () => {
-    const baseQuery =
+    const q =
       sub.role === "admin"
         ? query(collection(db, "lawLibrary"))
         : query(collection(db, "lawLibrary"), where("owner", "==", uid));
 
-    const snap = await getDocs(baseQuery);
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setUploaded(list);
+    const snap = await getDocs(q);
+    setUploaded(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   };
 
   useEffect(() => {
     loadDocs();
   }, [sub]);
 
-  // ----------------------------------------
   // UPLOAD PDF
-  // ----------------------------------------
   const uploadPDF = async () => {
     if (!file) {
-      alert("Please select a PDF first.");
+      alert("Select a PDF first.");
       return;
     }
 
     setLoading(true);
+
     try {
       const storagePath = `laws/${uid}/${Date.now()}_${file.name}`;
       const fileRef = ref(storage, storagePath);
@@ -135,16 +132,15 @@ export default function LawsPage() {
 
       setFile(null);
       await loadDocs();
-      alert("PDF uploaded successfully!");
+      alert("PDF uploaded.");
     } catch (err) {
       alert("Upload failed: " + err.message);
     }
+
     setLoading(false);
   };
 
-  // ----------------------------------------
-  // SAVE TEXT LAW (ONE PER STATE)
-  // ----------------------------------------
+  // SAVE TEXT LAW
   const saveTextLaw = async () => {
     if (!textLaw.trim()) {
       alert("Text is empty.");
@@ -152,6 +148,7 @@ export default function LawsPage() {
     }
 
     setLoading(true);
+
     try {
       await setDoc(doc(db, "lawText", `${uid}_${state}`), {
         type: "text",
@@ -166,18 +163,17 @@ export default function LawsPage() {
     } catch (err) {
       alert("Error saving text: " + err.message);
     }
+
     setLoading(false);
   };
 
-  // ----------------------------------------
   // DELETE PDF
-  // ----------------------------------------
   const deletePDF = async (item) => {
     if (!confirm("Delete this file?")) return;
 
     try {
       await deleteObject(ref(storage, item.storagePath));
-    } catch (e) {}
+    } catch {}
 
     await deleteDoc(doc(db, "lawLibrary", item.id));
     await loadDocs();
@@ -201,16 +197,14 @@ export default function LawsPage() {
       <div className="p-8 max-w-4xl mx-auto w-full">
         {/* DISCLAIMER */}
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
-          <strong>Important:</strong>  
-          If you do not upload state advertising laws, the platform will default to  
-          <strong>Wisconsin advertising law</strong> — one of the strictest in the U.S.  
-          Your state may require different disclosures.
+          <strong>Important:</strong> If you do not upload state advertising
+          laws, the platform defaults to <strong>Wisconsin</strong>.
         </div>
 
         {/* STATE SELECT */}
         <label className="text-gray-300 font-semibold">
           Select State
-          <Tooltip text="Choose Wisconsin if you want the default system. Choose Other only if you operate outside WI and want to upload your own laws." />
+          <Tooltip text="Pick WI unless you're uploading laws for another state." />
         </label>
 
         <select
@@ -224,16 +218,13 @@ export default function LawsPage() {
 
         {/* PDF UPLOAD */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
-          <h2 className="text-xl font-semibold mb-3">
-            Upload PDF
-            <Tooltip text="Upload your advertising laws as a PDF. This may be from OEMs, dealer associations, or your attorney." />
-          </h2>
+          <h2 className="text-xl font-semibold mb-3">Upload PDF</h2>
 
           <input
             type="file"
             accept="application/pdf"
-            className="text-gray-300 mb-4"
             onChange={(e) => setFile(e.target.files[0])}
+            className="text-gray-300 mb-4"
           />
 
           <button
@@ -247,16 +238,13 @@ export default function LawsPage() {
 
         {/* TEXT INPUT */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
-          <h2 className="text-xl font-semibold mb-2">
-            Paste Advertising Law Text
-            <Tooltip text="If you don't have a PDF, paste the full text of your state's advertising laws here. Make sure it’s complete. This platform does not verify legal correctness." />
-          </h2>
+          <h2 className="text-xl font-semibold mb-2">Paste Law Text</h2>
 
           <textarea
             value={textLaw}
             onChange={(e) => setTextLaw(e.target.value)}
             className="w-full h-48 bg-gray-700 text-white p-3 rounded-lg border border-gray-600"
-          />
+          ></textarea>
 
           <button
             onClick={saveTextLaw}
@@ -267,11 +255,8 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* UPLOADED LIST */}
-        <h2 className="text-xl font-semibold mb-4">
-          Your Uploaded PDFs
-          <Tooltip text="These are your uploaded advertising-law PDFs. The newest document is used automatically." />
-        </h2>
+        {/* LIST */}
+        <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
 
         {uploaded.length === 0 && (
           <p className="text-gray-400">No PDFs uploaded.</p>
@@ -309,7 +294,7 @@ export default function LawsPage() {
         </div>
 
         <p className="text-gray-400 text-sm mt-8">
-          If you operate outside Wisconsin, upload your state’s laws to avoid using Wisconsin as the default.
+          If outside Wisconsin, upload your own laws.
         </p>
       </div>
     </div>
