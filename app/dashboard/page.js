@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkSubscription } from "@/utils/checkSubscription";   // ← FIXED PATH
+import { checkSubscription } from "@/utils/checkSubscription";
 import { auth } from "@/app/firebase";
 
 export default function DashboardPage() {
@@ -23,7 +23,11 @@ export default function DashboardPage() {
         return;
       }
 
-      setSub({ loggedIn: true, active, uid: user.uid });
+      setSub({
+        loggedIn: true,
+        active,
+        uid: user.uid,
+      });
     });
 
     return () => unsub();
@@ -40,9 +44,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-10">
       <h1 className="text-3xl font-bold">Dashboard</h1>
-      <p className="mt-4 text-gray-300">
-        Your subscription is active. Welcome!
-      </p>
+      <p className="mt-4 text-gray-300">Your subscription is active.</p>
     </div>
   );
 }
