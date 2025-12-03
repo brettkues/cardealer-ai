@@ -1,66 +1,87 @@
-// app/register/page.js
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { setDoc, doc } from "firebase/firestore";
-import { auth, db } from "@/app/utils/firebase";
+
+// FIXED — RELATIVE IMPORTS ONLY
+import { auth, db } from "../firebase";
 
 export default function RegisterPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
+  const handleRegister = async () => {
     setError("");
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const userCred = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
-      await setDoc(doc(db, "users", user.uid), {
+      await setDoc(doc(db, "users", userCred.user.uid), {
+        email,
         subscriptionActive: false,
         role: "user",
-        subscriptionSource: "none",
+        createdAt: new Date(),
       });
 
-      router.push("/dashboard");
+      router.push("/subscribe");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Registration failed.");
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
-      <h1 className="text-3xl font-semibold mb-6">Register</h1>
-      <form onSubmit={handleRegister} className="w-full max-w-sm space-y-4">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col justify-center items-center">
+      <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-96">
+
+        <h1 className="text-3xl font-bold text-center mb-6">
+          Create Your Account
+        </h1>
+
         <input
           type="email"
           placeholder="Email"
+          className="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2 border rounded"
-          required
         />
+
         <input
           type="password"
           placeholder="Password"
+          className="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-2 border rounded"
-          required
         />
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+
+        {error && (
+          <div className="bg-red-700 p-2 rounded-lg text-center mb-4">
+            {error}
+          </div>
+        )}
+
         <button
-          type="submit"
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+          onClick={handleRegister}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
         >
-          Sign Up
+          Create Account
         </button>
-      </form>
+
+        <p
+          className="text-blue-400 text-center mt-4 cursor-pointer"
+          onClick={() => router.push("/login")}
+        >
+          Already have an account? Sign in
+        </p>
+      </div>
     </div>
   );
 }
