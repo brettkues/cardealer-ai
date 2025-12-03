@@ -82,7 +82,6 @@ export async function POST(request) {
       });
     }
 
-    // Fetch image buffers
     const buffers = await Promise.all(
       images.map(async (img) => {
         const res = await fetch(img);
@@ -90,25 +89,14 @@ export async function POST(request) {
       })
     );
 
-    // Resize each image
     const resized = await Promise.all(
       buffers.map((buf) =>
         sharp(buf).resize(800, 800, { fit: "cover" }).toBuffer()
       )
     );
 
-    // Base canvas for the 4-image collage
-    const canvas = sharp({
-      create: {
-        width: 1600,
-        height: 1600,
-        channels: 3,
-        background: "#FFFFFF",
-      },
-    });
-
-    // Ribbon bar
     const ribbonColor = getSeasonAssets(season);
+
     const ribbon = await sharp({
       create: {
         width: 1600,
@@ -120,23 +108,59 @@ export async function POST(request) {
       .png()
       .toBuffer();
 
-    const disclosure = generateDisclosure(description);
-    const ymm = extractYMM(description, url);
-
-    // LOAD LOGO
     let logoBuffer = null;
+
     if (logoUrl) {
       try {
         const logoRes = await fetch(logoUrl);
         logoBuffer = Buffer.from(await logoRes.arrayBuffer());
-      } catch (err) {
-        console.error("Logo fetch failed:", err);
+        logoBuffer = await sharp(logoBuffer)
+          .resize(300, 300, { fit: "contain" })
+          .toBuffer();
+      } catch {
+        logoBuffer = null;
       }
     }
 
-    // Compose the collage
-    let composite = await canvas
-      .composite([
-        { input: resized[0], top: 0, left: 0 },
-        { input: resized[1], top: 0, left: 800 },
-        { input: resized[2], t
+    const ymm = extractYMM(description, url);
+    const disclosure = generateDisclosure(description);
+
+    let collage = sharp({
+      create: {
+        width: 1600,
+        height: 1600,
+        channels: 3,
+        background: "#ffffff",
+      },
+    });
+
+    collage = collage.composite([
+      { input: resized[0], top: 0, left: 0 },
+      { input: resized[1], top: 0, left: 800 },
+      { input: resized[2], top: 800, left: 0 },
+      { input: resized[3], top: 800, left: 800 },
+      { input: ribbon, top: 700, left: 0 },
+    ]);
+
+    if (logoBuffer) {
+      collage = collage.composite([
+        { input: logoBuffer, top: 725, left: 50 },
+      ]);
+    }
+
+    const output = await collage.png().toBuffer();
+
+    return new Response(output, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        ...corsHeaders(),
+      },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: corsHeaders(),
+    });
+  }
+}
