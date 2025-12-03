@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkSubscription } from "@/app/utils/checkSubscription";
+import { checkSubscription } from "../utils/checkSubscription";  // ← FIXED HERE
 import { auth, db, storage } from "@/app/firebase";
 import { signOut } from "firebase/auth";
 import {
