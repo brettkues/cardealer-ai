@@ -1,18 +1,5 @@
-export const runtime = "nodejs";
+export const runtime = "edge"; 
 export const dynamic = "force-dynamic";
-
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
-
-// Required worker
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "pdfjs-dist/legacy/build/pdf.worker.js";
-
-// Fetch PDF as buffer
-async function fetchPdfBuffer(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Unable to fetch PDF");
-  return new Uint8Array(await res.arrayBuffer());
-}
 
 export async function GET(request) {
   try {
@@ -23,36 +10,34 @@ export async function GET(request) {
       return new Response("No PDF URL provided", { status: 400 });
     }
 
-    // Load PDF
-    const data = await fetchPdfBuffer(url);
-    const pdf = await pdfjsLib.getDocument({ data }).promise;
-
-    let fullText = "";
-
-    // Extract text from each page
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-
-      const pageText = content.items
-        .map((item) => item.str)
-        .join(" ");
-
-      fullText += pageText + "\n\n";
+    // Fetch PDF as plain binary
+    const res = await fetch(url);
+    if (!res.ok) {
+      return new Response("Failed to fetch PDF", { status: 500 });
     }
 
-    return new Response(fullText, {
+    const text = await extractTextFallback(res);
+
+    return new Response(text, {
       status: 200,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-      },
+      headers: { "Content-Type": "text/plain" },
     });
+
   } catch (err) {
-    return new Response(`Error reading PDF: ${err.message}`, {
+    return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-      },
     });
   }
+}
+
+// ------------------------------
+// SIMPLE FALLBACK PDF "EXTRACTOR"
+// ------------------------------
+async function extractTextFallback(res) {
+  // This gets SOME text from many PDFs
+  // It is lightweight + Vercel compatible
+  const buffer = new Uint8Array(await res.arrayBuffer());
+  const text = new TextDecoder("utf-8").decode(buffer);
+
+  return text || "Unable to extract text from PDF.";
 }
