@@ -2,10 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
 
-// RELATIVE IMPORT — REQUIRED FOR VERCEL
-import { auth } from "../firebase";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { initializeApp, getApps } from "firebase/app";
+
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+// Ensure Firebase is only initialized once
+if (!getApps().length) {
+  initializeApp(firebaseConfig);
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,66 +27,61 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = async () => {
+  async function handleLogin(e) {
+    e.preventDefault();
     setError("");
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const auth = getAuth();
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+
+      const uid = userCred.user.uid;
+
+      // Store UID so the dashboard can use it
+      localStorage.setItem("uid", uid);
+
       router.push("/dashboard");
     } catch (err) {
-      setError(err.message || "Login failed.");
+      setError("Invalid email or password.");
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col justify-center items-center">
-      <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-96">
+    <div style={{ padding: 40 }}>
+      <h1>Login</h1>
 
-        <h1 className="text-3xl font-bold mb-6 text-center">Dealer Login</h1>
-
+      <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", width: 300 }}>
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
         />
 
         <input
           type="password"
           placeholder="Password"
-          className="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{ marginTop: 10 }}
         />
 
-        {error && (
-          <div className="bg-red-700 p-2 rounded-lg text-center mb-4">
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleLogin}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
-        >
-          Sign In
+        <button type="submit" style={{ marginTop: 20 }}>
+          Login
         </button>
 
-        <p
-          className="text-blue-400 text-center mt-4 cursor-pointer"
-          onClick={() => router.push("/reset")}
-        >
-          Forgot Password?
-        </p>
+        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
+      </form>
 
-        <p
-          className="text-blue-400 text-center mt-2 cursor-pointer"
-          onClick={() => router.push("/register")}
-        >
-          Create Account
-        </p>
-      </div>
+      <p style={{ marginTop: 20 }}>
+        <a href="/register">Create an account</a>
+      </p>
+
+      <p>
+        <a href="/reset">Forgot password?</a>
+      </p>
     </div>
   );
 }
