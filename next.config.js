@@ -1,9 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
+
   experimental: {
-    serverActions: true,
-    webpackBuildWorker: true
+    serverActions: true
+  },
+
+  // Ensure Node.js APIs work in /app/api routes
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false
+    };
+    return config;
   }
 };
 
