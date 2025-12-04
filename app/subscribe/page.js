@@ -1,72 +1,80 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-
-// RELATIVE IMPORT — REQUIRED FOR VERCEL
-import { watchSubscription } from "../utils/checkSubscription";
+import { useState } from "react";
 
 export default function SubscribePage() {
-  const router = useRouter();
-  const [sub, setSub] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [promo, setPromo] = useState("");
+  const [promoResult, setPromoResult] = useState(null);
 
-  useEffect(() => {
-    const unsub = watchSubscription((status) => {
-      if (!status.loggedIn) {
-        router.push("/login");
-        return;
-      }
+  async function applyPromo() {
+    setPromoResult(null);
 
-      // If sub already active → redirect to dashboard
-      if (status.active) {
-        router.push("/dashboard");
-        return;
-      }
-
-      setSub(status);
+    const res = await fetch("/api/promo", {
+      method: "POST",
+      body: JSON.stringify({ code: promo }),
     });
 
-    return () => unsub();
-  }, [router]);
-
-  if (!sub) {
-    return (
-      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
-        Checking subscription…
-      </div>
-    );
+    const data = await res.json();
+    setPromoResult(data);
   }
 
-  const handleSubscribe = () => {
-    router.push("/subscribe/payment");
-  };
+  async function startCheckout(priceId) {
+    setLoading(true);
+
+    const uid = localStorage.getItem("uid");
+    if (!uid) {
+      alert("You must be logged in.");
+      setLoading(false);
+      return;
+    }
+
+    const res = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      body: JSON.stringify({ uid, priceId }),
+    });
+
+    const data = await res.json();
+
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      alert("Error: " + data.error);
+    }
+
+    setLoading(false);
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col justify-center items-center">
-      <div className="bg-gray-800 border border-gray-700 p-8 rounded-xl max-w-md w-full">
+    <div style={{ padding: 40 }}>
+      <h1>Subscribe</h1>
 
-        <h1 className="text-3xl font-bold text-center mb-6">
-          Activate Your Subscription
-        </h1>
+      <div style={{ marginTop: 20 }}>
+        <input
+          type="text"
+          placeholder="Promo code"
+          value={promo}
+          onChange={(e) => setPromo(e.target.value)}
+        />
+        <button onClick={applyPromo}>Apply</button>
 
-        <p className="text-gray-300 mb-6 text-center">
-          Your account is created, but you must activate a subscription to use the Dealer AI platform.
-        </p>
-
-        <button
-          onClick={handleSubscribe}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-lg font-semibold"
-        >
-          View Subscription Options
-        </button>
-
-        <p
-          className="mt-6 text-blue-400 text-center cursor-pointer"
-          onClick={() => router.push("/dashboard")}
-        >
-          Already subscribed? Refresh your status.
-        </p>
+        {promoResult && (
+          <p>
+            {promoResult.valid
+              ? `Promo applied! Discount: ${promoResult.discount}%`
+              : promoResult.message}
+          </p>
+        )}
       </div>
+
+      <h2 style={{ marginTop: 40 }}>Choose a plan:</h2>
+
+      <button
+        disabled={loading}
+        onClick={() => startCheckout(process.env.NEXT_PUBLIC_PRICE_ID)}
+      >
+        Subscribe Now
+      </button>
     </div>
   );
 }
