@@ -1,59 +1,27 @@
-"use client";
+import { redirect } from "next/navigation";
+import { checkSubscription } from "@/lib/checkSubscription";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+export default async function DashboardPage() {
+  // Read UID from cookies or headers via server context
+  const uid = ""; // <-- We will wire this up after we fix login
 
-// RELATIVE PATH — SAFE FOR VERCEL
-import { checkSubscription } from "../utils/checkSubscription";
-
-// RELATIVE PATH — SAFE FOR VERCEL
-import { auth } from "../firebase";
-
-export default function DashboardPage() {
-  const router = useRouter();
-  const [sub, setSub] = useState(null);
-
-  // -------------------------------------------
-  // LOGIN + SUBSCRIPTION CHECK
-  // -------------------------------------------
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const active = await checkSubscription(user.uid);
-
-      if (!active) {
-        router.push("/subscribe");
-        return;
-      }
-
-      setSub({
-        loggedIn: true,
-        active,
-        uid: user.uid,
-      });
-    });
-
-    return () => unsub();
-  }, [router]);
-
-  if (!sub) {
-    return (
-      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
-        Checking subscription…
-      </div>
-    );
+  // If uid is missing, redirect to login
+  if (!uid) {
+    redirect("/login");
   }
 
+  // Check subscription server-side
+  const subscribed = await checkSubscription(uid);
+
+  if (!subscribed) {
+    redirect("/subscribe");
+  }
+
+  // If subscribed, show dashboard
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-10">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      <p className="mt-4 text-gray-300">
-        Your subscription is active.
-      </p>
+    <div style={{ padding: 40 }}>
+      <h1>Dashboard</h1>
+      <p>Welcome! Your subscription is active.</p>
     </div>
   );
 }
