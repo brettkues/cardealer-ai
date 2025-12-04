@@ -1,85 +1,58 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import cheerio from "cheerio";                 // ← FIXED IMPORT
+import cheerio from "cheerio";              // ← FIXED: CJS import, not ESM
 import { corsHeaders, handleCors } from "../../utils/cors";
 
 /** Extract vehicle images */
 function extractImages($, url) {
-  let images = [];
-
+  const images = [];
   $("img").each((_, img) => {
     const src = $(img).attr("src");
-    if (src && src.startsWith("http") && !images.includes(src)) {
-      images.push(src);
-    }
+    if (src && src.startsWith("http")) images.push(src);
   });
-
-  // Fallback
-  if (images.length < 4) {
-    images = images.slice(0, 4);
-  }
-
-  return images;
+  return images.slice(0, 4);
 }
 
 /** Extract description */
 function extractDescription($) {
-  const metaDesc = $('meta[name="description"]').attr("content");
-  if (metaDesc) return metaDesc;
-
-  const ogDesc = $('meta[property="og:description"]').attr("content");
-  if (ogDesc) return ogDesc;
-
-  return "Vehicle listing.";
+  const title = $("title").first().text().trim();
+  return title || "Vehicle";
 }
 
-export async function POST(req) {
-  const preflight = handleCors(req);
+export async function POST(request) {
+  const preflight = handleCors(request);
   if (preflight) return preflight;
 
   try {
-    const { url } = await req.json();
+    const { url } = await request.json();
 
     if (!url) {
       return new Response(JSON.stringify({ error: "Missing URL" }), {
         status: 400,
-        headers: corsHeaders(),
+        headers: corsHeaders()
       });
     }
 
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
+    // Fetch page HTML
+    const res = await fetch(url);
+    const html = await res.text();
 
-    if (!response.ok) {
-      return new Response(JSON.stringify({ error: "Failed to load page" }), {
-        status: 500,
-        headers: corsHeaders(),
-      });
-    }
-
-    const html = await response.text();
+    // Parse with CJS Cheerio (works on Vercel)
     const $ = cheerio.load(html);
 
     const images = extractImages($, url);
     const description = extractDescription($);
 
-    return new Response(
-      JSON.stringify({
-        images,
-        description,
-        url,
-      }),
-      {
-        status: 200,
-        headers: corsHeaders(),
-      }
-    );
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ images, description }), {
+      status: 200,
+      headers: corsHeaders()
+    });
+
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: corsHeaders(),
+      headers: corsHeaders()
     });
   }
 }
