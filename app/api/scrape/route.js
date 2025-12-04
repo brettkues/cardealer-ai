@@ -1,91 +1,83 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import cheerio from "cheerio";       // ← FIXED (no Undici ESM)
-import { corsHeaders, handleCors } from "../utils/cors";
+import cheerio from "cheerio";                 // ← FIXED IMPORT
+import { corsHeaders, handleCors } from "../../utils/cors";
 
+/** Extract vehicle images */
 function extractImages($, url) {
-  const images = [];
-  const base = new URL(url).origin;
+  let images = [];
 
-  $("img").each((i, el) => {
-    const src = $(el).attr("src");
-    if (!src) return;
-
-    if (
-      src.includes("inventoryphotos") ||
-      src.includes("photos") ||
-      src.includes("vehicle")
-    ) {
-      if (src.startsWith("http")) images.push(src);
-      else images.push(base + src);
+  $("img").each((_, img) => {
+    const src = $(img).attr("src");
+    if (src && src.startsWith("http") && !images.includes(src)) {
+      images.push(src);
     }
   });
 
-  return [...new Set(images)];
-}
-
-function extractDescription($) {
-  let description = "";
-
-  const selectors = [
-    ".vehicle-summary",
-    ".description",
-    ".vehicle-description",
-    "#description",
-    ".col-md-8 p",
-    ".col-md-8 div",
-    "p",
-    "div",
-  ];
-
-  for (const sel of selectors) {
-    $(sel).each((_, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 40 && text.length < 1500) description = text;
-    });
-    if (description) break;
+  // Fallback
+  if (images.length < 4) {
+    images = images.slice(0, 4);
   }
 
-  return description || "No description found.";
+  return images;
 }
 
-export async function POST(request) {
-  const preflight = handleCors(request);
+/** Extract description */
+function extractDescription($) {
+  const metaDesc = $('meta[name="description"]').attr("content");
+  if (metaDesc) return metaDesc;
+
+  const ogDesc = $('meta[property="og:description"]').attr("content");
+  if (ogDesc) return ogDesc;
+
+  return "Vehicle listing.";
+}
+
+export async function POST(req) {
+  const preflight = handleCors(req);
   if (preflight) return preflight;
 
   try {
-    const { url, descriptionOnly } = await request.json();
+    const { url } = await req.json();
 
     if (!url) {
-      return new Response(JSON.stringify({ error: "No URL provided." }), {
+      return new Response(JSON.stringify({ error: "Missing URL" }), {
         status: 400,
         headers: corsHeaders(),
       });
     }
 
-    const res = await fetch(url);
-    const html = await res.text();
+    const response = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
 
-    const $ = cheerio.load(html); // ← FIXED
-
-    if (descriptionOnly) {
-      const description = extractDescription($);
-      return new Response(JSON.stringify({ description }), {
-        status: 200,
+    if (!response.ok) {
+      return new Response(JSON.stringify({ error: "Failed to load page" }), {
+        status: 500,
         headers: corsHeaders(),
       });
     }
 
-    const images = extractImages($, url).slice(0, 8);
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    const images = extractImages($, url);
     const description = extractDescription($);
 
-    return new Response(JSON.stringify({ images, description }), {
-      status: 200,
-      headers: corsHeaders(),
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(
+      JSON.stringify({
+        images,
+        description,
+        url,
+      }),
+      {
+        status: 200,
+        headers: corsHeaders(),
+      }
+    );
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: corsHeaders(),
     });
