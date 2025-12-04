@@ -21,7 +21,7 @@
     "jimp": "^0.22.10",
     "formdata-node": "^6.0.2",
     "sharp": "^0.32.6",
-    "pdfjs-dist": "^3.10.111"
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.0",
