@@ -1,46 +1,54 @@
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";  // Prevent static optimization
-export const maxDuration = 60;           // Prevent Vercel timeout on cold-start
+export const preferredRegion = "iad1";
+export const dynamic = "force-dynamic";
 
-import { corsHeaders, handleCors } from "../../utils/cors";
+import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// UPDATED — import firebase from /lib
+import { db } from "@/lib/firebase";
+
+import { doc, getDoc } from "firebase/firestore";
 
 export async function POST(req) {
-  const preflight = handleCors(req);
-  if (preflight) return preflight;
-
   try {
-    const { priceId, uid, email } = await req.json();
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    if (!priceId || !uid || !email) {
-      return new Response(
-        JSON.stringify({ error: "Missing priceId, uid, or email." }),
-        { status: 400, headers: corsHeaders() }
+    const { uid, priceId } = await req.json();
+
+    if (!uid || !priceId) {
+      return NextResponse.json(
+        { error: "Missing uid or priceId" },
+        { status: 400 }
       );
     }
+
+    const userRef = doc(db, "users", uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const { email } = userSnap.data();
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer_email: email,
-      line_items: [
-        { price: priceId, quantity: 1 }
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscribe?canceled=true`,
       metadata: { uid },
     });
 
-    return new Response(
-      JSON.stringify({ url: session.url }),
-      { status: 200, headers: corsHeaders() }
-    );
-
+    return NextResponse.json({ url: session.url });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: corsHeaders() }
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500 }
     );
   }
 }
