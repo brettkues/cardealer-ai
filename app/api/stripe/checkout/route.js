@@ -1,9 +1,12 @@
 export const runtime = "nodejs";
+export const preferredRegion = "iad1";
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-// FIXED — RELATIVE IMPORT (Vercel safe)
-import { db } from "../../../firebase";
+// UPDATED: Firebase must be imported from /lib, not /app
+import { db } from "@/lib/firebase";
 
 import { doc, getDoc } from "firebase/firestore";
 
