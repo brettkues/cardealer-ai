@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// RELATIVE IMPORTS — REQUIRED FOR VERCEL
-import { checkSubscription } from "../utils/checkSubscription";
-import { auth, db, storage } from "../firebase";
+// CLIENT-SAFE FIREBASE IMPORTS
+import {
+  initializeApp,
+  getApps
+} from "firebase/app";
 
-import { signOut } from "firebase/auth";
 import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from "firebase/storage";
+  getAuth,
+  onAuthStateChanged,
+  signOut
+} from "firebase/auth";
+
 import {
+  getFirestore,
   collection,
   addDoc,
   query,
@@ -22,10 +24,43 @@ import {
   getDocs,
   deleteDoc,
   doc,
-  setDoc,
+  setDoc
 } from "firebase/firestore";
 
-// Tooltip component (hover on desktop, tap-to-open on mobile)
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
+} from "firebase/storage";
+
+// SERVER-SAFE SUBSCRIPTION CHECK
+import { checkSubscription } from "@/lib/checkSubscription";
+
+// -------------------------------------
+// INITIALIZE FIREBASE ON CLIENT
+// -------------------------------------
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+if (!getApps().length) {
+  initializeApp(firebaseConfig);
+}
+
+const auth = getAuth();
+const db = getFirestore();
+const storage = getStorage();
+
+// -------------------------------------
+// TOOLTIP COMPONENT
+// -------------------------------------
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
 
@@ -47,6 +82,9 @@ function Tooltip({ text }) {
   );
 }
 
+// -------------------------------------
+// MAIN COMPONENT
+// -------------------------------------
 export default function LawsPage() {
   const router = useRouter();
 
@@ -61,7 +99,7 @@ export default function LawsPage() {
   // ENFORCE LOGIN + SUBSCRIPTION
   // ----------------------------------------
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push("/login");
         return;
@@ -74,7 +112,7 @@ export default function LawsPage() {
         return;
       }
 
-      setSub({ loggedIn: true, active, uid: user.uid });
+      setSub({ uid: user.uid, active: true });
     });
 
     return () => unsub();
@@ -88,19 +126,20 @@ export default function LawsPage() {
     );
   }
 
-  const uid = auth.currentUser.uid;
+  const uid = sub.uid;
 
   // ----------------------------------------
-  // LOAD UPLOADED LAWS
+  // LOAD UPLOADED PDFs
   // ----------------------------------------
   const loadDocs = async () => {
-    const baseQuery =
-      sub.role === "admin"
-        ? query(collection(db, "lawLibrary"))
-        : query(collection(db, "lawLibrary"), where("owner", "==", uid));
+    const baseQuery = query(
+      collection(db, "lawLibrary"),
+      where("owner", "==", uid)
+    );
 
     const snap = await getDocs(baseQuery);
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
     setUploaded(list);
   };
 
@@ -147,7 +186,7 @@ export default function LawsPage() {
   };
 
   // ----------------------------------------
-  // SAVE TEXT LAW (ONE PER STATE)
+  // SAVE TEXT LAW
   // ----------------------------------------
   const saveTextLaw = async () => {
     if (!textLaw.trim()) {
@@ -194,6 +233,7 @@ export default function LawsPage() {
   // ----------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      
       {/* HEADER */}
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
         <h1 className="text-3xl font-bold">Advertising Law Library</h1>
@@ -208,18 +248,18 @@ export default function LawsPage() {
 
       {/* BODY */}
       <div className="p-8 max-w-4xl mx-auto w-full">
+
         {/* DISCLAIMER */}
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
           <strong>Important:</strong>  
           If you do not upload state advertising laws, the platform will default to  
-          <strong>Wisconsin advertising law</strong> — one of the strictest in the U.S.  
-          Your state may require different disclosures.
+          <strong> Wisconsin advertising law</strong>.
         </div>
 
         {/* STATE SELECT */}
         <label className="text-gray-300 font-semibold">
           Select State
-          <Tooltip text="Choose Wisconsin for default rules. Choose Other if uploading custom state law." />
+          <Tooltip text="Upload laws specific to your state." />
         </label>
 
         <select
@@ -235,7 +275,7 @@ export default function LawsPage() {
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-3">
             Upload PDF
-            <Tooltip text="Upload OEM, state, or attorney-provided advertising laws as PDF." />
+            <Tooltip text="Upload OEM or state-provided advertising laws." />
           </h2>
 
           <input
@@ -258,7 +298,7 @@ export default function LawsPage() {
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-2">
             Paste Advertising Law Text
-            <Tooltip text="If you don't have a PDF, paste the state's advertising laws here." />
+            <Tooltip text="If you don't have a PDF, paste text here." />
           </h2>
 
           <textarea
@@ -277,10 +317,7 @@ export default function LawsPage() {
         </div>
 
         {/* UPLOADED LIST */}
-        <h2 className="text-xl font-semibold mb-4">
-          Your Uploaded PDFs
-          <Tooltip text="Newest law documents override older ones." />
-        </h2>
+        <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
 
         {uploaded.length === 0 ? (
           <p className="text-gray-400">No PDFs uploaded.</p>
@@ -317,9 +354,6 @@ export default function LawsPage() {
           </div>
         )}
 
-        <p className="text-gray-400 text-sm mt-8">
-          Upload your state laws to avoid Wisconsin rules being applied by default.
-        </p>
       </div>
     </div>
   );
