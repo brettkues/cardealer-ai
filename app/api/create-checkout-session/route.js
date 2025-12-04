@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";  // Prevent static optimization
 export const maxDuration = 60;           // Prevent Vercel timeout on cold-start
 
