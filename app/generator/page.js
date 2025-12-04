@@ -1,93 +1,83 @@
 "use client";
+
 import { useState } from "react";
 
 export default function GeneratorPage() {
-  const [url, setUrl] = useState("");
-  const [images, setImages] = useState([]);
-  const [selected, setSelected] = useState([]);
+  const [images, setImages] = useState(["", "", "", ""]);
   const [loading, setLoading] = useState(false);
+  const [resultUrl, setResultUrl] = useState(null);
+  const [ribbonText, setRibbonText] = useState("");
 
-  async function fetchImages() {
+  async function generateCollage() {
     setLoading(true);
-    setImages([]);
-    setSelected([]);
+    setResultUrl(null);
 
-    try {
-      const res = await fetch("/api/scrape", {
-        method: "POST",
-        body: JSON.stringify({ url }),
-      });
+    const res = await fetch("/api/collage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        images,
+        ribbonText,
+      }),
+    });
 
-      const data = await res.json();
-      console.log("API Response:", data);
-
-      if (data.images && data.images.length > 0) {
-        setImages(data.images);
-      } else {
-        alert("No vehicle images found on that page.");
-      }
-    } catch (err) {
-      alert("Error fetching images.");
+    if (!res.ok) {
+      alert("Failed to generate collage.");
+      setLoading(false);
+      return;
     }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    setResultUrl(url);
 
     setLoading(false);
   }
 
-  function toggleSelect(src) {
-    setSelected((prev) => {
-      if (prev.includes(src)) {
-        return prev.filter((img) => img !== src);
-      }
-      if (prev.length < 4) {
-        return [...prev, src];
-      }
-      alert("You can only select 4 images.");
-      return prev;
-    });
+  function handleImageChange(index, value) {
+    const newArr = [...images];
+    newArr[index] = value;
+    setImages(newArr);
   }
 
   return (
-    <div className="p-10 text-xl">
-      <h1 className="text-3xl font-bold mb-6">Image Generator</h1>
+    <div style={{ padding: 40 }}>
+      <h1>Image Collage Generator</h1>
+
+      <p>Enter 4 image URLs:</p>
+
+      {images.map((img, i) => (
+        <input
+          key={i}
+          type="text"
+          placeholder={`Image URL ${i + 1}`}
+          value={img}
+          onChange={(e) => handleImageChange(i, e.target.value)}
+          style={{ display: "block", marginBottom: 10, width: "400px" }}
+        />
+      ))}
 
       <input
         type="text"
-        placeholder="https://www.pischkemotorsoflacrosse.com/used-car-page"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        className="border p-3 w-full max-w-xl rounded mb-6"
+        placeholder="Ribbon text (optional)"
+        value={ribbonText}
+        onChange={(e) => setRibbonText(e.target.value)}
+        style={{ marginTop: 10, width: "400px" }}
       />
 
       <button
-        onClick={fetchImages}
-        className="bg-blue-600 text-white px-6 py-3 rounded"
+        onClick={generateCollage}
+        disabled={loading}
+        style={{ marginTop: 20 }}
       >
-        {loading ? "Fetching..." : "Fetch Images"}
+        {loading ? "Generating..." : "Generate Collage"}
       </button>
 
-      {/* IMAGE GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
-        {images.map((src, i) => {
-          const isSelected = selected.includes(src);
-          return (
-            <div
-              key={i}
-              onClick={() => toggleSelect(src)}
-              className={`cursor-pointer border-4 ${
-                isSelected ? "border-blue-600" : "border-transparent"
-              }`}
-            >
-              <img src={src} className="w-full h-auto" />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* COLLAGE BUTTON */}
-      {selected.length === 4 && (
-        <button className="bg-green-600 text-white px-6 py-3 rounded mt-6">
-          Build Collage
-        </button>
+      {resultUrl && (
+        <div style={{ marginTop: 20 }}>
+          <h3>Generated Image:</h3>
+          <img src={resultUrl} alt="Collage result" style={{ maxWidth: "100%" }} />
+        </div>
       )}
     </div>
   );
