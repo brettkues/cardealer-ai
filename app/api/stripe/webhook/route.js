@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
-// UPDATED — import from /lib
 import { db } from "@/lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 
@@ -28,6 +27,7 @@ export async function POST(req) {
   }
 
   try {
+    // Handle subscription creation
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
 
