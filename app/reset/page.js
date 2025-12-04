@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-
-// FIXED: removed "@/app", must be relative
-import { auth } from "../firebase";
+import { auth } from "../firebase";            // ← FIXED PATH
 import { sendPasswordResetEmail } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -56,12 +54,14 @@ export default function ResetPasswordPage() {
           onKeyDown={handleKey}
         />
 
+        {/* Error */}
         {error && (
           <div className="bg-red-600 text-white p-3 rounded-lg mb-4 text-sm">
             {error}
           </div>
         )}
 
+        {/* Success */}
         {sent && (
           <div className="bg-green-600 text-white p-3 rounded-lg mb-4 text-sm">
             Password reset email sent. Check your inbox.
@@ -76,6 +76,7 @@ export default function ResetPasswordPage() {
           {loading ? "Sending…" : "Send Reset Email"}
         </button>
 
+        {/* Links */}
         <div className="mt-6 text-center text-sm text-blue-400">
           <button onClick={() => router.push("/login")}>Back to Login</button>
         </div>
