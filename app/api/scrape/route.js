@@ -1,58 +1,45 @@
 export const runtime = "nodejs";
+export const preferredRegion = "iad1";
 export const dynamic = "force-dynamic";
 
-import cheerio from "cheerio";              // ← FIXED: CJS import, not ESM
-import { corsHeaders, handleCors } from "../../utils/cors";
+import { NextResponse } from "next/server";
 
-/** Extract vehicle images */
-function extractImages($, url) {
-  const images = [];
-  $("img").each((_, img) => {
-    const src = $(img).attr("src");
-    if (src && src.startsWith("http")) images.push(src);
-  });
-  return images.slice(0, 4);
-}
-
-/** Extract description */
-function extractDescription($) {
-  const title = $("title").first().text().trim();
-  return title || "Vehicle";
-}
-
-export async function POST(request) {
-  const preflight = handleCors(request);
-  if (preflight) return preflight;
-
+// Basic text scraper — safe for Vercel, avoids JSDOM during build
+export async function POST(req) {
   try {
-    const { url } = await request.json();
+    const { url } = await req.json();
 
     if (!url) {
-      return new Response(JSON.stringify({ error: "Missing URL" }), {
-        status: 400,
-        headers: corsHeaders()
-      });
+      return NextResponse.json(
+        { error: "URL is required" },
+        { status: 400 }
+      );
     }
 
-    // Fetch page HTML
     const res = await fetch(url);
+
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: `Failed to fetch URL: ${res.status}` },
+        { status: 500 }
+      );
+    }
+
     const html = await res.text();
 
-    // Parse with CJS Cheerio (works on Vercel)
-    const $ = cheerio.load(html);
+    // Simple title extraction — expandable later
+    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+    const title = titleMatch ? titleMatch[1] : "No title found";
 
-    const images = extractImages($, url);
-    const description = extractDescription($);
-
-    return new Response(JSON.stringify({ images, description }), {
-      status: 200,
-      headers: corsHeaders()
+    return NextResponse.json({
+      success: true,
+      title,
+      length: html.length,
     });
-
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: corsHeaders()
-    });
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500 }
+    );
   }
 }
