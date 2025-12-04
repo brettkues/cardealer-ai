@@ -1,5 +1,5 @@
 {
-  "name": "cardealership-ai",
+  "name": "cardealer-ai",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -7,26 +7,19 @@
     "build": "next build",
     "start": "next start"
   },
-  "engines": {
-    "node": "24.x"
-  },
   "dependencies": {
+    "firebase": "^10.8.0",
     "next": "14.0.0",
+    "openai": "^4.20.0",
+    "pdf-parse": "^1.1.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "firebase": "^9.22.0",
-    "firebase-admin": "^11.10.0",
-    "stripe": "^12.15.0",
-    "cheerio": "^1.0.0",
-    "jimp": "^0.22.10",
-    "formdata-node": "^6.0.2",
-    "sharp": "^0.32.6",
-    "pdf-parse": "^1.1.1"
+    "sharp": "^0.33.1",
+    "stripe": "^12.0.0"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0",
-    "@types/node": "^20.11.0"
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.4.0"
   }
 }
