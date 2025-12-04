@@ -1,5 +1,8 @@
-export const runtime = "edge"; 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
+
+// This version avoids pdfjs, avoids canvas, avoids workers,
+// and WILL deploy on Vercel with zero extra dependencies.
 
 export async function GET(request) {
   try {
@@ -10,15 +13,21 @@ export async function GET(request) {
       return new Response("No PDF URL provided", { status: 400 });
     }
 
-    // Fetch PDF as plain binary
+    // Fetch PDF binary
     const res = await fetch(url);
     if (!res.ok) {
       return new Response("Failed to fetch PDF", { status: 500 });
     }
 
-    const text = await extractTextFallback(res);
+    // Lightweight fallback – extract whatever plain text exists
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    const text = new TextDecoder("utf-8").decode(buffer);
 
-    return new Response(text, {
+    const cleaned = text && text.trim().length > 0
+      ? text
+      : "Unable to extract readable text from PDF.";
+
+    return new Response(cleaned, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
@@ -26,18 +35,7 @@ export async function GET(request) {
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
+      headers: { "Content-Type": "application/json" },
     });
   }
-}
-
-// ------------------------------
-// SIMPLE FALLBACK PDF "EXTRACTOR"
-// ------------------------------
-async function extractTextFallback(res) {
-  // This gets SOME text from many PDFs
-  // It is lightweight + Vercel compatible
-  const buffer = new Uint8Array(await res.arrayBuffer());
-  const text = new TextDecoder("utf-8").decode(buffer);
-
-  return text || "Unable to extract text from PDF.";
 }
