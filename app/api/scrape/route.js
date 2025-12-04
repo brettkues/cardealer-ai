@@ -1,10 +1,9 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import * as cheerio from "cheerio";
-import { corsHeaders, handleCors } from "../../utils/cors";
+import cheerio from "cheerio";       // ← FIXED (no Undici ESM)
+import { corsHeaders, handleCors } from "../utils/cors";
 
-/** Extracts vehicle images */
 function extractImages($, url) {
   const images = [];
   const base = new URL(url).origin;
@@ -26,7 +25,6 @@ function extractImages($, url) {
   return [...new Set(images)];
 }
 
-/** Extracts vehicle description */
 function extractDescription($) {
   let description = "";
 
@@ -68,9 +66,9 @@ export async function POST(request) {
 
     const res = await fetch(url);
     const html = await res.text();
-    const $ = cheerio.load(html);
 
-    // Description-only mode
+    const $ = cheerio.load(html); // ← FIXED
+
     if (descriptionOnly) {
       const description = extractDescription($);
       return new Response(JSON.stringify({ description }), {
@@ -79,25 +77,17 @@ export async function POST(request) {
       });
     }
 
-    // Full scrape
     const images = extractImages($, url).slice(0, 8);
     const description = extractDescription($);
 
-    return new Response(
-      JSON.stringify({ images, description }),
-      {
-        status: 200,
-        headers: corsHeaders(),
-      }
-    );
-
+    return new Response(JSON.stringify({ images, description }), {
+      status: 200,
+      headers: corsHeaders(),
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      {
-        status: 500,
-        headers: corsHeaders(),
-      }
-    );
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: corsHeaders(),
+    });
   }
 }
