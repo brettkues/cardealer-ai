@@ -5,6 +5,9 @@ export const maxDuration = 60;
 import sharp from "sharp";
 import { corsHeaders, handleCors } from "../../utils/cors";
 
+// ------------------------------------------------------------
+// SEASON COLORS
+// ------------------------------------------------------------
 function getSeasonAssets(season) {
   const seasonMap = {
     christmas: "#C00000",
@@ -22,6 +25,9 @@ function getSeasonAssets(season) {
   return seasonMap[season] || "#333333";
 }
 
+// ------------------------------------------------------------
+// EXTRACT YEAR/MAKE/MODEL FROM DESCRIPTION OR URL
+// ------------------------------------------------------------
 function extractYMM(description, url) {
   try {
     const urlParts = url.split("/");
@@ -36,9 +42,7 @@ function extractYMM(description, url) {
 
     if (year && make && model) return `${year} ${make} ${model}`;
 
-    const match = description.match(
-      /(20\d{2})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/
-    );
+    const match = description.match(/(20\d{2})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
     if (match) return `${match[1]} ${match[2]} ${match[3]}`;
 
     return "Vehicle";
@@ -47,6 +51,9 @@ function extractYMM(description, url) {
   }
 }
 
+// ------------------------------------------------------------
+// AUTOMATIC DISCLOSURE GENERATION
+// ------------------------------------------------------------
 function generateDisclosure(description) {
   const triggers = {
     price: /\$[\d,]+/i,
@@ -67,21 +74,28 @@ function generateDisclosure(description) {
   return "All offers subject to tax, title, license & fees. See dealer for details.";
 }
 
+// ------------------------------------------------------------
+// ROUTE: POST
+// ------------------------------------------------------------
 export async function POST(request) {
   const preflight = handleCors(request);
   if (preflight) return preflight;
 
   try {
     const body = await request.json();
-    const { images, description, season, logoUrl, url } = body;
+    const { images, description, season, logoUrl, laws, url } = body;
 
+    // Validate images
     if (!images || images.length !== 4) {
-      return new Response(
-        JSON.stringify({ error: "4 images required" }),
-        { status: 400, headers: corsHeaders() }
-      );
+      return new Response(JSON.stringify({ error: "4 images required" }), {
+        status: 400,
+        headers: corsHeaders(),
+      });
     }
 
+    // ------------------------------------------------------------
+    // Download vehicle images
+    // ------------------------------------------------------------
     const buffers = await Promise.all(
       images.map(async (img) => {
         const res = await fetch(img);
@@ -91,12 +105,25 @@ export async function POST(request) {
 
     const resized = await Promise.all(
       buffers.map((buf) =>
-        sharp(buf)
-          .resize(800, 800, { fit: "cover" })
-          .toBuffer()
+        sharp(buf).resize(800, 800, { fit: "cover" }).toBuffer()
       )
     );
 
+    // ------------------------------------------------------------
+    // Create base canvas
+    // ------------------------------------------------------------
+    const canvas = sharp({
+      create: {
+        width: 1600,
+        height: 1600,
+        channels: 3,
+        background: "#FFFFFF",
+      },
+    });
+
+    // ------------------------------------------------------------
+    // Create ribbon
+    // ------------------------------------------------------------
     const ribbonColor = getSeasonAssets(season);
     const ribbon = await sharp({
       create: {
@@ -109,38 +136,77 @@ export async function POST(request) {
       .png()
       .toBuffer();
 
-    const disclosure = generateDisclosure(description);
-    const ymm = extractYMM(description, url);
-
+    // ------------------------------------------------------------
+    // Logo fetch (optional)
+    // ------------------------------------------------------------
     let logoBuffer = null;
+
     if (logoUrl) {
       try {
-        const res = await fetch(logoUrl);
-        logoBuffer = Buffer.from(await res.arrayBuffer());
+        const logoRes = await fetch(logoUrl);
+        const arr = await logoRes.arrayBuffer();
+        logoBuffer = Buffer.from(arr);
       } catch {
-        logoBuffer = null;
+        logoBuffer = null; // continue without logo
       }
     }
 
-    const finalImage = await sharp({
-      create: {
-        width: 1600,
-        height: 1800,
-        channels: 3,
-        background: "#FFFFFF",
-      },
-    })
+    // ------------------------------------------------------------
+    // Auto-text
+    // ------------------------------------------------------------
+    const disclosure = generateDisclosure(description);
+    const ymm = extractYMM(description, url);
+
+    // ------------------------------------------------------------
+    // Compose everything
+    // ------------------------------------------------------------
+    let final = await canvas
       .composite([
         { input: resized[0], top: 0, left: 0 },
         { input: resized[1], top: 0, left: 800 },
         { input: resized[2], top: 800, left: 0 },
         { input: resized[3], top: 800, left: 800 },
-        { input: ribbon, top: 1600, left: 0 },
+        { input: ribbon, top: 700, left: 0 },
       ])
       .png()
       .toBuffer();
 
-    return new Response(finalImage, {
+    // ------------------------------------------------------------
+    // Add text + logo with Sharp pipeline
+    // ------------------------------------------------------------
+    let svgText = `
+      <svg width="1600" height="1600">
+        <text x="50%" y="760" font-size="48" fill="white" text-anchor="middle" font-family="Arial" font-weight="bold">
+          ${ymm}
+        </text>
+
+        <text x="50%" y="820" font-size="32" fill="white" text-anchor="middle" font-family="Arial">
+          ${description}
+        </text>
+
+        <text x="50%" y="880" font-size="28" fill="white" text-anchor="middle" font-family="Arial">
+          ${disclosure}
+        </text>
+      </svg>
+    `;
+
+    final = await sharp(final)
+      .composite([{ input: Buffer.from(svgText), top: 0, left: 0 }])
+      .png()
+      .toBuffer();
+
+    // Logo overlay
+    if (logoBuffer) {
+      final = await sharp(final)
+        .composite([{ input: logoBuffer, top: 710, left: 40 }])
+        .png()
+        .toBuffer();
+    }
+
+    // ------------------------------------------------------------
+    // Successful response
+    // ------------------------------------------------------------
+    return new Response(final, {
       status: 200,
       headers: {
         "Content-Type": "image/png",
@@ -148,9 +214,9 @@ export async function POST(request) {
       },
     });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: corsHeaders() }
-    );
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: corsHeaders(),
+    });
   }
 }
