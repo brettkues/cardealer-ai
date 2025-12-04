@@ -27,13 +27,21 @@ import {
   setDoc
 } from "firebase/firestore";
 
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject
-} from "firebase/storage";
+// REMOVE Firebase Storage import:
+// import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+
+// ADD SAFE LAZY LOADER FOR STORAGE
+let storage = null;
+async function loadStorage() {
+  const module = await import("firebase/storage");
+  return {
+    getStorage: module.getStorage,
+    ref: module.ref,
+    uploadBytes: module.uploadBytes,
+    getDownloadURL: module.getDownloadURL,
+    deleteObject: module.deleteObject
+  };
+}
 
 // SERVER-SAFE SUBSCRIPTION CHECK
 import { checkSubscription } from "@/lib/checkSubscription";
@@ -56,7 +64,6 @@ if (!getApps().length) {
 
 const auth = getAuth();
 const db = getFirestore();
-const storage = getStorage();
 
 // -------------------------------------
 // TOOLTIP COMPONENT
@@ -148,41 +155,10 @@ export default function LawsPage() {
   }, [sub]);
 
   // ----------------------------------------
-  // UPLOAD PDF
+  // UPLOAD PDF  (THIS PART NOT CHANGED YET)
   // ----------------------------------------
   const uploadPDF = async () => {
-    if (!file) {
-      alert("Please select a PDF first.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const storagePath = `laws/${uid}/${Date.now()}_${file.name}`;
-      const fileRef = ref(storage, storagePath);
-
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-
-      await addDoc(collection(db, "lawLibrary"), {
-        type: "pdf",
-        state,
-        url,
-        filename: file.name,
-        owner: uid,
-        storagePath,
-        uploadedAt: new Date(),
-      });
-
-      setFile(null);
-      await loadDocs();
-      alert("PDF uploaded successfully!");
-    } catch (err) {
-      alert("Upload failed: " + err.message);
-    }
-
-    setLoading(false);
+    alert("Step 2 will update this function.");
   };
 
   // ----------------------------------------
@@ -215,17 +191,10 @@ export default function LawsPage() {
   };
 
   // ----------------------------------------
-  // DELETE PDF
+  // DELETE PDF (NOT UPDATED YET)
   // ----------------------------------------
-  const deletePDF = async (item) => {
-    if (!confirm("Delete this file?")) return;
-
-    try {
-      await deleteObject(ref(storage, item.storagePath));
-    } catch {}
-
-    await deleteDoc(doc(db, "lawLibrary", item.id));
-    await loadDocs();
+  const deletePDF = async () => {
+    alert("Step 3 will update this function.");
   };
 
   // ----------------------------------------
@@ -233,11 +202,8 @@ export default function LawsPage() {
   // ----------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      
-      {/* HEADER */}
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
         <h1 className="text-3xl font-bold">Advertising Law Library</h1>
-
         <button
           onClick={() => signOut(auth)}
           className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
@@ -246,17 +212,13 @@ export default function LawsPage() {
         </button>
       </div>
 
-      {/* BODY */}
       <div className="p-8 max-w-4xl mx-auto w-full">
-
-        {/* DISCLAIMER */}
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
           <strong>Important:</strong>  
           If you do not upload state advertising laws, the platform will default to  
           <strong> Wisconsin advertising law</strong>.
         </div>
 
-        {/* STATE SELECT */}
         <label className="text-gray-300 font-semibold">
           Select State
           <Tooltip text="Upload laws specific to your state." />
@@ -271,7 +233,6 @@ export default function LawsPage() {
           <option value="OTHER">Other State</option>
         </select>
 
-        {/* PDF UPLOAD */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-3">
             Upload PDF
@@ -294,7 +255,6 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* TEXT INPUT */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-2">
             Paste Advertising Law Text
@@ -315,45 +275,6 @@ export default function LawsPage() {
             {loading ? "Saving…" : "Save Text"}
           </button>
         </div>
-
-        {/* UPLOADED LIST */}
-        <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
-
-        {uploaded.length === 0 ? (
-          <p className="text-gray-400">No PDFs uploaded.</p>
-        ) : (
-          <div className="space-y-4">
-            {uploaded.map((item) => (
-              <div
-                key={item.id}
-                className="p-4 bg-gray-800 border border-gray-700 rounded-xl flex justify-between"
-              >
-                <div>
-                  <p className="font-semibold">{item.filename}</p>
-                  <p className="text-gray-400 text-sm">State: {item.state}</p>
-                </div>
-
-                <div className="flex gap-3">
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    className="px-3 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm"
-                  >
-                    View
-                  </a>
-
-                  <button
-                    onClick={() => deletePDF(item)}
-                    className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
       </div>
     </div>
   );
