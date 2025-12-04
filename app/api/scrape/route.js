@@ -1,59 +1,103 @@
-export const dynamic = "force-dynamic";   // REQUIRED so Vercel doesn't optimize it
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import * as cheerio from "cheerio";
 import { corsHeaders, handleCors } from "../../utils/cors";
 
+/** Extracts vehicle images */
 function extractImages($, url) {
   const images = [];
+  const base = new URL(url).origin;
 
-  $("img").each((_, el) => {
+  $("img").each((i, el) => {
     const src = $(el).attr("src");
-    if (src && src.startsWith("http")) {
-      images.push(src);
+    if (!src) return;
+
+    if (
+      src.includes("inventoryphotos") ||
+      src.includes("photos") ||
+      src.includes("vehicle")
+    ) {
+      if (src.startsWith("http")) images.push(src);
+      else images.push(base + src);
     }
   });
 
-  return images.slice(0, 10); // limit for safety
+  return [...new Set(images)];
 }
 
+/** Extracts vehicle description */
 function extractDescription($) {
-  const title = $("h1, .title, .vehicle-title").first().text().trim();
-  const price = $(".price, .vehicle-price").first().text().trim();
-  const details = $(".description, .vehicle-info").first().text().trim();
+  let description = "";
 
-  return [title, price, details].filter(Boolean).join(" | ");
+  const selectors = [
+    ".vehicle-summary",
+    ".description",
+    ".vehicle-description",
+    "#description",
+    ".col-md-8 p",
+    ".col-md-8 div",
+    "p",
+    "div",
+  ];
+
+  for (const sel of selectors) {
+    $(sel).each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 40 && text.length < 1500) description = text;
+    });
+    if (description) break;
+  }
+
+  return description || "No description found.";
 }
 
-export async function POST(req) {
-  const preflight = handleCors(req);
+export async function POST(request) {
+  const preflight = handleCors(request);
   if (preflight) return preflight;
 
   try {
-    const { url } = await req.json();
+    const { url, descriptionOnly } = await request.json();
 
     if (!url) {
-      return new Response(
-        JSON.stringify({ error: "Missing URL" }),
-        { status: 400, headers: corsHeaders() }
-      );
+      return new Response(JSON.stringify({ error: "No URL provided." }), {
+        status: 400,
+        headers: corsHeaders(),
+      });
     }
 
     const res = await fetch(url);
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    const images = extractImages($, url);
+    // Description-only mode
+    if (descriptionOnly) {
+      const description = extractDescription($);
+      return new Response(JSON.stringify({ description }), {
+        status: 200,
+        headers: corsHeaders(),
+      });
+    }
+
+    // Full scrape
+    const images = extractImages($, url).slice(0, 8);
     const description = extractDescription($);
 
     return new Response(
       JSON.stringify({ images, description }),
-      { status: 200, headers: corsHeaders() }
+      {
+        status: 200,
+        headers: corsHeaders(),
+      }
     );
 
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err.message }),
-      { status: 500, headers: corsHeaders() }
+      {
+        status: 500,
+        headers: corsHeaders(),
+      }
     );
   }
 }
