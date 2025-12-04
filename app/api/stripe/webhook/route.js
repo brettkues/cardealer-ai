@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
-// UPDATED — must import firebase from /lib
+// UPDATED — import from /lib
 import { db } from "@/lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 
@@ -28,6 +28,30 @@ export async function POST(req) {
   }
 
   try {
-    // Handle subscription creation/updates
     if (event.type === "checkout.session.completed") {
-      const session = event
+      const session = event.data.object;
+
+      const uid = session.metadata?.uid;
+      if (!uid) {
+        return new NextResponse("Missing UID in metadata", { status: 400 });
+      }
+
+      await setDoc(
+        doc(db, "users", uid),
+        {
+          subscribed: true,
+          lastUpdated: Date.now(),
+        },
+        { merge: true }
+      );
+    }
+
+    return new NextResponse("Received", { status: 200 });
+  } catch (err) {
+    return new NextResponse(`Server error: ${err.message}`, { status: 500 });
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({ message: "Stripe webhook endpoint active" });
+}
