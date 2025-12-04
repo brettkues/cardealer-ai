@@ -4,17 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 // CLIENT-SAFE FIREBASE IMPORTS
-import {
-  initializeApp,
-  getApps
-} from "firebase/app";
-
+import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
   onAuthStateChanged,
   signOut
 } from "firebase/auth";
-
 import {
   getFirestore,
   collection,
@@ -27,10 +22,7 @@ import {
   setDoc
 } from "firebase/firestore";
 
-// REMOVE Firebase Storage import:
-// import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-
-// ADD SAFE LAZY LOADER FOR STORAGE
+// LAZY LOADER FOR FIREBASE STORAGE (prevents undici build errors)
 let storage = null;
 async function loadStorage() {
   const module = await import("firebase/storage");
@@ -46,9 +38,9 @@ async function loadStorage() {
 // SERVER-SAFE SUBSCRIPTION CHECK
 import { checkSubscription } from "@/lib/checkSubscription";
 
-// -------------------------------------
-// INITIALIZE FIREBASE ON CLIENT
-// -------------------------------------
+// -------------------------------------------
+// INITIALIZE FIREBASE
+// -------------------------------------------
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -65,9 +57,9 @@ if (!getApps().length) {
 const auth = getAuth();
 const db = getFirestore();
 
-// -------------------------------------
+// -------------------------------------------
 // TOOLTIP COMPONENT
-// -------------------------------------
+// -------------------------------------------
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
 
@@ -80,8 +72,7 @@ function Tooltip({ text }) {
     >
       <span className="ml-2 cursor-pointer text-blue-400 text-sm">ⓘ</span>
       {open && (
-        <div className="absolute z-20 left-0 mt-2 w-64 bg-gray-800 text-gray-200 
-                        text-sm p-3 rounded-xl border border-gray-700 shadow-xl">
+        <div className="absolute z-20 left-0 mt-2 w-64 bg-gray-800 text-gray-200 text-sm p-3 rounded-xl border border-gray-700 shadow-xl">
           {text}
         </div>
       )}
@@ -89,9 +80,9 @@ function Tooltip({ text }) {
   );
 }
 
-// -------------------------------------
-// MAIN COMPONENT
-// -------------------------------------
+// -------------------------------------------
+// MAIN PAGE
+// -------------------------------------------
 export default function LawsPage() {
   const router = useRouter();
 
@@ -102,9 +93,7 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ----------------------------------------
   // ENFORCE LOGIN + SUBSCRIPTION
-  // ----------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -135,9 +124,7 @@ export default function LawsPage() {
 
   const uid = sub.uid;
 
-  // ----------------------------------------
-  // LOAD UPLOADED PDFs
-  // ----------------------------------------
+  // LOAD PDF LIST
   const loadDocs = async () => {
     const baseQuery = query(
       collection(db, "lawLibrary"),
@@ -154,16 +141,52 @@ export default function LawsPage() {
     loadDocs();
   }, [sub]);
 
-  // ----------------------------------------
-  // UPLOAD PDF  (THIS PART NOT CHANGED YET)
-  // ----------------------------------------
+  // -------------------------------------------
+  // UPLOAD PDF (SAFE STORAGE VERSION)
+  // -------------------------------------------
   const uploadPDF = async () => {
-    alert("Step 2 will update this function.");
+    if (!file) {
+      alert("Please select a PDF first.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { getStorage, ref, uploadBytes, getDownloadURL } =
+        await loadStorage();
+
+      if (!storage) storage = getStorage();
+
+      const storagePath = `laws/${uid}/${Date.now()}_${file.name}`;
+      const fileRef = ref(storage, storagePath);
+
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+
+      await addDoc(collection(db, "lawLibrary"), {
+        type: "pdf",
+        state,
+        url,
+        filename: file.name,
+        owner: uid,
+        storagePath,
+        uploadedAt: new Date(),
+      });
+
+      setFile(null);
+      await loadDocs();
+      alert("PDF uploaded successfully!");
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    }
+
+    setLoading(false);
   };
 
-  // ----------------------------------------
-  // SAVE TEXT LAW
-  // ----------------------------------------
+  // -------------------------------------------
+  // SAVE TEXT (STATE LAW TEXT)
+  // -------------------------------------------
   const saveTextLaw = async () => {
     if (!textLaw.trim()) {
       alert("Text is empty.");
@@ -190,20 +213,36 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // ----------------------------------------
-  // DELETE PDF (NOT UPDATED YET)
-  // ----------------------------------------
-  const deletePDF = async () => {
-    alert("Step 3 will update this function.");
+  // -------------------------------------------
+  // DELETE PDF (SAFE STORAGE VERSION)
+  // -------------------------------------------
+  const deletePDF = async (item) => {
+    if (!confirm("Delete this file?")) return;
+
+    try {
+      const { getStorage, ref, deleteObject } = await loadStorage();
+
+      if (!storage) storage = getStorage();
+
+      const fileRef = ref(storage, item.storagePath);
+      await deleteObject(fileRef);
+    } catch (err) {
+      console.warn("Failed to delete storage file:", err);
+    }
+
+    await deleteDoc(doc(db, "lawLibrary", item.id));
+    await loadDocs();
   };
 
-  // ----------------------------------------
-  // RENDER
-  // ----------------------------------------
+  // -------------------------------------------
+  // RENDER PAGE
+  // -------------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
         <h1 className="text-3xl font-bold">Advertising Law Library</h1>
+
         <button
           onClick={() => signOut(auth)}
           className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
@@ -213,15 +252,15 @@ export default function LawsPage() {
       </div>
 
       <div className="p-8 max-w-4xl mx-auto w-full">
+
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
-          <strong>Important:</strong>  
-          If you do not upload state advertising laws, the platform will default to  
-          <strong> Wisconsin advertising law</strong>.
+          <strong>Important:</strong> If you do not upload laws for your state,
+          the system defaults to <strong>Wisconsin advertising law</strong>.
         </div>
 
         <label className="text-gray-300 font-semibold">
           Select State
-          <Tooltip text="Upload laws specific to your state." />
+          <Tooltip text="Choose which state's law library you want to store." />
         </label>
 
         <select
@@ -234,10 +273,7 @@ export default function LawsPage() {
         </select>
 
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
-          <h2 className="text-xl font-semibold mb-3">
-            Upload PDF
-            <Tooltip text="Upload OEM or state-provided advertising laws." />
-          </h2>
+          <h2 className="text-xl font-semibold mb-3">Upload PDF</h2>
 
           <input
             type="file"
@@ -256,10 +292,7 @@ export default function LawsPage() {
         </div>
 
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
-          <h2 className="text-xl font-semibold mb-2">
-            Paste Advertising Law Text
-            <Tooltip text="If you don't have a PDF, paste text here." />
-          </h2>
+          <h2 className="text-xl font-semibold mb-2">Paste Advertising Law Text</h2>
 
           <textarea
             value={textLaw}
@@ -275,6 +308,44 @@ export default function LawsPage() {
             {loading ? "Saving…" : "Save Text"}
           </button>
         </div>
+
+        <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
+
+        {uploaded.length === 0 ? (
+          <p className="text-gray-400">No PDFs uploaded.</p>
+        ) : (
+          <div className="space-y-4">
+            {uploaded.map((item) => (
+              <div
+                key={item.id}
+                className="p-4 bg-gray-800 border border-gray-700 rounded-xl flex justify-between"
+              >
+                <div>
+                  <p className="font-semibold">{item.filename}</p>
+                  <p className="text-gray-400 text-sm">State: {item.state}</p>
+                </div>
+
+                <div className="flex gap-3">
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    className="px-3 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm"
+                  >
+                    View
+                  </a>
+
+                  <button
+                    onClick={() => deletePDF(item)}
+                    className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
   );
