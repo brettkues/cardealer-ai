@@ -1,86 +1,61 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "../firebase";            // ← FIXED PATH
-import { sendPasswordResetEmail } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 
-export default function ResetPasswordPage() {
-  const router = useRouter();
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
 
+if (!getApps().length) {
+  initializeApp(firebaseConfig);
+}
+
+export default function ResetPage() {
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const handleReset = async () => {
+  async function handleReset(e) {
+    e.preventDefault();
+    setMessage("");
     setError("");
-    setSent(false);
-
-    if (!email.includes("@")) {
-      setError("Please enter a valid email.");
-      return;
-    }
-
-    setLoading(true);
 
     try {
+      const auth = getAuth();
       await sendPasswordResetEmail(auth, email);
-      setSent(true);
+      setMessage("Password reset email sent.");
     } catch (err) {
-      setError(err.message || "Unable to send reset email.");
+      setError("Unable to send reset email. Check the address.");
     }
-
-    setLoading(false);
-  };
-
-  const handleKey = (e) => {
-    if (e.key === "Enter") handleReset();
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center px-6">
-      <div className="bg-gray-800 p-10 rounded-2xl w-full max-w-md border border-gray-700">
+    <div style={{ padding: 40 }}>
+      <h1>Reset Password</h1>
 
-        <h1 className="text-3xl font-bold mb-6">Reset Password</h1>
-
-        <label className="block mb-2">Email</label>
+      <form onSubmit={handleReset} style={{ display: "flex", flexDirection: "column", width: 300 }}>
         <input
           type="email"
-          className="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 mb-4"
-          placeholder="you@dealership.com"
+          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={handleKey}
+          required
         />
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-600 text-white p-3 rounded-lg mb-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Success */}
-        {sent && (
-          <div className="bg-green-600 text-white p-3 rounded-lg mb-4 text-sm">
-            Password reset email sent. Check your inbox.
-          </div>
-        )}
-
-        <button
-          onClick={handleReset}
-          disabled={loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-lg font-semibold disabled:opacity-50"
-        >
-          {loading ? "Sending…" : "Send Reset Email"}
+        <button type="submit" style={{ marginTop: 20 }}>
+          Send Reset Email
         </button>
+      </form>
 
-        {/* Links */}
-        <div className="mt-6 text-center text-sm text-blue-400">
-          <button onClick={() => router.push("/login")}>Back to Login</button>
-        </div>
-      </div>
+      {message && <p style={{ color: "green", marginTop: 10 }}>{message}</p>}
+      {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
     </div>
   );
 }
