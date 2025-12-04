@@ -1,79 +1,56 @@
 export const runtime = "nodejs";
+export const preferredRegion = "iad1";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
 
+import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-// FIXED — RELATIVE IMPORT (NO "@")
-import { corsHeaders, handleCors } from "../../utils/cors";
+// UPDATED — import from /lib
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
-// Firebase Admin for secure server-side Firestore
-import { initializeApp, cert, getApps } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-
-// -------------------------------------------
-// Initialize Firebase Admin (only once)
-// -------------------------------------------
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_ADMIN_KEY)),
-  });
-}
-
-const adminDB = getFirestore();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-export async function POST(request) {
-  const preflight = handleCors(request);
-  if (preflight) return preflight;
-
+export async function POST(req) {
   try {
-    const { uid } = await request.json();
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+    const { uid } = await req.json();
 
     if (!uid) {
-      return new Response(
-        JSON.stringify({ error: "Missing UID." }),
-        { status: 400, headers: corsHeaders() }
+      return NextResponse.json(
+        { error: "Missing uid" },
+        { status: 400 }
       );
     }
 
-    // Load user record
-    const userRef = adminDB.collection("users").doc(uid);
-    const snap = await userRef.get();
+    const userRef = doc(db, "users", uid);
+    const userSnap = await getDoc(userRef);
 
-    if (!snap.exists) {
-      return new Response(
-        JSON.stringify({ error: "User not found." }),
-        { status: 404, headers: corsHeaders() }
+    if (!userSnap.exists()) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
       );
     }
 
-    const data = snap.data();
+    const { stripeCustomerId } = userSnap.data();
 
-    if (!data.stripeCustomerId) {
-      return new Response(
-        JSON.stringify({
-          error: "No Stripe customer found for this account.",
-        }),
-        { status: 400, headers: corsHeaders() }
+    if (!stripeCustomerId) {
+      return NextResponse.json(
+        { error: "No Stripe customer ID found" },
+        { status: 400 }
       );
     }
 
-    // Create billing portal session
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: data.stripeCustomerId,
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
       return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
     });
 
-    return new Response(
-      JSON.stringify({ url: portalSession.url }),
-      { status: 200, headers: corsHeaders() }
-    );
-
+    return NextResponse.json({ url: session.url });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: corsHeaders() }
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500 }
     );
   }
 }
