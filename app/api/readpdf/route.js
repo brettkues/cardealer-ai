@@ -1,8 +1,14 @@
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// This version avoids pdfjs, avoids canvas, avoids workers,
-// and WILL deploy on Vercel with zero extra dependencies.
+import pdf from "pdf-parse";
+
+// Fetch PDF as ArrayBuffer / Buffer
+async function fetchPdfBuffer(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Unable to fetch PDF");
+  return Buffer.from(await res.arrayBuffer());
+}
 
 export async function GET(request) {
   try {
@@ -13,21 +19,11 @@ export async function GET(request) {
       return new Response("No PDF URL provided", { status: 400 });
     }
 
-    // Fetch PDF binary
-    const res = await fetch(url);
-    if (!res.ok) {
-      return new Response("Failed to fetch PDF", { status: 500 });
-    }
+    // Fetch & parse PDF text
+    const buffer = await fetchPdfBuffer(url);
+    const data = await pdf(buffer);
 
-    // Lightweight fallback – extract whatever plain text exists
-    const buffer = new Uint8Array(await res.arrayBuffer());
-    const text = new TextDecoder("utf-8").decode(buffer);
-
-    const cleaned = text && text.trim().length > 0
-      ? text
-      : "Unable to extract readable text from PDF.";
-
-    return new Response(cleaned, {
+    return new Response(data.text, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
@@ -35,7 +31,6 @@ export async function GET(request) {
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
     });
   }
 }
