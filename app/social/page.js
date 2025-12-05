@@ -1,132 +1,111 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default function SocialPage() {
-  const [website, setWebsite] = useState("");
-  const [inventoryImages, setInventoryImages] = useState([]);
-  const [selectedImages, setSelectedImages] = useState([]);
+export default function SocialCollagePage() {
+  const router = useRouter();
+
+  const [checking, setChecking] = useState(true);
+  const [uid, setUid] = useState(null);
+
   const [description, setDescription] = useState("");
-  const [resultUrl, setResultUrl] = useState(null);
+  const [resultUrl, setResultUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function scrapeSite() {
-    setInventoryImages([]);
-    setSelectedImages([]);
-    setResultUrl(null);
+  useEffect(() => {
+    async function verify() {
+      // 1. Get session
+      const sessionRes = await fetch("/api/session/me");
+      const session = await sessionRes.json();
 
-    const res = await fetch("/api/scrape", {
-      method: "POST",
-      body: JSON.stringify({ url: website }),
-    });
+      if (!session.uid) {
+        router.push("/login");
+        return;
+      }
 
-    const data = await res.json();
+      // 2. Check subscription
+      const subRes = await fetch("/api/subscription", {
+        method: "POST",
+        body: JSON.stringify({ uid: session.uid })
+      });
 
-    if (!data.success) {
-      alert("Unable to scrape website.");
-      return;
+      const sub = await subRes.json();
+
+      if (!sub.active) {
+        router.push("/subscribe");
+        return;
+      }
+
+      setUid(session.uid);
+      setChecking(false);
     }
 
-    // Placeholder: production scraper should return image URLs
-    // For now we use dummy placeholders until scraper is rebuilt.
-    setInventoryImages([
-      "https://via.placeholder.com/800x800?text=Image+1",
-      "https://via.placeholder.com/800x800?text=Image+2",
-      "https://via.placeholder.com/800x800?text=Image+3",
-      "https://via.placeholder.com/800x800?text=Image+4",
-    ]);
-  }
+    verify();
+  }, [router]);
 
-  function toggleSelect(img) {
-    if (selectedImages.includes(img)) {
-      setSelectedImages(selectedImages.filter((i) => i !== img));
-    } else if (selectedImages.length < 4) {
-      setSelectedImages([...selectedImages, img]);
-    }
+  if (checking) {
+    return (
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+        Loading…
+      </div>
+    );
   }
 
   async function generateCollage() {
-    if (selectedImages.length !== 4) {
-      alert("Select exactly 4 images.");
-      return;
-    }
-
+    if (!description.trim()) return alert("Enter a description first.");
     setLoading(true);
-    setResultUrl(null);
 
-    const res = await fetch("/api/collage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        images: selectedImages,
-        ribbonText: description,
-      }),
-    });
+    try {
+      const res = await fetch("/api/collage", {
+        method: "POST",
+        body: JSON.stringify({
+          uid,
+          description,
+        }),
+      });
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    setResultUrl(url);
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error);
+
+      setResultUrl(data.url);
+    } catch (err) {
+      alert("Error generating collage: " + err.message);
+    }
 
     setLoading(false);
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Facebook Image Generator</h1>
+    <div className="min-h-screen bg-gray-900 text-white p-10">
+      <h1 className="text-3xl font-bold mb-6">Facebook Collage Generator</h1>
 
-      <input
-        type="text"
-        placeholder="Dealer website URL"
-        value={website}
-        onChange={(e) => setWebsite(e.target.value)}
-        style={{ width: 400 }}
-      />
-      <button onClick={scrapeSite} style={{ marginLeft: 10 }}>
-        Load Inventory
-      </button>
+      <div className="bg-gray-800 p-6 rounded-xl max-w-xl">
+        <label className="font-semibold">Short description</label>
+        <textarea
+          className="w-full bg-gray-700 text-white p-3 rounded mt-2 h-32"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
 
-      {inventoryImages.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 20 }}>Select 4 images:</h3>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {inventoryImages.map((img) => (
-              <img
-                key={img}
-                src={img}
-                onClick={() => toggleSelect(img)}
-                style={{
-                  width: 150,
-                  height: 150,
-                  border: selectedImages.includes(img)
-                    ? "4px solid blue"
-                    : "2px solid gray",
-                  cursor: "pointer",
-                }}
-              />
-            ))}
-          </div>
-
-          <textarea
-            placeholder="Ribbon text / description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            style={{ marginTop: 20, width: 400, height: 80 }}
-          />
-
-          <button
-            onClick={generateCollage}
-            disabled={loading}
-            style={{ marginTop: 10 }}
-          >
-            {loading ? "Generating..." : "Generate Collage"}
-          </button>
-        </>
-      )}
+        <button
+          onClick={generateCollage}
+          disabled={loading}
+          className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+        >
+          {loading ? "Generating…" : "Generate Collage"}
+        </button>
+      </div>
 
       {resultUrl && (
-        <div style={{ marginTop: 30 }}>
-          <h3>Final Collage:</h3>
-          <img src={resultUrl} style={{ maxWidth: "100%" }} />
+        <div className="mt-10">
+          <h2 className="text-xl font-semibold mb-3">Generated Image</h2>
+          <img
+            src={resultUrl}
+            alt="Generated collage"
+            className="rounded-xl shadow-xl border border-gray-700 max-w-xl"
+          />
         </div>
       )}
     </div>
