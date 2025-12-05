@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// CLIENT-SAFE FIREBASE IMPORTS
+// CLIENT-FRIENDLY FIREBASE INIT
 import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
@@ -22,32 +22,23 @@ import {
   setDoc
 } from "firebase/firestore";
 
-// LAZY LOADER FOR FIREBASE STORAGE (prevents undici build errors)
-let storage = null;
+// LAZY-LOADED STORAGE (AVOIDS BUILD ERRORS)
+let storageModule = null;
 async function loadStorage() {
-  const module = await import("firebase/storage");
-  return {
-    getStorage: module.getStorage,
-    ref: module.ref,
-    uploadBytes: module.uploadBytes,
-    getDownloadURL: module.getDownloadURL,
-    deleteObject: module.deleteObject
-  };
+  if (storageModule) return storageModule;
+  storageModule = await import("firebase/storage");
+  return storageModule;
 }
 
-// SERVER-SAFE SUBSCRIPTION CHECK
+// SERVER-SAFE CHECK
 import { checkSubscription } from "@/lib/checkSubscription";
 
-// -------------------------------------------
-// INITIALIZE FIREBASE
-// -------------------------------------------
+// Initialize Firebase client app
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 if (!getApps().length) {
@@ -57,9 +48,6 @@ if (!getApps().length) {
 const auth = getAuth();
 const db = getFirestore();
 
-// -------------------------------------------
-// TOOLTIP COMPONENT
-// -------------------------------------------
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
 
@@ -80,9 +68,6 @@ function Tooltip({ text }) {
   );
 }
 
-// -------------------------------------------
-// MAIN PAGE
-// -------------------------------------------
 export default function LawsPage() {
   const router = useRouter();
 
@@ -93,7 +78,6 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ENFORCE LOGIN + SUBSCRIPTION
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -108,7 +92,7 @@ export default function LawsPage() {
         return;
       }
 
-      setSub({ uid: user.uid, active: true });
+      setSub({ loggedIn: true, active, uid: user.uid });
     });
 
     return () => unsub();
@@ -122,18 +106,16 @@ export default function LawsPage() {
     );
   }
 
-  const uid = sub.uid;
+  const uid = auth.currentUser.uid;
 
-  // LOAD PDF LIST
   const loadDocs = async () => {
-    const baseQuery = query(
-      collection(db, "lawLibrary"),
-      where("owner", "==", uid)
-    );
+    const baseQuery =
+      sub.role === "admin"
+        ? query(collection(db, "lawLibrary"))
+        : query(collection(db, "lawLibrary"), where("owner", "==", uid));
 
     const snap = await getDocs(baseQuery);
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
     setUploaded(list);
   };
 
@@ -141,9 +123,6 @@ export default function LawsPage() {
     loadDocs();
   }, [sub]);
 
-  // -------------------------------------------
-  // UPLOAD PDF (SAFE STORAGE VERSION)
-  // -------------------------------------------
   const uploadPDF = async () => {
     if (!file) {
       alert("Please select a PDF first.");
@@ -156,8 +135,7 @@ export default function LawsPage() {
       const { getStorage, ref, uploadBytes, getDownloadURL } =
         await loadStorage();
 
-      if (!storage) storage = getStorage();
-
+      const storage = getStorage();
       const storagePath = `laws/${uid}/${Date.now()}_${file.name}`;
       const fileRef = ref(storage, storagePath);
 
@@ -184,9 +162,6 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // -------------------------------------------
-  // SAVE TEXT (STATE LAW TEXT)
-  // -------------------------------------------
   const saveTextLaw = async () => {
     if (!textLaw.trim()) {
       alert("Text is empty.");
@@ -213,33 +188,22 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // -------------------------------------------
-  // DELETE PDF (SAFE STORAGE VERSION)
-  // -------------------------------------------
   const deletePDF = async (item) => {
     if (!confirm("Delete this file?")) return;
 
-    try {
-      const { getStorage, ref, deleteObject } = await loadStorage();
+    await fetch("/api/laws/delete", {
+      method: "POST",
+      body: JSON.stringify({
+        id: item.id,
+        storagePath: item.storagePath,
+      }),
+    });
 
-      if (!storage) storage = getStorage();
-
-      const fileRef = ref(storage, item.storagePath);
-      await deleteObject(fileRef);
-    } catch (err) {
-      console.warn("Failed to delete storage file:", err);
-    }
-
-    await deleteDoc(doc(db, "lawLibrary", item.id));
     await loadDocs();
   };
 
-  // -------------------------------------------
-  // RENDER PAGE
-  // -------------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
         <h1 className="text-3xl font-bold">Advertising Law Library</h1>
 
@@ -252,15 +216,13 @@ export default function LawsPage() {
       </div>
 
       <div className="p-8 max-w-4xl mx-auto w-full">
-
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
-          <strong>Important:</strong> If you do not upload laws for your state,
-          the system defaults to <strong>Wisconsin advertising law</strong>.
+          <strong>Important:</strong>
+          If you do not upload state advertising laws, the platform will default to Wisconsin laws.
         </div>
 
         <label className="text-gray-300 font-semibold">
-          Select State
-          <Tooltip text="Choose which state's law library you want to store." />
+          Select State <Tooltip text="Choose the state whose advertising laws you want to upload." />
         </label>
 
         <select
@@ -345,7 +307,6 @@ export default function LawsPage() {
             ))}
           </div>
         )}
-
       </div>
     </div>
   );
