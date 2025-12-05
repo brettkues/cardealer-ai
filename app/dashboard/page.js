@@ -1,28 +1,32 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { checkSubscription } from "@/lib/checkSubscription";
 
 export default async function DashboardPage() {
-  // Read UID from secure cookie created at login
-  const uid = cookies().get("session_uid")?.value;
+  // Fetch the logged-in user from server-side cookie
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/me`, {
+    cache: "no-store",
+  });
 
-  // If cookie missing → not logged in
-  if (!uid) {
+  const data = await res.json();
+  const user = data.user;
+
+  // Not logged in → redirect to login
+  if (!user || !user.uid) {
     redirect("/login");
   }
 
-  // Check subscription status
-  const subscribed = await checkSubscription(uid);
+  // Check subscription on the server
+  const active = await checkSubscription(user.uid);
 
-  if (!subscribed) {
+  if (!active) {
     redirect("/subscribe");
   }
 
-  // If valid → show dashboard
+  // Success → user authenticated + subscribed
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
-      <p>Your subscription is active. Welcome to your tools.</p>
+      <p>Welcome! Your subscription is active.</p>
     </div>
   );
 }
