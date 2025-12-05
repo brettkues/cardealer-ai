@@ -3,17 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-// Lazy-load Firebase Auth — prevents Undici from being bundled
-let authModule = null;
-async function loadAuth() {
-  if (authModule) return authModule;
-  authModule = await import("firebase/auth");
-  return authModule;
-}
-
-// Firebase init
 import { initializeApp, getApps } from "firebase/app";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 
+// Firebase client config
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -23,6 +16,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+// Initialize once
 if (!getApps().length) initializeApp(firebaseConfig);
 
 export default function LoginPage() {
@@ -37,14 +31,25 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const { getAuth, signInWithEmailAndPassword } = await loadAuth();
       const auth = getAuth();
-
       const userCred = await signInWithEmailAndPassword(auth, email, password);
-      const uid = userCred.user.uid;
 
-      localStorage.setItem("uid", uid);
+      const user = userCred.user;
+      const token = await user.getIdToken();
+
+      // Send token to server to set an HTTP-only cookie
+      const res = await fetch("/api/session/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Cookie set failed");
+      }
+
       router.push("/dashboard");
+
     } catch (err) {
       setError("Invalid email or password.");
     }
@@ -54,7 +59,10 @@ export default function LoginPage() {
     <div style={{ padding: 40 }}>
       <h1>Login</h1>
 
-      <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", width: 300 }}>
+      <form
+        onSubmit={handleLogin}
+        style={{ display: "flex", flexDirection: "column", width: 300 }}
+      >
         <input
           type="email"
           placeholder="Email"
