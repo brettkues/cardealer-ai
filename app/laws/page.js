@@ -17,12 +17,11 @@ import {
   query,
   where,
   getDocs,
-  deleteDoc,
   doc,
   setDoc
 } from "firebase/firestore";
 
-// LAZY-LOADED STORAGE (prevents Webpack from parsing undici)
+// LAZY-LOADED STORAGE (prevents Undici/Webpack parsing)
 let storageModule = null;
 async function loadStorage() {
   if (storageModule) return storageModule;
@@ -41,11 +40,15 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
+// Init Firebase once
 if (!getApps().length) initializeApp(firebaseConfig);
 
 const auth = getAuth();
 const db = getFirestore();
 
+// -----------------------------------------
+// Tooltip Component
+// -----------------------------------------
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
 
@@ -66,6 +69,9 @@ function Tooltip({ text }) {
   );
 }
 
+// -----------------------------------------
+// MAIN PAGE COMPONENT
+// -----------------------------------------
 export default function LawsPage() {
   const router = useRouter();
 
@@ -76,9 +82,9 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ------------------------------------
+  // -----------------------------------------
   // LOGIN + SUBSCRIPTION CHECK
-  // ------------------------------------
+  // -----------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -109,9 +115,9 @@ export default function LawsPage() {
 
   const uid = auth.currentUser.uid;
 
-  // ------------------------------------
-  // LOAD USER FILES
-  // ------------------------------------
+  // -----------------------------------------
+  // LOAD USER PDF RECORDS
+  // -----------------------------------------
   const loadDocs = async () => {
     const baseQuery =
       sub.role === "admin"
@@ -127,9 +133,9 @@ export default function LawsPage() {
     loadDocs();
   }, [sub]);
 
-  // ------------------------------------
-  // UPLOAD PDF (lazy-loaded storage)
-  // ------------------------------------
+  // -----------------------------------------
+  // UPLOAD PDF
+  // -----------------------------------------
   const uploadPDF = async () => {
     if (!file) return alert("Please select a PDF.");
 
@@ -165,9 +171,9 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // ------------------------------------
-  // SAVE TEXT LAW
-  // ------------------------------------
+  // -----------------------------------------
+  // SAVE PLAIN TEXT LAW
+  // -----------------------------------------
   const saveTextLaw = async () => {
     if (!textLaw.trim()) return alert("Text is empty.");
 
@@ -187,9 +193,9 @@ export default function LawsPage() {
     }
   };
 
-  // ------------------------------------
-  // DELETE PDF (server API)
-  // ------------------------------------
+  // -----------------------------------------
+  // DELETE PDF
+  // -----------------------------------------
   const deletePDF = async (item) => {
     if (!confirm("Delete this file?")) return;
 
@@ -204,9 +210,9 @@ export default function LawsPage() {
     await loadDocs();
   };
 
-  // ------------------------------------
-  // RENDER
-  // ------------------------------------
+  // -----------------------------------------
+  // RENDER UI
+  // -----------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
@@ -223,13 +229,12 @@ export default function LawsPage() {
       <div className="p-8 max-w-4xl mx-auto w-full">
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
           <strong>Important:</strong>  
-          If you do not upload specific state advertising laws, the platform defaults to
+          If you do not upload specific state advertising laws, the platform defaults to  
           <strong> Wisconsin law</strong>.
         </div>
 
         <label className="text-gray-300 font-semibold">
-          Select State
-          <Tooltip text="Choose which state's advertising laws you want to upload." />
+          Select State <Tooltip text="Choose which state's advertising laws you want to upload." />
         </label>
 
         <select
@@ -261,7 +266,7 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* TEXT AREA */}
+        {/* TEXT INPUT */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-2">Paste Advertising Law Text</h2>
 
