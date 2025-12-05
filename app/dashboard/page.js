@@ -1,32 +1,44 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { checkSubscription } from "@/lib/checkSubscription";
+import { adminDB } from "@/lib/firebaseAdmin";
+
+// Server-side subscription check
+async function getSubscriptionStatus(uid) {
+  try {
+    const snap = await adminDB.collection("users").doc(uid).get();
+    if (!snap.exists) return false;
+
+    const data = snap.data();
+    return data.subscribed === true;
+  } catch (err) {
+    console.error("Subscription check failed:", err);
+    return false;
+  }
+}
 
 export default async function DashboardPage() {
-  // Fetch the logged-in user from server-side cookie
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/me`, {
-    cache: "no-store",
-  });
+  // Read UID from session cookie
+  const cookieStore = cookies();
+  const uid = cookieStore.get("uid")?.value;
 
-  const data = await res.json();
-  const user = data.user;
-
-  // Not logged in → redirect to login
-  if (!user || !user.uid) {
+  // If not logged in → login
+  if (!uid) {
     redirect("/login");
   }
 
-  // Check subscription on the server
-  const active = await checkSubscription(user.uid);
+  // Check subscription from Firestore (server-only)
+  const active = await getSubscriptionStatus(uid);
 
+  // If no subscription → subscribe page
   if (!active) {
     redirect("/subscribe");
   }
 
-  // Success → user authenticated + subscribed
+  // If valid subscription → show dashboard
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
-      <p>Welcome! Your subscription is active.</p>
+      <p>Your subscription is active. Welcome!</p>
     </div>
   );
 }
