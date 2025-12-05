@@ -1,29 +1,42 @@
-// SERVER COMPONENT — SAFE FOR NEXT.JS + VERCEL
 import { redirect } from "next/navigation";
-import { adminDB } from "@/lib/firebaseAdmin";
+import { checkSubscription } from "@/lib/checkSubscription";
 
-// Helper function to get UID from cookies later (placeholder for now)
-async function getUID() {
-  // TODO: Replace with real session logic
-  return null;
+// Dashboard must run ONLY on server
+export const dynamic = "force-dynamic";
+
+async function getUIDFromSession() {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/session/me`, {
+      cache: "no-store",
+      method: "GET",
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data.uid || null;
+  } catch {
+    return null;
+  }
 }
 
 export default async function DashboardPage() {
-  const uid = await getUID();
+  // Get UID from our session API
+  const uid = await getUIDFromSession();
 
-  // If no user → redirect to login
+  // If no uid → not logged in
   if (!uid) {
     redirect("/login");
   }
 
-  // Retrieve subscription using firebase-admin ONLY
-  const snap = await adminDB.collection("users").doc(uid).get();
+  // Check subscription status
+  const subscribed = await checkSubscription(uid);
 
-  if (!snap.exists || snap.data().subscribed !== true) {
+  if (!subscribed) {
     redirect("/subscribe");
   }
 
-  // If subscribed → show dashboard
+  // Render dashboard
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
