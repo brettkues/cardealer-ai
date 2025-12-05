@@ -5,72 +5,63 @@ import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const register = async () => {
-    if (!email || !password) {
-      alert("Email and password required.");
+  async function handleRegister(e) {
+    e.preventDefault();
+    setError("");
+
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error || "Registration failed");
       return;
     }
 
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/set", {
-        method: "POST",
-        body: JSON.stringify({
-          action: "register",
-          email,
-          password,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || "Registration failed");
-      } else {
-        alert("Account created! Please log in.");
-        router.push("/login");
-      }
-    } catch (err) {
-      alert("Error: " + err.message);
-    }
-
-    setLoading(false);
-  };
+    // success → session created → redirect
+    router.push("/dashboard");
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
-      <div className="p-10 bg-gray-800 rounded-2xl border border-gray-700 w-96">
-        <h1 className="text-2xl font-bold mb-6">Create Account</h1>
+    <div style={{ padding: 40 }}>
+      <h1>Create Account</h1>
 
+      <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", width: 300 }}>
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-3 rounded-lg bg-gray-700 mb-4"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
         />
 
         <input
           type="password"
-          placeholder="Password"
-          className="w-full p-3 rounded-lg bg-gray-700 mb-6"
+          placeholder="Password (min 6 chars)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{ marginTop: 10 }}
         />
 
-        <button
-          onClick={register}
-          disabled={loading}
-          className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold"
-        >
-          {loading ? "Creating…" : "Create Account"}
+        <button type="submit" style={{ marginTop: 20 }}>
+          Register
         </button>
-      </div>
+
+        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
+      </form>
+
+      <p style={{ marginTop: 20 }}>
+        Already have an account? <a href="/login">Login</a>
+      </p>
     </div>
   );
 }
