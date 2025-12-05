@@ -1,85 +1,78 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function SubscribePage() {
+  const router = useRouter();
   const [uid, setUid] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // 1. Load session
+  // Load session on mount
   useEffect(() => {
-    async function load() {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
+    async function loadSession() {
+      const res = await fetch("/api/auth/me");
       const data = await res.json();
 
-      if (!data.loggedIn || !data.uid) {
-        window.location.href = "/login";
+      if (!data.loggedIn) {
+        router.push("/login");
         return;
       }
 
       setUid(data.uid);
-
-      // Check if already subscribed
-      const subRes = await fetch("/api/subscription", {
-        method: "POST",
-        cache: "no-store",
-        body: JSON.stringify({ uid: data.uid }),
-      });
-
-      const subData = await subRes.json();
-
-      if (subData.active) {
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      setLoading(false);
     }
 
-    load();
-  }, []);
+    loadSession();
+  }, [router]);
 
-  // 2. Create Checkout Session
-  async function subscribe() {
+  // Call Stripe checkout
+  async function subscribe(priceId) {
     if (!uid) return;
 
-    const res = await fetch("/api/create-checkout-session", {
+    setLoading(true);
+
+    const res = await fetch("/api/stripe/checkout", {
       method: "POST",
-      body: JSON.stringify({
-        uid,
-        priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID,
-      }),
+      body: JSON.stringify({ uid, priceId }),
     });
 
     const data = await res.json();
+    setLoading(false);
 
     if (data.url) {
       window.location.href = data.url;
     } else {
-      alert("Error starting checkout: " + (data.error || "Unknown error"));
+      alert("Error: " + data.error);
     }
   }
 
-  if (loading) {
+  if (!uid) {
     return (
       <div className="h-screen flex justify-center items-center text-white">
-        Checking subscription…
+        Checking account…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col justify-center items-center p-10">
-      <h1 className="text-3xl font-bold mb-6">Subscribe</h1>
-      <p className="text-gray-300 mb-8 text-center max-w-md">
-        Unlock full access to your dealer tools with a monthly subscription.
+    <div style={{ padding: 40 }}>
+      <h1>Subscription Required</h1>
+      <p style={{ marginTop: 10 }}>
+        Choose a plan below to unlock all dealer tools.
       </p>
 
       <button
-        onClick={subscribe}
-        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+        onClick={() => subscribe(process.env.NEXT_PUBLIC_STRIPE_PRICE_ID)}
+        disabled={loading}
+        style={{
+          marginTop: 30,
+          padding: "12px 20px",
+          background: "#2563eb",
+          color: "white",
+          borderRadius: 8,
+        }}
       >
-        Start Subscription
+        {loading ? "Redirecting…" : "Subscribe Now"}
       </button>
     </div>
   );
