@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+// Use server-side admin Firestore ONLY
 import { adminDB } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
@@ -9,19 +11,20 @@ export async function POST(req) {
       return NextResponse.json({ active: false });
     }
 
-    const ref = adminDB.collection("users").doc(uid);
-    const snap = await ref.get();
+    const snap = await adminDB.collection("users").doc(uid).get();
 
     if (!snap.exists) {
       return NextResponse.json({ active: false });
     }
 
     const data = snap.data();
-    const active = data.subscribed === true;
 
-    return NextResponse.json({ active });
+    return NextResponse.json({
+      active: data.subscribed === true
+    });
+
   } catch (err) {
-    console.error("Subscription API error:", err);
+    console.error("Subscription check API error:", err);
     return NextResponse.json({ active: false });
   }
 }
