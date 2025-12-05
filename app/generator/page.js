@@ -3,32 +3,36 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function GeneratorPage() {
+export default function AIMarketingGenerator() {
   const router = useRouter();
 
   const [checking, setChecking] = useState(true);
   const [uid, setUid] = useState(null);
+
   const [input, setInput] = useState("");
   const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ---------------------------------------------
-  // VERIFY LOGIN + SUBSCRIPTION
-  // ---------------------------------------------
+  // -------------------------------------------
+  // LOGIN + SUBSCRIPTION VALIDATION
+  // -------------------------------------------
   useEffect(() => {
     async function verify() {
-      const res = await fetch("/api/session/me");
-      const data = await res.json();
+      // 1. Get session
+      const sessionRes = await fetch("/api/session/me");
+      const session = await sessionRes.json();
 
-      if (!data.uid) {
+      if (!session.uid) {
         router.push("/login");
         return;
       }
 
+      // 2. Subscription check
       const subRes = await fetch("/api/subscription", {
         method: "POST",
-        body: JSON.stringify({ uid: data.uid }),
+        body: JSON.stringify({ uid: session.uid }),
       });
+
       const sub = await subRes.json();
 
       if (!sub.active) {
@@ -36,7 +40,7 @@ export default function GeneratorPage() {
         return;
       }
 
-      setUid(data.uid);
+      setUid(session.uid);
       setChecking(false);
     }
 
@@ -46,19 +50,17 @@ export default function GeneratorPage() {
   if (checking) {
     return (
       <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
-        Checking access…
+        Loading…
       </div>
     );
   }
 
-  // ---------------------------------------------
-  // SEND PROMPT TO AI
-  // ---------------------------------------------
-  const handleGenerate = async () => {
-    if (!input.trim()) return;
-
+  // -------------------------------------------
+  // SEND PROMPT TO /api/chat
+  // -------------------------------------------
+  async function sendPrompt() {
+    if (!input.trim()) return alert("Enter text first.");
     setLoading(true);
-    setReply("");
 
     try {
       const res = await fetch("/api/chat", {
@@ -72,38 +74,39 @@ export default function GeneratorPage() {
 
       setReply(data.reply);
     } catch (err) {
-      setReply("Error: " + err.message);
+      alert("Error: " + err.message);
     }
 
     setLoading(false);
-  };
+  }
 
-  // ---------------------------------------------
-  // UI
-  // ---------------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white p-10">
-      <h1 className="text-3xl font-bold mb-6">AI Generator</h1>
+      <h1 className="text-3xl font-bold mb-8">AI Marketing Generator</h1>
 
-      <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        className="w-full h-40 p-4 bg-gray-800 border border-gray-700 rounded-lg"
-        placeholder="Enter text to generate response…"
-      />
+      <div className="bg-gray-800 p-6 rounded-xl max-w-2xl">
+        <label className="font-semibold">Describe the vehicle, deal, or ad idea:</label>
 
-      <button
-        onClick={handleGenerate}
-        disabled={loading}
-        className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg"
-      >
-        {loading ? "Generating…" : "Generate"}
-      </button>
+        <textarea
+          className="w-full bg-gray-700 text-white p-3 rounded mt-2 h-40"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
+
+        <button
+          onClick={sendPrompt}
+          disabled={loading}
+          className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+        >
+          {loading ? "Generating…" : "Generate Text"}
+        </button>
+      </div>
 
       {reply && (
-        <div className="mt-6 bg-gray-800 p-5 rounded-lg border border-gray-700">
-          <h2 className="text-xl font-semibold mb-2">Response</h2>
-          <p className="whitespace-pre-wrap">{reply}</p>
+        <div className="mt-10 bg-gray-800 p-6 rounded-xl border border-gray-700 max-w-3xl">
+          <h2 className="text-xl font-semibold mb-3">Generated Marketing Copy</h2>
+
+          <pre className="whitespace-pre-wrap text-gray-100">{reply}</pre>
         </div>
       )}
     </div>
