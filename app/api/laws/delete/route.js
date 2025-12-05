@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-import { getFirestore, doc, deleteDoc } from "firebase/firestore";
 import { initializeApp, getApps } from "firebase/app";
-import { getStorage, ref, deleteObject } from "firebase/storage";
+import { getFirestore, doc, deleteDoc } from "firebase/firestore";
+import {
+  getStorage,
+  ref,
+  deleteObject
+} from "firebase/storage";
 
+// Firebase config (client-safe)
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -10,9 +15,8 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
+// Initialize once
+if (!getApps().length) initializeApp(firebaseConfig);
 
 const db = getFirestore();
 const storage = getStorage();
@@ -28,11 +32,15 @@ export async function POST(req) {
       );
     }
 
-    // Delete the file from storage
-    const fileRef = ref(storage, storagePath);
-    await deleteObject(fileRef);
+    // Remove file from storage
+    try {
+      const fileRef = ref(storage, storagePath);
+      await deleteObject(fileRef);
+    } catch (err) {
+      // Ignore storage delete errors (file may already be gone)
+    }
 
-    // Delete DB doc
+    // Remove DB record
     await deleteDoc(doc(db, "lawLibrary", id));
 
     return NextResponse.json({ success: true });
