@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import sharp from "sharp";
+import fetch from "node-fetch";
 
 export async function POST(req) {
   try {
@@ -16,7 +17,7 @@ export async function POST(req) {
       );
     }
 
-    // Fetch all images as buffers
+    // Fetch image buffers
     const buffers = await Promise.all(
       images.map(async (url) => {
         const res = await fetch(url);
@@ -25,24 +26,32 @@ export async function POST(req) {
       })
     );
 
-    // Combine the images into a 2x2 grid
+    // Resize all images to 800x800 to ensure uniform fit
+    const resized = await Promise.all(
+      buffers.map((buf) =>
+        sharp(buf)
+          .resize(800, 800, { fit: "cover" })
+          .toBuffer()
+      )
+    );
+
+    // Create white background canvas
     const collage = await sharp({
       create: {
         width: 1600,
         height: 1600,
         channels: 3,
-        background: "#ffffff",
-      },
+        background: "#ffffff"
+      }
     })
       .composite([
-        { input: buffers[0], top: 0, left: 0 },
-        { input: buffers[1], top: 0, left: 800 },
-        { input: buffers[2], top: 800, left: 0 },
-        { input: buffers[3], top: 800, left: 800 },
+        { input: resized[0], top: 0, left: 0 },
+        { input: resized[1], top: 0, left: 800 },
+        { input: resized[2], top: 800, left: 0 },
+        { input: resized[3], top: 800, left: 800 }
       ])
+      .png()
       .toBuffer();
-
-    // NOTE: RIBBON GENERATION will be added later — this ensures backend stability first.
 
     return new Response(collage, {
       headers: {
