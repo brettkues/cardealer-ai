@@ -1,44 +1,41 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { adminDB } from "@/lib/firebaseAdmin";
 
-// Server-side subscription check
-async function getSubscriptionStatus(uid) {
-  try {
-    const snap = await adminDB.collection("users").doc(uid).get();
-    if (!snap.exists) return false;
-
-    const data = snap.data();
-    return data.subscribed === true;
-  } catch (err) {
-    console.error("Subscription check failed:", err);
-    return false;
-  }
-}
+// Dashboard is a SERVER COMPONENT
 
 export default async function DashboardPage() {
-  // Read UID from session cookie
-  const cookieStore = cookies();
-  const uid = cookieStore.get("uid")?.value;
+  // 1 — Get UID from secure cookie through API route
+  const sessionRes = await fetch(
+    `${process.env.NEXT_PUBLIC_APP_URL}/api/session/get`,
+    { cache: "no-store" }
+  );
+  const session = await sessionRes.json();
+  const uid = session.uid;
 
-  // If not logged in → login
+  // If no UID → not logged in
   if (!uid) {
     redirect("/login");
   }
 
-  // Check subscription from Firestore (server-only)
-  const active = await getSubscriptionStatus(uid);
+  // 2 — Check subscription status
+  const subRes = await fetch(
+    `${process.env.NEXT_PUBLIC_APP_URL}/api/subscription`,
+    {
+      method: "POST",
+      body: JSON.stringify({ uid }),
+      cache: "no-store",
+    }
+  );
+  const subData = await subRes.json();
 
-  // If no subscription → subscribe page
-  if (!active) {
+  if (!subData.active) {
     redirect("/subscribe");
   }
 
-  // If valid subscription → show dashboard
+  // 3 — Render dashboard (user is authenticated + subscribed)
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
-      <p>Your subscription is active. Welcome!</p>
+      <p>You are logged in and your subscription is active.</p>
     </div>
   );
 }
