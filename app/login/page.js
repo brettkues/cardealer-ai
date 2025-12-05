@@ -3,38 +3,52 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { initializeApp, getApps } from "firebase/app";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+
+// Firebase Config
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+// Init Firebase once
+if (!getApps().length) initializeApp(firebaseConfig);
+
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
     try {
-      const res = await fetch("/api/session/login", {
+      const auth = getAuth();
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+
+      const uid = userCred.user.uid;
+
+      // Hit our session API to store UID in a secure server cookie
+      await fetch("/api/session/set", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ uid }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setLoading(false);
-        return setError(data.error || "Login failed.");
-      }
-
-      // Login success → redirect dashboard
       router.push("/dashboard");
     } catch (err) {
-      setError("Login failed. Try again.");
-      setLoading(false);
+      setError("Invalid email or password.");
     }
   }
 
@@ -63,17 +77,11 @@ export default function LoginPage() {
           style={{ marginTop: 10 }}
         />
 
-        <button
-          type="submit"
-          style={{ marginTop: 20 }}
-          disabled={loading}
-        >
-          {loading ? "Logging in..." : "Login"}
+        <button type="submit" style={{ marginTop: 20 }}>
+          Login
         </button>
 
-        {error && (
-          <p style={{ color: "red", marginTop: 10 }}>{error}</p>
-        )}
+        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
       </form>
 
       <p style={{ marginTop: 20 }}>
