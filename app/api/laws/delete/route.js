@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, doc, deleteDoc } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  deleteObject
-} from "firebase/storage";
 
-// Firebase config (client-safe)
+// Init Firebase client-safe (Admin not needed here)
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -15,11 +10,21 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
-// Initialize once
-if (!getApps().length) initializeApp(firebaseConfig);
+if (!getApps().length) {
+  initializeApp(firebaseConfig);
+}
 
 const db = getFirestore();
-const storage = getStorage();
+
+// Lazy import storage — avoids Undici/Webpack parse errors
+async function getStorageOps() {
+  const mod = await import("firebase/storage");
+  return {
+    getStorage: mod.getStorage,
+    ref: mod.ref,
+    deleteObject: mod.deleteObject
+  };
+}
 
 export async function POST(req) {
   try {
@@ -32,15 +37,17 @@ export async function POST(req) {
       );
     }
 
-    // Remove file from storage
+    // Delete from storage – errors ignored if file missing
     try {
+      const { getStorage, ref, deleteObject } = await getStorageOps();
+      const storage = getStorage();
       const fileRef = ref(storage, storagePath);
       await deleteObject(fileRef);
-    } catch (err) {
-      // Ignore storage delete errors (file may already be gone)
+    } catch {
+      // ignore storage errors
     }
 
-    // Remove DB record
+    // Delete Firestore document
     await deleteDoc(doc(db, "lawLibrary", id));
 
     return NextResponse.json({ success: true });
