@@ -5,40 +5,38 @@ import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
   const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const register = async () => {
-    if (!email || !password) return alert("Email and password required");
+    if (!email || !password) {
+      alert("Email and password required.");
+      return;
+    }
 
     setLoading(true);
 
     try {
-      // Register via Firebase REST API
       const res = await fetch("/api/auth/set", {
         method: "POST",
-        body: JSON.stringify({ action: "register", email, password }),
+        body: JSON.stringify({
+          action: "register",
+          email,
+          password,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
         alert(data.error || "Registration failed");
-        setLoading(false);
-        return;
+      } else {
+        alert("Account created! Please log in.");
+        router.push("/login");
       }
-
-      // Save session token
-      await fetch("/api/auth/set", {
-        method: "POST",
-        body: JSON.stringify({ idToken: data.idToken }),
-      });
-
-      router.push("/dashboard");
     } catch (err) {
-      alert("Registration error: " + err.message);
+      alert("Error: " + err.message);
     }
 
     setLoading(false);
@@ -52,7 +50,7 @@ export default function RegisterPage() {
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-3 rounded-lg bg-gray-700 mb-3"
+          className="w-full p-3 rounded-lg bg-gray-700 mb-4"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -68,16 +66,9 @@ export default function RegisterPage() {
         <button
           onClick={register}
           disabled={loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+          className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold"
         >
-          {loading ? "Creating..." : "Create Account"}
-        </button>
-
-        <button
-          onClick={() => router.push("/login")}
-          className="w-full py-2 mt-4 text-blue-400 underline"
-        >
-          Already have an account?
+          {loading ? "Creating…" : "Create Account"}
         </button>
       </div>
     </div>
