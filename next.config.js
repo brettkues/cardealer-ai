@@ -2,19 +2,20 @@
 const nextConfig = {
   reactStrictMode: false,
 
+  // Enable build worker so Vercel doesn’t choke on custom webpack
   experimental: {
-    serverActions: true
+    webpackBuildWorker: true,
   },
 
-  // Ensure Node.js APIs work in /app/api routes
+  // Allow Node.js APIs inside /app/api/* routes
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
-      path: false
+      path: false,
     };
     return config;
-  }
+  },
 };
 
 module.exports = nextConfig;
