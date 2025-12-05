@@ -1,22 +1,16 @@
-export const runtime = "nodejs";
-export const preferredRegion = "iad1";
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
-
 import pdfParse from "pdf-parse";
+
+// Prevent edge runtime — requires Node.js
+export const runtime = "nodejs";
 
 export async function POST(req) {
   try {
-    const arrayBuffer = await req.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const data = await pdfParse(buffer);
+    const data = await req.arrayBuffer();
+    const pdfText = await pdfParse(Buffer.from(data));
 
     return NextResponse.json({
-      success: true,
-      text: data.text || "",
-      pageCount: data.numpages || 0,
+      text: pdfText.text || ""
     });
   } catch (err) {
     return NextResponse.json(
