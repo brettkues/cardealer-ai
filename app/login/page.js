@@ -3,94 +3,90 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-
-// Firebase Config
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-// Initialize Firebase once
-if (!getApps().length) initializeApp(firebaseConfig);
-const auth = getAuth();
-
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    setError("");
+  const login = async () => {
+    if (!email || !password) {
+      alert("Email and password required");
+      return;
+    }
+
+    setLoading(true);
 
     try {
-      // Firebase sign-in
-      const creds = await signInWithEmailAndPassword(auth, email, password);
-      const uid = creds.user.uid;
-
-      // Set HTTP-only cookie on backend
-      const res = await fetch("/api/session/set", {
+      // 1. LOGIN THROUGH FIREBASE REST API (handled inside our server route)
+      const res = await fetch("/api/auth/set", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid }),
+        body: JSON.stringify({
+          action: "login",
+          email,
+          password,
+        }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        throw new Error("Failed to create session.");
+        alert(data.error || "Login failed");
+        setLoading(false);
+        return;
       }
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // 2. STORE SESSION IN SECURE HTTP-ONLY COOKIE
+      await fetch("/api/auth/set", {
+        method: "POST",
+        body: JSON.stringify({ idToken: data.idToken }),
+      });
 
+      router.push("/dashboard");
     } catch (err) {
-      setError("Invalid email or password.");
+      alert("Login error: " + err.message);
     }
-  }
+
+    setLoading(false);
+  };
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Login</h1>
+    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
+      <div className="p-10 bg-gray-800 rounded-2xl border border-gray-700 w-96">
+        <h1 className="text-2xl font-bold mb-6">Login</h1>
 
-      <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", width: 300 }}>
         <input
           type="email"
           placeholder="Email"
+          className="w-full p-3 rounded-lg bg-gray-700 mb-3"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
         />
 
         <input
           type="password"
           placeholder="Password"
+          className="w-full p-3 rounded-lg bg-gray-700 mb-6"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ marginTop: 10 }}
         />
 
-        <button type="submit" style={{ marginTop: 20 }}>
-          Login
+        <button
+          onClick={login}
+          disabled={loading}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+        >
+          {loading ? "Signing in…" : "Sign In"}
         </button>
 
-        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
-      </form>
-
-      <p style={{ marginTop: 20 }}>
-        <a href="/register">Create an account</a>
-      </p>
-
-      <p>
-        <a href="/reset">Forgot password?</a>
-      </p>
+        <button
+          onClick={() => router.push("/register")}
+          className="w-full py-2 mt-4 text-blue-400 underline"
+        >
+          Create an account
+        </button>
+      </div>
     </div>
   );
 }
