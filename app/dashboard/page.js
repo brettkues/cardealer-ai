@@ -1,56 +1,44 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+async function getSession() {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/me`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
-export default function DashboardPage() {
-  const router = useRouter();
+  return res.json();
+}
 
-  const [checking, setChecking] = useState(true);
-  const [uid, setUid] = useState(null);
+async function checkSub(uid) {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/subscription`, {
+    method: "POST",
+    cache: "no-store",
+    body: JSON.stringify({ uid }),
+  });
 
-  useEffect(() => {
-    async function verify() {
-      // 1. Check login session
-      const sessionRes = await fetch("/api/session/me");
-      const session = await sessionRes.json();
+  return res.json();
+}
 
-      if (!session.uid) {
-        router.push("/login");
-        return;
-      }
+export default async function DashboardPage() {
+  // 1. Check login
+  const session = await getSession();
 
-      // 2. Check subscription
-      const subRes = await fetch("/api/subscription", {
-        method: "POST",
-        body: JSON.stringify({ uid: session.uid }),
-      });
-      const sub = await subRes.json();
-
-      if (!sub.active) {
-        router.push("/subscribe");
-        return;
-      }
-
-      setUid(session.uid);
-      setChecking(false);
-    }
-
-    verify();
-  }, [router]);
-
-  if (checking) {
-    return (
-      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
-        Loading dashboard…
-      </div>
-    );
+  if (!session.loggedIn || !session.uid) {
+    redirect("/login");
   }
 
+  // 2. Check subscription
+  const sub = await checkSub(session.uid);
+
+  if (!sub.active) {
+    redirect("/subscribe");
+  }
+
+  // 3. User is allowed → show dashboard
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-10">
-      <h1 className="text-3xl font-bold mb-4">Dashboard</h1>
-      <p className="text-gray-300">Welcome! Your subscription is active.</p>
+    <div style={{ padding: 40 }}>
+      <h1>Dashboard</h1>
+      <p>Welcome! Your subscription is active.</p>
     </div>
   );
 }
