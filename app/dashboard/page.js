@@ -1,30 +1,12 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { checkSubscription } from "@/lib/checkSubscription";
 
-// Dashboard must run ONLY on server
-export const dynamic = "force-dynamic";
-
-async function getUIDFromSession() {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/session/me`, {
-      cache: "no-store",
-      method: "GET",
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    return data.uid || null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function DashboardPage() {
-  // Get UID from our session API
-  const uid = await getUIDFromSession();
+  // Read UID from secure cookie created at login
+  const uid = cookies().get("session_uid")?.value;
 
-  // If no uid → not logged in
+  // If cookie missing → not logged in
   if (!uid) {
     redirect("/login");
   }
@@ -36,11 +18,11 @@ export default async function DashboardPage() {
     redirect("/subscribe");
   }
 
-  // Render dashboard
+  // If valid → show dashboard
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
-      <p>Welcome! Your subscription is active.</p>
+      <p>Your subscription is active. Welcome to your tools.</p>
     </div>
   );
 }
