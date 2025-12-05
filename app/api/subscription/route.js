@@ -1,20 +1,27 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { adminDB } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
     const { uid } = await req.json();
-    if (!uid) return NextResponse.json({ active: false });
 
-    const ref = doc(db, "users", uid);
-    const snap = await getDoc(ref);
+    if (!uid) {
+      return NextResponse.json({ active: false });
+    }
 
-    if (!snap.exists()) return NextResponse.json({ active: false });
+    const ref = adminDB.collection("users").doc(uid);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      return NextResponse.json({ active: false });
+    }
 
     const data = snap.data();
-    return NextResponse.json({ active: data.subscribed === true });
+    const active = data.subscribed === true;
+
+    return NextResponse.json({ active });
   } catch (err) {
+    console.error("Subscription API error:", err);
     return NextResponse.json({ active: false });
   }
 }
