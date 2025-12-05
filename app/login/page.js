@@ -4,94 +4,97 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  getAuth,
+  signInWithEmailAndPassword
+} from "firebase/auth";
 
-// Firebase config
+// Firebase client config
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Ensure Firebase initializes once
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
+if (!getApps().length) initializeApp(firebaseConfig);
+
+const auth = getAuth();
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
-    setError("");
+    setLoading(true);
 
     try {
-      const auth = getAuth();
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      // Firebase client login
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      const token = await result.user.getIdToken();
 
-      const uid = userCred.user.uid;
-
-      // Send UID to secure server route to set the cookie
-      await fetch("/api/session/set", {
+      // Store ID token in HttpOnly cookie on the server
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid })
+        body: JSON.stringify({ token }),
       });
 
+      if (!res.ok) {
+        alert("Server login failed.");
+        setLoading(false);
+        return;
+      }
+
+      // Route to dashboard
       router.push("/dashboard");
     } catch (err) {
-      setError("Invalid email or password.");
+      alert(err.message);
     }
+
+    setLoading(false);
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Login</h1>
-
+    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
       <form
         onSubmit={handleLogin}
-        style={{ display: "flex", flexDirection: "column", width: 300 }}
+        className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-96"
       >
+        <h1 className="text-2xl font-bold mb-4">Login</h1>
+
         <input
           type="email"
           placeholder="Email"
+          className="w-full mb-3 p-3 rounded bg-gray-700 border border-gray-600"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
         />
 
         <input
           type="password"
           placeholder="Password"
+          className="w-full mb-4 p-3 rounded bg-gray-700 border border-gray-600"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ marginTop: 10 }}
         />
 
-        <button type="submit" style={{ marginTop: 20 }}>
-          Login
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-blue-600 hover:bg-blue-500 rounded p-3 font-semibold"
+        >
+          {loading ? "Logging in…" : "Login"}
         </button>
 
-        {error && (
-          <p style={{ color: "red", marginTop: 10 }}>{error}</p>
-        )}
+        <p className="text-sm text-gray-400 mt-4">
+          Don’t have an account? <a href="/register" className="text-blue-400">Register</a>
+        </p>
       </form>
-
-      <p style={{ marginTop: 20 }}>
-        <a href="/register">Create an account</a>
-      </p>
-
-      <p>
-        <a href="/reset">Forgot password?</a>
-      </p>
     </div>
   );
 }
