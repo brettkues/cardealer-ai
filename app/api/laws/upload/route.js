@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL
-} from "firebase/storage";
 
-// Firebase (client-compatible config)
+// Firebase config (safe for server)
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -16,13 +10,23 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
-// Init Firebase safely on server
+// Initialize Firebase only once
 if (!getApps().length) {
   initializeApp(firebaseConfig);
 }
 
 const db = getFirestore();
-const storage = getStorage();
+
+// Lazy-loaded Firebase Storage (prevents undici build errors)
+async function loadStorage() {
+  const mod = await import("firebase/storage");
+  return {
+    getStorage: mod.getStorage,
+    ref: mod.ref,
+    uploadBytes: mod.uploadBytes,
+    getDownloadURL: mod.getDownloadURL,
+  };
+}
 
 export async function POST(req) {
   try {
@@ -39,20 +43,27 @@ export async function POST(req) {
       );
     }
 
+    // Convert uploaded file → buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    // Lazy-load storage
+    const { getStorage, ref, uploadBytes, getDownloadURL } =
+      await loadStorage();
+
+    const storage = getStorage();
 
     const fileName = `${Date.now()}_${file.name}`;
     const storagePath = `laws/${uid}/${fileName}`;
     const fileRef = ref(storage, storagePath);
 
-    // Upload to Firebase Storage
+    // Upload PDF
     await uploadBytes(fileRef, buffer);
 
-    // Get public URL
+    // Get URL
     const url = await getDownloadURL(fileRef);
 
-    // Store DB record
+    // Write to DB
     await addDoc(collection(db, "lawLibrary"), {
       type: "pdf",
       state,
