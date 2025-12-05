@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -8,88 +8,64 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // If user is already logged in → redirect to dashboard
-  useEffect(() => {
-    async function checkSession() {
-      const res = await fetch("/api/auth/me", { method: "GET" });
-      const data = await res.json();
-      if (data.loggedIn) {
-        router.push("/dashboard");
-      }
-    }
-    checkSession();
-  }, [router]);
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError("");
 
-  const login = async () => {
-    if (!email || !password) {
-      alert("Email and password required.");
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error || "Login failed");
       return;
     }
 
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/set", {
-        method: "POST",
-        body: JSON.stringify({
-          action: "login",
-          email,
-          password,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || "Login failed");
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (err) {
-      alert("Error: " + err.message);
-    }
-
-    setLoading(false);
-  };
+    // Success → session stored → go to dashboard
+    router.push("/dashboard");
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
-      <div className="p-10 bg-gray-800 rounded-2xl border border-gray-700 w-96">
-        <h1 className="text-2xl font-bold mb-6">Log In</h1>
+    <div style={{ padding: 40 }}>
+      <h1>Login</h1>
 
+      <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", width: 300 }}>
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-3 rounded-lg bg-gray-700 mb-4"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
         />
 
         <input
           type="password"
           placeholder="Password"
-          className="w-full p-3 rounded-lg bg-gray-700 mb-6"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{ marginTop: 10 }}
         />
 
-        <button
-          onClick={login}
-          disabled={loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
-        >
-          {loading ? "Logging in…" : "Log In"}
+        <button type="submit" style={{ marginTop: 20 }}>
+          Login
         </button>
 
-        <button
-          onClick={() => router.push("/register")}
-          className="w-full py-3 mt-3 bg-gray-600 hover:bg-gray-500 rounded-lg font-semibold"
-        >
-          Create Account
-        </button>
-      </div>
+        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
+      </form>
+
+      <p style={{ marginTop: 20 }}>
+        <a href="/register">Create an account</a>
+      </p>
+
+      <p>
+        <a href="/reset">Forgot password?</a>
+      </p>
     </div>
   );
 }
