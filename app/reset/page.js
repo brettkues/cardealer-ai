@@ -1,68 +1,68 @@
 "use client";
 
 import { useState } from "react";
-import { getApps, initializeApp } from "firebase/app";
-import { getAuth, sendPasswordResetEmail } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
-// Firebase config
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-};
-
-if (!getApps().length) initializeApp(firebaseConfig);
-
-const auth = getAuth();
-
-export default function ResetPage() {
+export default function ResetPasswordPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleReset(e) {
     e.preventDefault();
     setStatus("");
+    setLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, email);
+      const res = await fetch("/api/auth/reset", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error);
+
       setStatus("A password reset link has been sent to your email.");
+      setTimeout(() => router.push("/login"), 2000);
     } catch (err) {
       setStatus("Error: " + err.message);
     }
+
+    setLoading(false);
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
-      <form
-        onSubmit={handleReset}
-        className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-96"
-      >
-        <h1 className="text-2xl font-bold mb-4">Reset Password</h1>
+    <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center p-8">
+      <div className="bg-gray-800 p-8 rounded-xl shadow-xl w-full max-w-md border border-gray-700">
+        <h1 className="text-2xl font-bold mb-6 text-center">Reset Password</h1>
 
-        <input
-          type="email"
-          placeholder="Enter your email"
-          className="w-full mb-4 p-3 bg-gray-700 border border-gray-600 rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <form onSubmit={handleReset} className="flex flex-col gap-4">
+          <input
+            type="email"
+            placeholder="Enter your account email"
+            className="bg-gray-700 border border-gray-600 text-white p-3 rounded-lg"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-        <button
-          type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-500 p-3 rounded font-semibold"
-        >
-          Send Reset Email
-        </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+          >
+            {loading ? "Sending…" : "Send Reset Link"}
+          </button>
+        </form>
 
         {status && (
-          <p className="text-sm text-gray-300 mt-4 whitespace-pre-line">{status}</p>
+          <p className="text-center mt-4 text-gray-300 whitespace-pre-wrap">
+            {status}
+          </p>
         )}
-
-        <p className="text-sm text-gray-400 mt-4">
-          <a href="/login" className="text-blue-400">Back to Login</a>
-        </p>
-      </form>
+      </div>
     </div>
   );
 }
