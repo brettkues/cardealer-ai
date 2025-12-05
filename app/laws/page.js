@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// CLIENT-SAFE FIREBASE INIT
+// Firebase App + Auth + Firestore (safe on client)
 import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
@@ -21,14 +21,6 @@ import {
   setDoc
 } from "firebase/firestore";
 
-// LAZY-LOADED STORAGE (prevents Undici/Webpack parsing)
-let storageModule = null;
-async function loadStorage() {
-  if (storageModule) return storageModule;
-  storageModule = await import("firebase/storage");
-  return storageModule;
-}
-
 // SERVER-SAFE SUB CHECK
 import { checkSubscription } from "@/lib/checkSubscription";
 
@@ -40,15 +32,12 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
-// Init Firebase once
+// Init Firebase
 if (!getApps().length) initializeApp(firebaseConfig);
 
 const auth = getAuth();
 const db = getFirestore();
 
-// -----------------------------------------
-// Tooltip Component
-// -----------------------------------------
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
 
@@ -69,9 +58,6 @@ function Tooltip({ text }) {
   );
 }
 
-// -----------------------------------------
-// MAIN PAGE COMPONENT
-// -----------------------------------------
 export default function LawsPage() {
   const router = useRouter();
 
@@ -82,9 +68,7 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // -----------------------------------------
   // LOGIN + SUBSCRIPTION CHECK
-  // -----------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -115,9 +99,7 @@ export default function LawsPage() {
 
   const uid = auth.currentUser.uid;
 
-  // -----------------------------------------
-  // LOAD USER PDF RECORDS
-  // -----------------------------------------
+  // LOAD USER FILES
   const loadDocs = async () => {
     const baseQuery =
       sub.role === "admin"
@@ -133,33 +115,26 @@ export default function LawsPage() {
     loadDocs();
   }, [sub]);
 
-  // -----------------------------------------
-  // UPLOAD PDF
-  // -----------------------------------------
+  // UPLOAD PDF → API ROUTE (NO firebase/storage on client)
   const uploadPDF = async () => {
     if (!file) return alert("Please select a PDF.");
 
     setLoading(true);
 
     try {
-      const { getStorage, ref, uploadBytes, getDownloadURL } = await loadStorage();
-      const storage = getStorage();
+      const form = new FormData();
+      form.append("file", file);
+      form.append("state", state);
+      form.append("uid", uid);
 
-      const storagePath = `laws/${uid}/${Date.now()}_${file.name}`;
-      const fileRef = ref(storage, storagePath);
-
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-
-      await addDoc(collection(db, "lawLibrary"), {
-        type: "pdf",
-        state,
-        url,
-        filename: file.name,
-        owner: uid,
-        storagePath,
-        uploadedAt: new Date(),
+      const res = await fetch("/api/laws/upload", {
+        method: "POST",
+        body: form
       });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Upload failed");
 
       setFile(null);
       await loadDocs();
@@ -171,9 +146,7 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // -----------------------------------------
-  // SAVE PLAIN TEXT LAW
-  // -----------------------------------------
+  // SAVE TEXT LAW
   const saveTextLaw = async () => {
     if (!textLaw.trim()) return alert("Text is empty.");
 
@@ -193,9 +166,7 @@ export default function LawsPage() {
     }
   };
 
-  // -----------------------------------------
-  // DELETE PDF
-  // -----------------------------------------
+  // DELETE PDF (server API)
   const deletePDF = async (item) => {
     if (!confirm("Delete this file?")) return;
 
@@ -210,9 +181,7 @@ export default function LawsPage() {
     await loadDocs();
   };
 
-  // -----------------------------------------
-  // RENDER UI
-  // -----------------------------------------
+  // RENDER
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
@@ -228,8 +197,8 @@ export default function LawsPage() {
 
       <div className="p-8 max-w-4xl mx-auto w-full">
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
-          <strong>Important:</strong>  
-          If you do not upload specific state advertising laws, the platform defaults to  
+          <strong>Important:</strong>
+          If you do not upload specific state advertising laws, the platform defaults to
           <strong> Wisconsin law</strong>.
         </div>
 
@@ -266,7 +235,7 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* TEXT INPUT */}
+        {/* TEXT AREA */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-2">Paste Advertising Law Text</h2>
 
