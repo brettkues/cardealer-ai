@@ -22,6 +22,8 @@ import {
   setDoc
 } from "firebase/firestore";
 
+// NO STORAGE IMPORTS ANYWHERE
+
 // SERVER-SAFE CHECK
 import { checkSubscription } from "@/lib/checkSubscription";
 
@@ -70,7 +72,7 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // AUTH + SUBSCRIPTION
+  // AUTH CHECK + SUBSCRIPTION ENFORCEMENT
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -193,7 +195,7 @@ export default function LawsPage() {
     await loadDocs();
   };
 
-  // RENDER
+  // RENDER UI
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
