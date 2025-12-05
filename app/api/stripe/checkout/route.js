@@ -5,10 +5,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-// UPDATED: Firebase must be imported from /lib, not /app
-import { db } from "@/lib/firebase";
-
-import { doc, getDoc } from "firebase/firestore";
+// SERVER-SAFE FIREBASE ADMIN
+import { adminDB } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
@@ -17,23 +15,17 @@ export async function POST(req) {
     const { uid, priceId } = await req.json();
 
     if (!uid || !priceId) {
-      return NextResponse.json(
-        { error: "Missing uid or priceId" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing uid or priceId" }, { status: 400 });
     }
 
-    const userRef = doc(db, "users", uid);
-    const userSnap = await getDoc(userRef);
+    // Fetch the user safely using admin
+    const snap = await adminDB.collection("users").doc(uid).get();
 
-    if (!userSnap.exists()) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+    if (!snap.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const { email } = userSnap.data();
+    const { email } = snap.data();
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -41,14 +33,11 @@ export async function POST(req) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscribe?canceled=true`,
-      metadata: { uid },
+      metadata: { uid }
     });
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
