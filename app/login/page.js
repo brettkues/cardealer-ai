@@ -3,55 +3,38 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-
-// Firebase client config
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-// Initialize once
-if (!getApps().length) initializeApp(firebaseConfig);
-
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-      const auth = getAuth();
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
-
-      const user = userCred.user;
-      const token = await user.getIdToken();
-
-      // Send token to server to set an HTTP-only cookie
       const res = await fetch("/api/session/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ email, password })
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        throw new Error("Cookie set failed");
+        setLoading(false);
+        return setError(data.error || "Login failed.");
       }
 
+      // Login success → redirect dashboard
       router.push("/dashboard");
-
     } catch (err) {
-      setError("Invalid email or password.");
+      setError("Login failed. Try again.");
+      setLoading(false);
     }
   }
 
@@ -80,11 +63,17 @@ export default function LoginPage() {
           style={{ marginTop: 10 }}
         />
 
-        <button type="submit" style={{ marginTop: 20 }}>
-          Login
+        <button
+          type="submit"
+          style={{ marginTop: 20 }}
+          disabled={loading}
+        >
+          {loading ? "Logging in..." : "Login"}
         </button>
 
-        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
+        {error && (
+          <p style={{ color: "red", marginTop: 10 }}>{error}</p>
+        )}
       </form>
 
       <p style={{ marginTop: 20 }}>
