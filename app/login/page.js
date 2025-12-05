@@ -4,12 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { initializeApp, getApps } from "firebase/app";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 
-// Firebase Config
+// Firebase config
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -19,8 +16,10 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Init Firebase once
-if (!getApps().length) initializeApp(firebaseConfig);
+// Ensure Firebase initializes once
+if (!getApps().length) {
+  initializeApp(firebaseConfig);
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,11 +38,11 @@ export default function LoginPage() {
 
       const uid = userCred.user.uid;
 
-      // Hit our session API to store UID in a secure server cookie
+      // Send UID to secure server route to set the cookie
       await fetch("/api/session/set", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid }),
+        body: JSON.stringify({ uid })
       });
 
       router.push("/dashboard");
@@ -81,7 +80,9 @@ export default function LoginPage() {
           Login
         </button>
 
-        {error && <p style={{ color: "red", marginTop: 10 }}>{error}</p>}
+        {error && (
+          <p style={{ color: "red", marginTop: 10 }}>{error}</p>
+        )}
       </form>
 
       <p style={{ marginTop: 20 }}>
