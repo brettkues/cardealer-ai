@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// CLIENT-FRIENDLY FIREBASE INIT
+// CLIENT-SAFE FIREBASE INIT
 import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
@@ -22,12 +22,18 @@ import {
   setDoc
 } from "firebase/firestore";
 
-// NO STORAGE IMPORTS ANYWHERE
+// LAZY-LOADED STORAGE (prevents Webpack from parsing undici)
+let storageModule = null;
+async function loadStorage() {
+  if (storageModule) return storageModule;
+  storageModule = await import("firebase/storage");
+  return storageModule;
+}
 
-// SERVER-SAFE CHECK
+// SERVER-SAFE SUB CHECK
 import { checkSubscription } from "@/lib/checkSubscription";
 
-// Initialize Firebase client app
+// Firebase config
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -35,9 +41,7 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
+if (!getApps().length) initializeApp(firebaseConfig);
 
 const auth = getAuth();
 const db = getFirestore();
@@ -72,7 +76,9 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // AUTH CHECK + SUBSCRIPTION ENFORCEMENT
+  // ------------------------------------
+  // LOGIN + SUBSCRIPTION CHECK
+  // ------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -103,7 +109,9 @@ export default function LawsPage() {
 
   const uid = auth.currentUser.uid;
 
-  // LOAD PDFs FOR USER
+  // ------------------------------------
+  // LOAD USER FILES
+  // ------------------------------------
   const loadDocs = async () => {
     const baseQuery =
       sub.role === "admin"
@@ -119,32 +127,36 @@ export default function LawsPage() {
     loadDocs();
   }, [sub]);
 
-  // UPLOAD PDF (VIA SERVER API)
+  // ------------------------------------
+  // UPLOAD PDF (lazy-loaded storage)
+  // ------------------------------------
   const uploadPDF = async () => {
-    if (!file) {
-      alert("Please select a PDF first.");
-      return;
-    }
+    if (!file) return alert("Please select a PDF.");
 
     setLoading(true);
 
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("state", state);
-      form.append("uid", uid);
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await loadStorage();
+      const storage = getStorage();
 
-      const res = await fetch("/api/laws/upload", {
-        method: "POST",
-        body: form,
+      const storagePath = `laws/${uid}/${Date.now()}_${file.name}`;
+      const fileRef = ref(storage, storagePath);
+
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+
+      await addDoc(collection(db, "lawLibrary"), {
+        type: "pdf",
+        state,
+        url,
+        filename: file.name,
+        owner: uid,
+        storagePath,
+        uploadedAt: new Date(),
       });
 
-      const result = await res.json();
-
-      if (!res.ok) throw new Error(result.error || "Upload failed.");
-
-      await loadDocs();
       setFile(null);
+      await loadDocs();
       alert("PDF uploaded successfully!");
     } catch (err) {
       alert("Upload failed: " + err.message);
@@ -153,14 +165,11 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // SAVE TEXT VERSION OF LAW
+  // ------------------------------------
+  // SAVE TEXT LAW
+  // ------------------------------------
   const saveTextLaw = async () => {
-    if (!textLaw.trim()) {
-      alert("Text is empty.");
-      return;
-    }
-
-    setLoading(true);
+    if (!textLaw.trim()) return alert("Text is empty.");
 
     try {
       await setDoc(doc(db, "lawText", `${uid}_${state}`), {
@@ -176,11 +185,11 @@ export default function LawsPage() {
     } catch (err) {
       alert("Error saving text: " + err.message);
     }
-
-    setLoading(false);
   };
 
-  // DELETE PDF (CALLS SERVER API)
+  // ------------------------------------
+  // DELETE PDF (server API)
+  // ------------------------------------
   const deletePDF = async (item) => {
     if (!confirm("Delete this file?")) return;
 
@@ -195,7 +204,9 @@ export default function LawsPage() {
     await loadDocs();
   };
 
-  // RENDER UI
+  // ------------------------------------
+  // RENDER
+  // ------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
@@ -211,12 +222,14 @@ export default function LawsPage() {
 
       <div className="p-8 max-w-4xl mx-auto w-full">
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
-          <strong>Important:</strong> If you don’t upload your own state laws,
-          Wisconsin laws will be applied by default.
+          <strong>Important:</strong>  
+          If you do not upload specific state advertising laws, the platform defaults to
+          <strong> Wisconsin law</strong>.
         </div>
 
         <label className="text-gray-300 font-semibold">
-          Select State <Tooltip text="Choose which state's advertising laws you're uploading." />
+          Select State
+          <Tooltip text="Choose which state's advertising laws you want to upload." />
         </label>
 
         <select
@@ -248,7 +261,7 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* TEXT ENTRY */}
+        {/* TEXT AREA */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-2">Paste Advertising Law Text</h2>
 
@@ -267,7 +280,7 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* LIST OF UPLOADED PDFS */}
+        {/* DISPLAY PDF LIST */}
         <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
 
         {uploaded.length === 0 ? (
