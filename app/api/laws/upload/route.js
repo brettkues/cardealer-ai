@@ -1,51 +1,64 @@
-export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
-import { adminDB } from "@/lib/firebaseAdmin";
-import { getStorage } from "firebase-admin/storage";
+import { initializeApp, getApps } from "firebase/app";
+import { getFirestore, collection, addDoc } from "firebase/firestore";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "firebase/storage";
+
+// Firebase (client-compatible config)
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+};
+
+// Init Firebase safely on server
+if (!getApps().length) {
+  initializeApp(firebaseConfig);
+}
+
+const db = getFirestore();
+const storage = getStorage();
 
 export async function POST(req) {
   try {
-    const data = await req.formData();
+    const formData = await req.formData();
 
-    const file = data.get("file");
-    const state = data.get("state");
-    const uid = data.get("uid");
+    const file = formData.get("file");
+    const state = formData.get("state");
+    const uid = formData.get("uid");
 
-    if (!file || !uid || !state) {
+    if (!file || !state || !uid) {
       return NextResponse.json(
-        { error: "Missing file, state, or user ID" },
+        { error: "Missing file, state, or uid" },
         { status: 400 }
       );
     }
 
-    // Convert file to buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
 
-    // Create storage path
-    const filename = `${Date.now()}_${file.name}`;
-    const storagePath = `laws/${uid}/${filename}`;
+    const fileName = `${Date.now()}_${file.name}`;
+    const storagePath = `laws/${uid}/${fileName}`;
+    const fileRef = ref(storage, storagePath);
 
-    // Upload using Firebase Admin Storage
-    const bucket = getStorage().bucket();
-    const uploadedFile = bucket.file(storagePath);
-
-    await uploadedFile.save(buffer, {
-      contentType: file.type,
-      gzip: true,
-    });
+    // Upload to Firebase Storage
+    await uploadBytes(fileRef, buffer);
 
     // Get public URL
-    const url = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+    const url = await getDownloadURL(fileRef);
 
-    // Save metadata in Firestore
-    await adminDB.collection("lawLibrary").add({
+    // Store DB record
+    await addDoc(collection(db, "lawLibrary"), {
       type: "pdf",
-      owner: uid,
       state,
-      filename: file.name,
       url,
+      filename: file.name,
+      owner: uid,
       storagePath,
       uploadedAt: new Date(),
     });
