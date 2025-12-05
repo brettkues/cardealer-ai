@@ -1,82 +1,109 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function GeneratorPage() {
-  const [images, setImages] = useState(["", "", "", ""]);
+  const router = useRouter();
+
+  const [checking, setChecking] = useState(true);
+  const [uid, setUid] = useState(null);
+  const [input, setInput] = useState("");
+  const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resultUrl, setResultUrl] = useState(null);
-  const [ribbonText, setRibbonText] = useState("");
 
-  async function generateCollage() {
-    setLoading(true);
-    setResultUrl(null);
+  // ---------------------------------------------
+  // VERIFY LOGIN + SUBSCRIPTION
+  // ---------------------------------------------
+  useEffect(() => {
+    async function verify() {
+      const res = await fetch("/api/session/me");
+      const data = await res.json();
 
-    const res = await fetch("/api/collage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        images,
-        ribbonText,
-      }),
-    });
+      if (!data.uid) {
+        router.push("/login");
+        return;
+      }
 
-    if (!res.ok) {
-      alert("Failed to generate collage.");
-      setLoading(false);
-      return;
+      const subRes = await fetch("/api/subscription", {
+        method: "POST",
+        body: JSON.stringify({ uid: data.uid }),
+      });
+      const sub = await subRes.json();
+
+      if (!sub.active) {
+        router.push("/subscribe");
+        return;
+      }
+
+      setUid(data.uid);
+      setChecking(false);
     }
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    setResultUrl(url);
+    verify();
+  }, [router]);
+
+  if (checking) {
+    return (
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+        Checking access…
+      </div>
+    );
+  }
+
+  // ---------------------------------------------
+  // SEND PROMPT TO AI
+  // ---------------------------------------------
+  const handleGenerate = async () => {
+    if (!input.trim()) return;
+
+    setLoading(true);
+    setReply("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ prompt: input }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error);
+
+      setReply(data.reply);
+    } catch (err) {
+      setReply("Error: " + err.message);
+    }
 
     setLoading(false);
-  }
+  };
 
-  function handleImageChange(index, value) {
-    const newArr = [...images];
-    newArr[index] = value;
-    setImages(newArr);
-  }
-
+  // ---------------------------------------------
+  // UI
+  // ---------------------------------------------
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Image Collage Generator</h1>
+    <div className="min-h-screen bg-gray-900 text-white p-10">
+      <h1 className="text-3xl font-bold mb-6">AI Generator</h1>
 
-      <p>Enter 4 image URLs:</p>
-
-      {images.map((img, i) => (
-        <input
-          key={i}
-          type="text"
-          placeholder={`Image URL ${i + 1}`}
-          value={img}
-          onChange={(e) => handleImageChange(i, e.target.value)}
-          style={{ display: "block", marginBottom: 10, width: "400px" }}
-        />
-      ))}
-
-      <input
-        type="text"
-        placeholder="Ribbon text (optional)"
-        value={ribbonText}
-        onChange={(e) => setRibbonText(e.target.value)}
-        style={{ marginTop: 10, width: "400px" }}
+      <textarea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        className="w-full h-40 p-4 bg-gray-800 border border-gray-700 rounded-lg"
+        placeholder="Enter text to generate response…"
       />
 
       <button
-        onClick={generateCollage}
+        onClick={handleGenerate}
         disabled={loading}
-        style={{ marginTop: 20 }}
+        className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg"
       >
-        {loading ? "Generating..." : "Generate Collage"}
+        {loading ? "Generating…" : "Generate"}
       </button>
 
-      {resultUrl && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Generated Image:</h3>
-          <img src={resultUrl} alt="Collage result" style={{ maxWidth: "100%" }} />
+      {reply && (
+        <div className="mt-6 bg-gray-800 p-5 rounded-lg border border-gray-700">
+          <h2 className="text-xl font-semibold mb-2">Response</h2>
+          <p className="whitespace-pre-wrap">{reply}</p>
         </div>
       )}
     </div>
