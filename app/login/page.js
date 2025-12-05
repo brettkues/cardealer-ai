@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+// Lazy-load Firebase Auth — prevents Undici from being bundled
+let authModule = null;
+async function loadAuth() {
+  if (authModule) return authModule;
+  authModule = await import("firebase/auth");
+  return authModule;
+}
+
+// Firebase init
 import { initializeApp, getApps } from "firebase/app";
 
 const firebaseConfig = {
@@ -15,10 +23,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Ensure Firebase is only initialized once
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
+if (!getApps().length) initializeApp(firebaseConfig);
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,14 +37,13 @@ export default function LoginPage() {
     setError("");
 
     try {
+      const { getAuth, signInWithEmailAndPassword } = await loadAuth();
       const auth = getAuth();
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
 
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
       const uid = userCred.user.uid;
 
-      // Store UID so the dashboard can use it
       localStorage.setItem("uid", uid);
-
       router.push("/dashboard");
     } catch (err) {
       setError("Invalid email or password.");
