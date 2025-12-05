@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: false,
 
   experimental: {
-    webpackBuildWorker: true,  // allowed
+    webpackBuildWorker: true,
   },
 
   webpack: (config) => {
