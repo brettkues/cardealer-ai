@@ -1,30 +1,33 @@
 export const runtime = "nodejs";
+export const preferredRegion = "iad1";
+export const dynamic = "force-dynamic";
 
-import Stripe from "stripe";
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
+
+// ADMIN FIREBASE ONLY — SAFE FOR SERVER
 import { adminDB } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-  const rawBody = await req.text();
+  // Stripe sends raw body, not JSON
+  const body = await req.text();
   const sig = req.headers.get("stripe-signature");
 
   let event;
-
   try {
     event = stripe.webhooks.constructEvent(
-      rawBody,
+      body,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("Webhook signature error:", err);
     return new NextResponse(`Webhook error: ${err.message}`, { status: 400 });
   }
 
   try {
-    // Handle subscription completion
+    // Only handle successful subscription creation
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       const uid = session.metadata?.uid;
@@ -33,19 +36,18 @@ export async function POST(req) {
         return new NextResponse("Missing UID metadata", { status: 400 });
       }
 
-      // Write subscription status using firebase-admin
+      // Update Firestore via admin SDK
       await adminDB.collection("users").doc(uid).set(
         {
           subscribed: true,
-          lastUpdated: Date.now(),
+          lastUpdated: Date.now()
         },
         { merge: true }
       );
     }
 
-    return new NextResponse("Received", { status: 200 });
+    return new NextResponse("Webhook received", { status: 200 });
   } catch (err) {
-    console.error("Webhook handler error:", err);
     return new NextResponse(`Server error: ${err.message}`, { status: 500 });
   }
 }
