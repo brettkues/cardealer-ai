@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// Firebase App + Auth + Firestore (safe on client)
+// Firebase client-side
 import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
@@ -21,10 +21,6 @@ import {
   setDoc
 } from "firebase/firestore";
 
-// SERVER-SAFE SUB CHECK
-import { checkSubscription } from "@/lib/checkSubscription";
-
-// Firebase config
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -32,7 +28,6 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 };
 
-// Init Firebase
 if (!getApps().length) initializeApp(firebaseConfig);
 
 const auth = getAuth();
@@ -40,7 +35,6 @@ const db = getFirestore();
 
 function Tooltip({ text }) {
   const [open, setOpen] = useState(false);
-
   return (
     <span
       className="relative inline-block"
@@ -68,7 +62,17 @@ export default function LawsPage() {
   const [uploaded, setUploaded] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // LOGIN + SUBSCRIPTION CHECK
+  // SUBSCRIPTION CHECK (via API instead of server import)
+  async function checkSub(uid) {
+    const res = await fetch("/api/subscription", {
+      method: "POST",
+      body: JSON.stringify({ uid })
+    });
+    const data = await res.json();
+    return data.active === true;
+  }
+
+  // LOGIN + SUB CHECK
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -76,8 +80,7 @@ export default function LawsPage() {
         return;
       }
 
-      const active = await checkSubscription(user.uid);
-
+      const active = await checkSub(user.uid);
       if (!active) {
         router.push("/subscribe");
         return;
@@ -115,10 +118,9 @@ export default function LawsPage() {
     loadDocs();
   }, [sub]);
 
-  // UPLOAD PDF → API ROUTE (NO firebase/storage on client)
+  // UPLOAD PDF (via API, not firebase/storage)
   const uploadPDF = async () => {
     if (!file) return alert("Please select a PDF.");
-
     setLoading(true);
 
     try {
@@ -133,7 +135,6 @@ export default function LawsPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
       setFile(null);
@@ -146,7 +147,7 @@ export default function LawsPage() {
     setLoading(false);
   };
 
-  // SAVE TEXT LAW
+  // SAVE LAW TEXT
   const saveTextLaw = async () => {
     if (!textLaw.trim()) return alert("Text is empty.");
 
@@ -166,7 +167,7 @@ export default function LawsPage() {
     }
   };
 
-  // DELETE PDF (server API)
+  // DELETE PDF
   const deletePDF = async (item) => {
     if (!confirm("Delete this file?")) return;
 
@@ -181,12 +182,12 @@ export default function LawsPage() {
     await loadDocs();
   };
 
-  // RENDER
+  // UI
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      {/* HEADER */}
       <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
         <h1 className="text-3xl font-bold">Advertising Law Library</h1>
-
         <button
           onClick={() => signOut(auth)}
           className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium"
@@ -196,12 +197,13 @@ export default function LawsPage() {
       </div>
 
       <div className="p-8 max-w-4xl mx-auto w-full">
+        {/* WARNING BANNER */}
         <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-4 rounded-xl mb-8">
-          <strong>Important:</strong>
-          If you do not upload specific state advertising laws, the platform defaults to
+          <strong>Important:</strong> If you do not upload state-specific laws, default is  
           <strong> Wisconsin law</strong>.
         </div>
 
+        {/* STATE SELECT */}
         <label className="text-gray-300 font-semibold">
           Select State <Tooltip text="Choose which state's advertising laws you want to upload." />
         </label>
@@ -235,7 +237,7 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* TEXT AREA */}
+        {/* TEXT INPUT */}
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-2">Paste Advertising Law Text</h2>
 
@@ -254,7 +256,7 @@ export default function LawsPage() {
           </button>
         </div>
 
-        {/* DISPLAY PDF LIST */}
+        {/* FILE LIST */}
         <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
 
         {uploaded.length === 0 ? (
