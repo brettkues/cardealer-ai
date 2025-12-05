@@ -1,19 +1,12 @@
 export const runtime = "nodejs";
-export const preferredRegion = "iad1";
-export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-
-// UPDATED — import firebase from /lib
-import { db } from "@/lib/firebase";
-
-import { doc, getDoc } from "firebase/firestore";
+import { adminDB } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
     const { uid, priceId } = await req.json();
 
     if (!uid || !priceId) {
@@ -23,17 +16,17 @@ export async function POST(req) {
       );
     }
 
-    const userRef = doc(db, "users", uid);
-    const userSnap = await getDoc(userRef);
+    // Get user from Firestore via admin SDK
+    const snap = await adminDB.collection("users").doc(uid).get();
 
-    if (!userSnap.exists()) {
+    if (!snap.exists) {
       return NextResponse.json(
         { error: "User not found" },
         { status: 404 }
       );
     }
 
-    const { email } = userSnap.data();
+    const { email } = snap.data();
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -41,11 +34,12 @@ export async function POST(req) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscribe?canceled=true`,
-      metadata: { uid },
+      metadata: { uid }
     });
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
+    console.error("CHECKOUT SESSION ERROR:", err);
     return NextResponse.json(
       { error: err.message },
       { status: 500 }
