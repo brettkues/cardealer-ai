@@ -17,22 +17,27 @@ export default function FILibraryPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">F&amp;I Training Library</h1>
+      <h1 className="text-2xl font-semibold mb-4">F&I Training Library</h1>
 
       <div className="space-y-4">
         {entries.length === 0 && <p>No training items uploaded yet.</p>}
 
         {entries.map((entry, i) => (
-          <div key={i} className="p-4 bg-white border rounded shadow">
-            <h2 className="font-semibold">{entry.title || "Training Item"}</h2>
+          <div
+            key={i}
+            className="p-4 bg-white border rounded shadow space-y-2"
+          >
+            <h2 className="font-semibold">Training Item</h2>
+
             {entry.text && (
-              <p className="mt-2 whitespace-pre-line">{entry.text}</p>
+              <p className="whitespace-pre-line">{entry.text}</p>
             )}
+
             {entry.fileUrl && (
               <a
                 href={entry.fileUrl}
                 target="_blank"
-                className="text-blue-600 underline mt-2 block"
+                className="text-blue-600 underline"
               >
                 View PDF
               </a>
