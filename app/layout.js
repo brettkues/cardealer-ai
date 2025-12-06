@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "Dealer Platform",
-  description: "Tools for dealership management and advertising.",
+  description: "AI tools for automotive dealers",
 };
 
 export default function RootLayout({ children }) {
