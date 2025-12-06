@@ -1,17 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function ImageSelectorPage() {
-  const [url, setUrl] = useState("");
+  const router = useRouter();
+
+  const [stock, setStock] = useState("");
+  const [websites, setWebsites] = useState([]);
+  const [selectedWebsite, setSelectedWebsite] = useState("");
   const [images, setImages] = useState([]);
   const [selected, setSelected] = useState([]);
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("");
 
+  // Load dealership websites
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch("/api/social/get-websites");
+      const data = await res.json();
+      setWebsites(data.websites || []);
+    };
+    load();
+  }, []);
+
+  // Scrape the vehicle images
   const scrapeImages = async () => {
-    if (!url.trim()) return;
+    if (!selectedWebsite || !stock.trim()) return;
 
-    setMessage("Scraping images…");
+    setStatus("Scraping images…");
+
+    const url = `${selectedWebsite}/used-${stock}`;
 
     const res = await fetch("/api/scrape", {
       method: "POST",
@@ -20,69 +38,91 @@ export default function ImageSelectorPage() {
     });
 
     const data = await res.json();
-    setImages(data.images || []);
-    setMessage("");
-  };
 
-  const toggleSelect = (img) => {
-    if (selected.includes(img)) {
-      setSelected(selected.filter((x) => x !== img));
-    } else if (selected.length < 4) {
-      setSelected([...selected, img]);
+    if (!data.images) {
+      setStatus("No images found.");
+      return;
     }
+
+    setImages(data.images);
+    setStatus("");
   };
 
-  const sendToGenerator = async () => {
-    if (selected.length !== 4) return;
+  // Select / deselect images (max 4)
+  const toggle = (img) => {
+    setSelected((prev) =>
+      prev.includes(img)
+        ? prev.filter((i) => i !== img)
+        : prev.length < 4
+        ? [...prev, img]
+        : prev
+    );
+  };
 
+  const continueToGenerate = () => {
+    if (selected.length !== 4) return;
     localStorage.setItem("selectedImages", JSON.stringify(selected));
-    window.location.href = "/dashboard/social/image-generator";
+    router.push("/dashboard/social/image-generator");
   };
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Image Selector</h1>
+      <h1 className="text-2xl font-semibold mb-4">Select Images</h1>
 
-      <div className="max-w-xl space-y-4 mb-6">
+      <div className="space-y-4 max-w-xl">
         <input
           type="text"
-          placeholder="Paste vehicle URL…"
           className="w-full p-3 border rounded"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Enter stock number or last 8 of VIN…"
+          value={stock}
+          onChange={(e) => setStock(e.target.value)}
         />
+
+        <select
+          className="w-full p-3 border rounded"
+          value={selectedWebsite}
+          onChange={(e) => setSelectedWebsite(e.target.value)}
+        >
+          <option value="">Select dealership website…</option>
+          {websites.map((w, i) => (
+            <option key={i} value={w.url}>
+              {w.url}
+            </option>
+          ))}
+        </select>
 
         <button
           onClick={scrapeImages}
           className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
         >
-          Fetch Images
+          Scrape Images
         </button>
 
-        {message && <p>{message}</p>}
+        <p>{status}</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      {/* Image grid */}
+      <div className="grid grid-cols-4 gap-4 mt-6">
         {images.map((src, i) => (
-          <img
+          <div
             key={i}
-            src={src}
-            className={`w-full h-32 object-cover border-4 cursor-pointer ${
-              selected.includes(src)
-                ? "border-blue-600"
-                : "border-transparent"
+            className={`border rounded overflow-hidden cursor-pointer ${
+              selected.includes(src) ? "ring-4 ring-blue-500" : ""
             }`}
-            onClick={() => toggleSelect(src)}
-          />
+            onClick={() => toggle(src)}
+          >
+            <img src={src} className="w-full h-32 object-cover" />
+          </div>
         ))}
       </div>
 
+      {/* Continue button */}
       {selected.length === 4 && (
         <button
-          onClick={sendToGenerator}
+          onClick={continueToGenerate}
           className="mt-6 bg-green-600 text-white py-3 px-6 rounded hover:bg-green-700 transition"
         >
-          Continue to Generator
+          Continue to Image Generator
         </button>
       )}
     </div>
