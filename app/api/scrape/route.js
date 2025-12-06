@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
 
-/**
- * Simple HTML scraper for dealership vehicle pages.
- * Extracts ALL <img> tags and returns up to 20 image URLs.
- */
 export async function POST(req) {
   try {
     const { url } = await req.json();
 
     if (!url) {
-      return NextResponse.json({ error: "Missing URL" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing URL" },
+        { status: 400 }
+      );
     }
 
-    // Fetch the HTML of the vehicle page
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
     const html = await res.text();
 
-    // Match all <img src="..."> URLs
     const imgRegex = /<img[^>]+src="([^">]+)"/g;
     const urls = [];
     let match;
@@ -24,7 +23,6 @@ export async function POST(req) {
     while ((match = imgRegex.exec(html)) !== null) {
       const src = match[1];
 
-      // Skip icons and junk
       if (
         src.startsWith("http") &&
         !src.includes("logo") &&
@@ -35,13 +33,12 @@ export async function POST(req) {
       }
     }
 
-    // Return first 20 images maximum
-    return NextResponse.json({
-      images: urls.slice(0, 20)
-    });
+    return NextResponse.json(
+      { images: urls.slice(0, 20) },
+      { status: 200 }
+    );
 
-  } catch (err) {
-    console.error("Scrape Error:", err);
+  } catch (error) {
     return NextResponse.json(
       { error: "Failed to scrape images" },
       { status: 500 }
