@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { adminDB } from "../../../../lib/firebaseAdmin"; // correct depth for route groups
+import { adminDB } from "../../../../lib/firebaseAdmin";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
