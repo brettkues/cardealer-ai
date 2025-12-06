@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminStorage } from "../../../../../lib/firebaseAdmin";
+import { adminStorage } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
@@ -7,7 +7,10 @@ export async function POST(req) {
     const files = form.getAll("logos");
 
     if (!files.length) {
-      return NextResponse.json({ message: "No files uploaded." });
+      return NextResponse.json(
+        { message: "No files uploaded." },
+        { status: 200 }
+      );
     }
 
     const uploaded = [];
@@ -22,16 +25,23 @@ export async function POST(req) {
 
       await fileRef.save(buffer, { contentType: file.type });
 
-      const url = (await fileRef.getSignedUrl({
+      const [signedUrl] = await fileRef.getSignedUrl({
         action: "read",
         expires: "03-01-2035",
-      }))[0];
+      });
 
-      uploaded.push(url);
+      uploaded.push(signedUrl);
     }
 
-    return NextResponse.json({ message: "Logos uploaded.", urls: uploaded });
-  } catch (err) {
-    return NextResponse.json({ message: "Error uploading logos." }, { status: 500 });
+    return NextResponse.json(
+      { message: "Logos uploaded.", urls: uploaded },
+      { status: 200 }
+    );
+
+  } catch (error) {
+    return NextResponse.json(
+      { message: "Error uploading logos." },
+      { status: 500 }
+    );
   }
 }
