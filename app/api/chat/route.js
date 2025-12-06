@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import { runChat } from "../../../../lib/ai/openai";
 
 export const runtime = "nodejs";
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 export async function POST(req) {
   try {
@@ -18,16 +14,16 @@ export async function POST(req) {
       );
     }
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
+    const reply = await runChat(
+      "gpt-4o-mini",
+      [
         { role: "system", content: "You are a helpful dealership assistant." },
         { role: "user", content: prompt }
       ]
-    });
+    );
 
     return NextResponse.json(
-      { reply: completion.choices[0].message.content },
+      { reply },
       { status: 200 }
     );
 
