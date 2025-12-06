@@ -20,13 +20,12 @@ export default function AccountPage() {
     <div>
       <h1 className="text-2xl font-semibold mb-4">My Account</h1>
 
-      {!user && <p>Loading…</p>}
+      {!user && <p>Not logged in.</p>}
 
       {user && (
-        <div className="p-4 border rounded bg-white shadow">
+        <div className="space-y-2">
           <p><strong>Email:</strong> {user.email}</p>
           <p><strong>Role:</strong> {user.role}</p>
-          <p><strong>User ID:</strong> {user.uid}</p>
         </div>
       )}
     </div>
