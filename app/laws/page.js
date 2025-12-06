@@ -1,121 +1,196 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { initializeApp, getApps } from "firebase/app";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signOut
+} from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  setDoc,
+  doc
+} from "firebase/firestore";
+
+// ----------------------------
+// FIREBASE CLIENT INIT
+// ----------------------------
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+};
+
+if (!getApps().length) initializeApp(firebaseConfig);
+
+const auth = getAuth();
+const db = getFirestore();
+
+// ----------------------------
+// HELPER: CHECK SESSION + SUB
+// ----------------------------
+async function getSession() {
+  try {
+    const res = await fetch("/api/auth/session/get", { method: "GET" });
+    return await res.json();
+  } catch {
+    return { uid: null };
+  }
+}
+
+async function getSubscription(uid) {
+  try {
+    const res = await fetch("/api/subscription", {
+      method: "POST",
+      body: JSON.stringify({ uid }),
+    });
+    return await res.json();
+  } catch {
+    return { active: false };
+  }
+}
+
+// ----------------------------
+// UI COMPONENTS
+// ----------------------------
+function Tooltip({ text }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={() => setOpen(!open)}
+    >
+      <span className="ml-2 text-blue-400 cursor-pointer">ⓘ</span>
+      {open && (
+        <div className="absolute left-0 mt-2 w-64 bg-gray-800 text-gray-200 text-sm p-3 rounded-lg border border-gray-700 shadow-xl">
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
+// ----------------------------
+// MAIN PAGE
+// ----------------------------
 export default function LawsPage() {
+  const router = useRouter();
+
   const [uid, setUid] = useState(null);
-  const [subscribed, setSubscribed] = useState(false);
   const [state, setState] = useState("WI");
   const [file, setFile] = useState(null);
   const [textLaw, setTextLaw] = useState("");
   const [uploaded, setUploaded] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // -----------------------------------
-  // 1. LOAD SESSION + SUBSCRIPTION
-  // -----------------------------------
+  // ----------------------------
+  // AUTH + SUB CHECK
+  // ----------------------------
   useEffect(() => {
-    async function load() {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
-      const data = await res.json();
+    async function init() {
+      const session = await getSession();
 
-      if (!data.loggedIn || !data.uid) {
-        window.location.href = "/login";
+      if (!session.uid) {
+        router.push("/login");
         return;
       }
 
-      setUid(data.uid);
+      const sub = await getSubscription(session.uid);
 
-      const subRes = await fetch("/api/subscription", {
+      if (!sub.active) {
+        router.push("/subscribe");
+        return;
+      }
+
+      setUid(session.uid);
+    }
+
+    init();
+  }, [router]);
+
+  // ----------------------------
+  // LOAD USER FILES
+  // ----------------------------
+  async function loadDocs() {
+    if (!uid) return;
+
+    const q = query(collection(db, "lawLibrary"), where("owner", "==", uid));
+    const snap = await getDocs(q);
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setUploaded(list);
+  }
+
+  useEffect(() => {
+    loadDocs();
+  }, [uid]);
+
+  // ----------------------------
+  // UPLOAD PDF → API ROUTE
+  // ----------------------------
+  async function uploadPDF() {
+    if (!file) return alert("Please select a PDF.");
+
+    setLoading(true);
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("uid", uid);
+      form.append("state", state);
+
+      const res = await fetch("/api/laws/upload", {
         method: "POST",
-        body: JSON.stringify({ uid: data.uid }),
+        body: form,
       });
 
-      const subData = await subRes.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
-      if (!subData.active) {
-        window.location.href = "/subscribe";
-        return;
-      }
-
-      setSubscribed(true);
-      setLoading(false);
-      await loadDocs(data.uid);
+      alert("PDF uploaded successfully!");
+      setFile(null);
+      loadDocs();
+    } catch (err) {
+      alert("Upload failed: " + err.message);
     }
 
-    load();
-  }, []);
-
-  // -----------------------------------
-  // 2. LOAD USER DOCUMENTS
-  // -----------------------------------
-  async function loadDocs(uid) {
-    const res = await fetch("/api/laws/get", {
-      method: "POST",
-      body: JSON.stringify({ uid }),
-    });
-
-    const data = await res.json();
-    setUploaded(data.files || []);
+    setLoading(false);
   }
 
-  // -----------------------------------
-  // 3. UPLOAD PDF (server route)
-  // -----------------------------------
-  async function uploadPDF() {
-    if (!file) return alert("Select a PDF");
-
-    const form = new FormData();
-    form.append("file", file);
-    form.append("uid", uid);
-    form.append("state", state);
-
-    const res = await fetch("/api/laws/upload", {
-      method: "POST",
-      body: form,
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert("Upload failed: " + data.error);
-      return;
-    }
-
-    setFile(null);
-    await loadDocs(uid);
-    alert("Uploaded!");
-  }
-
-  // -----------------------------------
-  // 4. SAVE TEXT LAW
-  // -----------------------------------
+  // ----------------------------
+  // SAVE TEXT LAW
+  // ----------------------------
   async function saveTextLaw() {
-    if (!textLaw.trim()) return alert("Text is empty");
+    if (!textLaw.trim()) return alert("Text is empty.");
 
-    const res = await fetch("/api/laws/text", {
-      method: "POST",
-      body: JSON.stringify({ uid, state, textLaw }),
+    await setDoc(doc(db, "lawText", `${uid}_${state}`), {
+      type: "text",
+      state,
+      text: textLaw.trim(),
+      owner: uid,
+      updatedAt: new Date(),
     });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert("Error saving: " + data.error);
-      return;
-    }
 
     setTextLaw("");
     alert("Saved!");
   }
 
-  // -----------------------------------
-  // 5. DELETE PDF
-  // -----------------------------------
+  // ----------------------------
+  // DELETE PDF
+  // ----------------------------
   async function deletePDF(item) {
     if (!confirm("Delete this file?")) return;
 
-    const res = await fetch("/api/laws/delete", {
+    await fetch("/api/laws/delete", {
       method: "POST",
       body: JSON.stringify({
         id: item.id,
@@ -123,92 +198,96 @@ export default function LawsPage() {
       }),
     });
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert("Delete error: " + data.error);
-      return;
-    }
-
-    await loadDocs(uid);
+    loadDocs();
   }
 
-  // -----------------------------------
-  // 6. UI LOADING SCREEN
-  // -----------------------------------
-  if (loading || !subscribed) {
+  // ----------------------------
+  // RENDER UI
+  // ----------------------------
+  if (!uid) {
     return (
-      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+      <div className="h-screen flex justify-center items-center text-white">
         Checking access…
       </div>
     );
   }
 
-  // -----------------------------------
-  // 7. RENDER PAGE
-  // -----------------------------------
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-3xl font-bold mb-6">Advertising Law Library</h1>
+    <div className="min-h-screen bg-gray-900 text-white">
 
-      <label className="block mb-3 text-gray-300 font-semibold">
-        Select State
-      </label>
-
-      <select
-        value={state}
-        onChange={(e) => setState(e.target.value)}
-        className="w-full bg-gray-700 text-white p-3 rounded-lg mb-6"
-      >
-        <option value="WI">Wisconsin (WI)</option>
-        <option value="OTHER">Other State</option>
-      </select>
-
-      {/* Upload PDF */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Upload PDF</h2>
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => setFile(e.target.files[0])}
-          className="text-gray-300 mb-4"
-        />
+      <div className="p-5 bg-gray-800 border-b border-gray-700 flex justify-between">
+        <h1 className="text-xl font-bold">Advertising Law Library</h1>
         <button
-          onClick={uploadPDF}
-          disabled={!file}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold"
+          onClick={() => signOut(auth)}
+          className="px-4 py-2 bg-red-600 rounded-lg"
         >
-          Upload PDF
+          Sign Out
         </button>
       </div>
 
-      {/* Text law entry */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Enter Text Law</h2>
-        <textarea
-          value={textLaw}
-          onChange={(e) => setTextLaw(e.target.value)}
-          className="w-full bg-gray-700 text-white p-3 h-48 rounded-lg border border-gray-600"
-        />
-        <button
-          onClick={saveTextLaw}
-          className="w-full py-3 mt-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold"
+      <div className="p-8 max-w-4xl mx-auto">
+
+        <label className="text-gray-300 font-semibold">
+          Select State <Tooltip text="Choose which state's advertising laws you want to upload." />
+        </label>
+
+        <select
+          value={state}
+          onChange={(e) => setState(e.target.value)}
+          className="w-full bg-gray-700 p-3 rounded-lg mt-2 mb-6"
         >
-          Save Text Law
-        </button>
-      </div>
+          <option value="WI">Wisconsin (WI)</option>
+          <option value="OTHER">Other State</option>
+        </select>
 
-      {/* Uploaded PDFs */}
-      <h2 className="text-xl font-semibold mb-4">Your Uploaded PDFs</h2>
+        {/* PDF Upload */}
+        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
+          <h2 className="text-lg font-semibold mb-3">Upload PDF</h2>
 
-      {uploaded.length === 0 ? (
-        <p className="text-gray-400">No PDFs uploaded.</p>
-      ) : (
-        <div className="space-y-4">
-          {uploaded.map((item) => (
+          <input
+            type="file"
+            accept="application/pdf"
+            className="text-gray-300 mb-4"
+            onChange={(e) => setFile(e.target.files[0])}
+          />
+
+          <button
+            disabled={!file || loading}
+            onClick={uploadPDF}
+            className="w-full py-3 bg-blue-600 rounded-lg"
+          >
+            {loading ? "Uploading…" : "Upload PDF"}
+          </button>
+        </div>
+
+        {/* TEXT LAW */}
+        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-10">
+          <h2 className="text-lg font-semibold mb-2">Paste Law Text</h2>
+
+          <textarea
+            value={textLaw}
+            onChange={(e) => setTextLaw(e.target.value)}
+            className="w-full h-48 bg-gray-700 p-3 border border-gray-600 rounded-lg"
+          />
+
+          <button
+            onClick={saveTextLaw}
+            className="w-full py-3 mt-3 bg-green-600 rounded-lg"
+          >
+            Save Text
+          </button>
+        </div>
+
+        {/* FILE LIST */}
+        <h2 className="text-lg font-semibold mb-4">Your PDFs</h2>
+
+        {uploaded.length === 0 ? (
+          <p className="text-gray-400">No PDFs uploaded.</p>
+        ) : (
+          uploaded.map((item) => (
             <div
               key={item.id}
-              className="p-4 bg-gray-800 rounded-xl border border-gray-700 flex justify-between"
+              className="p-4 bg-gray-800 border border-gray-700 rounded-xl flex justify-between mb-4"
             >
               <div>
                 <p className="font-semibold">{item.filename}</p>
@@ -219,21 +298,22 @@ export default function LawsPage() {
                 <a
                   href={item.url}
                   target="_blank"
-                  className="px-3 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm"
+                  className="px-3 py-2 bg-green-600 rounded-lg text-sm"
                 >
                   View
                 </a>
+
                 <button
                   onClick={() => deletePDF(item)}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm"
+                  className="px-3 py-2 bg-red-600 rounded-lg text-sm"
                 >
                   Delete
                 </button>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }
