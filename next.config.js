@@ -11,18 +11,6 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**.pischkemotorsoflacrosse.com"
-      },
-      {
-        protocol: "https",
-        hostname: "**.pischkenissan.com"
-      },
-      {
-        protocol: "https",
-        hostname: "**.dealerinspire.com"
-      },
-      {
-        protocol: "https",
         hostname: "**"
       }
     ]
@@ -32,10 +20,8 @@ const nextConfig = {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
-      path: false,
-      os: false
+      path: false
     };
-
     return config;
   }
 };
