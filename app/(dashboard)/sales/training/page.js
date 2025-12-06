@@ -48,7 +48,7 @@ export default function SalesTrainingUploadPage() {
           Upload Training
         </button>
 
-        <p>{message}</p>
+        {message && <p className="text-green-700 font-medium">{message}</p>}
       </div>
     </div>
   );
