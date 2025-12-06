@@ -1,10 +1,8 @@
+export const runtime = "nodejs"; // REQUIRED FOR SHARP
+
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 
-/**
- * Combine 4 selected images into an 850x850 collage.
- * Layout: 2 images on top, 2 on bottom.
- */
 export async function POST(req) {
   try {
     const { imageUrls, ribbonText } = await req.json();
@@ -16,23 +14,28 @@ export async function POST(req) {
       );
     }
 
-    // Fetch all 4 images
+    // Download all 4 images
     const buffers = await Promise.all(
       imageUrls.map(async (url) => {
-        const res = await fetch(url);
+        const res = await fetch(url, {
+          headers: { "User-Agent": "Mozilla/5.0" }
+        });
         return Buffer.from(await res.arrayBuffer());
       })
     );
 
-    // Resize each image to 425x425 (half of 850x850)
+    // Resize each to 425x425
     const resized = await Promise.all(
       buffers.map((img) =>
-        sharp(img).resize(425, 425, { fit: "cover" }).toBuffer()
+        sharp(img)
+          .resize(425, 425, { fit: "cover" })
+          .jpeg({ quality: 90 })
+          .toBuffer()
       )
     );
 
-    // Create a blank 850x850 background
-    let collage = sharp({
+    // Build collage
+    const collage = sharp({
       create: {
         width: 850,
         height: 850,
@@ -40,20 +43,12 @@ export async function POST(req) {
         background: "#ffffff"
       }
     }).composite([
-      // Top-left
       { input: resized[0], left: 0, top: 0 },
-
-      // Top-right
       { input: resized[1], left: 425, top: 0 },
-
-      // Bottom-left
       { input: resized[2], left: 0, top: 425 },
-
-      // Bottom-right
       { input: resized[3], left: 425, top: 425 }
     ]);
 
-    // Final image buffer
     const output = await collage.jpeg({ quality: 90 }).toBuffer();
 
     return new NextResponse(output, {
@@ -64,7 +59,6 @@ export async function POST(req) {
     });
 
   } catch (error) {
-    console.error("Collage API Error:", error);
     return NextResponse.json(
       { error: "Failed to generate collage." },
       { status: 500 }
