@@ -1,19 +1,20 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getUserFromToken } from "../../../../lib/auth";
 
-export async function GET(request) {
+export async function GET(req) {
   try {
-    // Next.js 14 compatible token extraction
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader ? authHeader.replace("Bearer ", "") : null;
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader?.replace("Bearer ", "") || null;
 
     if (!token) {
-      return NextResponse.json({ user: null }, { status: 200 });
+      return NextResponse.json({ user: null });
     }
 
     const user = await getUserFromToken(token);
-    return NextResponse.json({ user }, { status: 200 });
-  } catch (err) {
-    return NextResponse.json({ user: null }, { status: 200 });
+    return NextResponse.json({ user });
+  } catch {
+    return NextResponse.json({ user: null });
   }
 }
