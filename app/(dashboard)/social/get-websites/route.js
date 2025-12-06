@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminDB } from "../../../../lib/firebaseAdmin";
+import { adminDB } from "../../../../lib/firebaseAdmin"; // correct depth for route groups
 
 export async function GET() {
   try {
