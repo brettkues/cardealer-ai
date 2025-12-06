@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "../../../lib/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth, googleProvider } from "../../../lib/firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -10,13 +13,25 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  async function registerUser() {
+  async function registerEmail() {
     setError("");
     setMessage("");
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      setMessage("Account created successfully. You may now log in.");
+      setMessage("Account created. You may now log in.");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function registerGoogle() {
+    setError("");
+    setMessage("");
+
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setMessage("Account created with Google.");
     } catch (err) {
       setError(err.message);
     }
@@ -43,10 +58,17 @@ export default function RegisterPage() {
       />
 
       <button
-        onClick={registerUser}
+        onClick={registerEmail}
         className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
       >
-        Register
+        Sign Up
+      </button>
+
+      <button
+        onClick={registerGoogle}
+        className="w-full bg-red-600 text-white py-3 rounded hover:bg-red-700 mt-3"
+      >
+        Sign Up with Google
       </button>
 
       {error && <p className="text-red-600 mt-3">{error}</p>}
