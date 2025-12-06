@@ -4,8 +4,15 @@ import { useState, useEffect } from "react";
 
 export default function WebsiteManagerPage() {
   const [url, setUrl] = useState("");
-  const [message, setMessage] = useState("");
   const [websites, setWebsites] = useState([]);
+  const [message, setMessage] = useState("");
+
+  // Fetch saved websites from Firestore
+  const loadWebsites = async () => {
+    const res = await fetch("/api/social/get-websites");
+    const data = await res.json();
+    setWebsites(data.websites || []);
+  };
 
   const saveWebsite = async () => {
     if (!url.trim()) return;
@@ -18,14 +25,9 @@ export default function WebsiteManagerPage() {
 
     const data = await res.json();
     setMessage(data.message || "");
+
     setUrl("");
     loadWebsites();
-  };
-
-  const loadWebsites = async () => {
-    const res = await fetch("/api/social/get-websites");
-    const data = await res.json();
-    setWebsites(data.websites || []);
   };
 
   useEffect(() => {
@@ -36,11 +38,12 @@ export default function WebsiteManagerPage() {
     <div>
       <h1 className="text-2xl font-semibold mb-4">Website Manager</h1>
 
-      <div className="space-y-4 max-w-lg">
+      {/* Add Website */}
+      <div className="space-y-4 max-w-xl mb-6">
         <input
           type="text"
-          placeholder="Enter dealership website URL…"
           className="w-full p-3 border rounded"
+          placeholder="Enter dealership website URL…"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
@@ -52,14 +55,19 @@ export default function WebsiteManagerPage() {
           Save Website
         </button>
 
-        {message && <p>{message}</p>}
+        <p>{message}</p>
+      </div>
 
-        <h2 className="font-semibold mt-6">Saved Websites</h2>
-        <ul className="list-disc ml-6">
-          {websites.map((w, i) => (
-            <li key={i}>{w.url}</li>
-          ))}
-        </ul>
+      {/* Website List */}
+      <div className="space-y-2">
+        {websites.map((site, i) => (
+          <div
+            key={i}
+            className="p-3 bg-white border rounded shadow flex justify-between items-center"
+          >
+            <span>{site.url}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
