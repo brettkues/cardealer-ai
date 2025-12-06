@@ -1,23 +1,22 @@
 import { redirect } from "next/navigation";
-import { checkSession } from "@/app/api/auth/session/get/route";
+import { cookies } from "next/headers";
+import { checkSubscription } from "@/lib/checkSubscription";
 
 export default async function DashboardPage() {
-  // Read session (server-side)
-  const session = await checkSession();
+  // Read uid from cookies (set at login)
+  const uid = cookies().get("uid")?.value;
 
-  // If no session → redirect to login
-  if (!session?.uid) {
+  if (!uid) {
     redirect("/login");
   }
 
-  // Check subscription (server-side)
-  const subscribed = await session?.subscribed;
+  // Validate subscription on the server
+  const active = await checkSubscription(uid);
 
-  if (!subscribed) {
+  if (!active) {
     redirect("/subscribe");
   }
 
-  // If subscribed, render dashboard
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
