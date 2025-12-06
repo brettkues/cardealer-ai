@@ -3,75 +3,88 @@
 import { useState } from "react";
 
 export default function ImageSelectorPage() {
-  const [images, setImages] = useState([
-    // Placeholder previews — replaced once scraper is active
-    "/placeholder1.jpg",
-    "/placeholder2.jpg",
-    "/placeholder3.jpg",
-    "/placeholder4.jpg",
-    "/placeholder5.jpg",
-    "/placeholder6.jpg",
-    "/placeholder7.jpg",
-    "/placeholder8.jpg",
-    "/placeholder9.jpg",
-    "/placeholder10.jpg"
-  ]);
-
+  const [url, setUrl] = useState("");
+  const [images, setImages] = useState([]);
   const [selected, setSelected] = useState([]);
+  const [message, setMessage] = useState("");
 
-  function toggleSelect(url) {
-    if (selected.includes(url)) {
-      setSelected(selected.filter((i) => i !== url));
-    } else {
-      if (selected.length >= 4) return; // limit 4 images
-      setSelected([...selected, url]);
+  const scrapeImages = async () => {
+    if (!url.trim()) return;
+
+    setMessage("Scraping images…");
+
+    const res = await fetch("/api/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+
+    const data = await res.json();
+    setImages(data.images || []);
+    setMessage("");
+  };
+
+  const toggleSelect = (img) => {
+    if (selected.includes(img)) {
+      setSelected(selected.filter((x) => x !== img));
+    } else if (selected.length < 4) {
+      setSelected([...selected, img]);
     }
-  }
+  };
 
-  async function continueToRibbon() {
+  const sendToGenerator = async () => {
     if (selected.length !== 4) return;
 
-    // Save selection into local storage
     localStorage.setItem("selectedImages", JSON.stringify(selected));
-
-    // Redirect to next step
-    window.location.href = "/dashboard/social/ribbon";
-  }
+    window.location.href = "/dashboard/social/image-generator";
+  };
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">Select 4 Images</h1>
+      <h1 className="text-2xl font-semibold mb-4">Image Selector</h1>
 
-      <p className="mb-4 text-gray-600">
-        Choose exactly 4 images for your social media collage.
-      </p>
+      <div className="max-w-xl space-y-4 mb-6">
+        <input
+          type="text"
+          placeholder="Paste vehicle URL…"
+          className="w-full p-3 border rounded"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
 
-      <div className="grid grid-cols-2 gap-4">
-        {images.map((url, idx) => (
-          <div
-            key={idx}
-            onClick={() => toggleSelect(url)}
-            className={`cursor-pointer border-4 rounded-lg overflow-hidden ${
-              selected.includes(url)
+        <button
+          onClick={scrapeImages}
+          className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
+        >
+          Fetch Images
+        </button>
+
+        {message && <p>{message}</p>}
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        {images.map((src, i) => (
+          <img
+            key={i}
+            src={src}
+            className={`w-full h-32 object-cover border-4 cursor-pointer ${
+              selected.includes(src)
                 ? "border-blue-600"
                 : "border-transparent"
             }`}
-          >
-            <img src={url} className="w-full h-40 object-cover" />
-          </div>
+            onClick={() => toggleSelect(src)}
+          />
         ))}
       </div>
 
-      <button
-        onClick={continueToRibbon}
-        className={`w-full mt-6 py-3 rounded text-white transition ${
-          selected.length === 4
-            ? "bg-blue-600 hover:bg-blue-700"
-            : "bg-gray-400 cursor-not-allowed"
-        }`}
-      >
-        Continue (4 Selected Required)
-      </button>
+      {selected.length === 4 && (
+        <button
+          onClick={sendToGenerator}
+          className="mt-6 bg-green-600 text-white py-3 px-6 rounded hover:bg-green-700 transition"
+        >
+          Continue to Generator
+        </button>
+      )}
     </div>
   );
 }
