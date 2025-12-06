@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
-import { getUserFromToken } from "../../../../lib/auth";
+import { getUserFromToken } from "@/lib/auth";
 
 export async function GET(req) {
-  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  try {
+    const authHeader = req.headers.get("authorization");
 
-  if (!token) {
+    // No token → return null user
+    if (!authHeader) {
+      return NextResponse.json({ user: null }, { status: 200 });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const user = await getUserFromToken(token);
+
+    return NextResponse.json({ user }, { status: 200 });
+
+  } catch (error) {
+    console.error("ACCOUNT /me ERROR:", error);
     return NextResponse.json({ user: null }, { status: 200 });
   }
-
-  const user = await getUserFromToken(token);
-  return NextResponse.json({ user }, { status: 200 });
 }
