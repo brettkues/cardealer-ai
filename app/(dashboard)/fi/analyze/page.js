@@ -46,7 +46,7 @@ export default function FIAnalyzePage() {
         {message && <p>{message}</p>}
 
         {analysis && (
-          <div className="p-4 bg-white border rounded shadow whitespace-pre-line">
+          <div className="p-4 bg-white border rounded shadow whitespace-pre-wrap">
             {analysis}
           </div>
         )}
