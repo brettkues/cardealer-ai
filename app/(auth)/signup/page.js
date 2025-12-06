@@ -6,46 +6,51 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  const signup = async () => {
+  async function signupUser() {
+    setError("");
+    setMessage("");
+
     try {
-      await createUserWithEmailAndPassword(auth, email, pw);
-      window.location.href = "/dashboard";
+      await createUserWithEmailAndPassword(auth, email, password);
+      setMessage("Signup successful. You may now log in.");
     } catch (err) {
-      setError("Signup failed.");
+      setError(err.message);
     }
-  };
+  }
 
   return (
-    <div className="p-6 max-w-md mx-auto">
+    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
       <h1 className="text-2xl font-semibold mb-4">Sign Up</h1>
 
       <input
         type="email"
+        className="w-full p-3 border rounded mb-3"
         placeholder="Email"
-        className="border p-3 w-full mb-3"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
 
       <input
         type="password"
+        className="w-full p-3 border rounded mb-3"
         placeholder="Password"
-        className="border p-3 w-full mb-3"
-        value={pw}
-        onChange={(e) => setPw(e.target.value)}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
       />
 
       <button
-        onClick={signup}
-        className="bg-blue-600 text-white py-2 w-full rounded"
+        onClick={signupUser}
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
       >
-        Create Account
+        Sign Up
       </button>
 
       {error && <p className="text-red-600 mt-3">{error}</p>}
+      {message && <p className="text-green-600 mt-3">{message}</p>}
     </div>
   );
 }
