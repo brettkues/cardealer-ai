@@ -37,4 +37,58 @@ It must be clean, dealership-professional, and work as an overlay on social medi
     // 2) Canvas: build final 850×850 JPG
     // ---------------------------
     const canvas = createCanvas(850, 850);
-    const ctx = canv
+    const ctx = canvas.getContext("2d");
+
+    // Load & draw the four selected vehicle images
+    const loaded = await Promise.all(images.map((url) => loadImage(url)));
+
+    ctx.drawImage(loaded[0], 0, 0, 425, 425);
+    ctx.drawImage(loaded[1], 425, 0, 425, 425);
+    ctx.drawImage(loaded[2], 0, 425, 425, 425);
+    ctx.drawImage(loaded[3], 425, 425, 425, 425);
+
+    // Draw ribbon across the middle
+    const ribbonImage = await loadImage(ribbonBuffer);
+    ctx.drawImage(ribbonImage, 0, 350, 850, 150);
+
+    // ---------------------------
+    // 3) Add logos (if any)
+    // ---------------------------
+    if (logos && logos.length > 0) {
+      let x = 20;
+      for (const logo of logos.slice(0, 3)) {
+        try {
+          const logoImg = await loadImage(logo);
+          ctx.drawImage(logoImg, x, 20, 120, 60);
+          x += 140;
+        } catch {}
+      }
+    }
+
+    // ---------------------------
+    // 4) Export final JPG
+    // ---------------------------
+    const buffer = canvas.toBuffer("image/jpeg");
+    const filename = `final-social-image-${Date.now()}.jpg`;
+
+    const bucket = adminStorage.bucket();
+    const fileRef = bucket.file(filename);
+
+    await fileRef.save(buffer, {
+      contentType: "image/jpeg"
+    });
+
+    const [url] = await fileRef.getSignedUrl({
+      action: "read",
+      expires: "03-01-2035"
+    });
+
+    return NextResponse.json({ url });
+  } catch (err) {
+    console.error("Finalize error:", err);
+    return NextResponse.json(
+      { error: "Unable to generate final image." },
+      { status: 500 }
+    );
+  }
+}
