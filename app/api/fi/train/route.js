@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { saveFITraining } from "../../../../lib/ai/vector-store-fi";
-import { adminStorage } from "../../../../lib/firebaseAdmin";
+import { saveFITraining } from "@/lib/ai/vector-store-fi";
+import { adminStorage } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
@@ -10,7 +10,7 @@ export async function POST(req) {
 
     let fileUrl = null;
 
-    // Handle uploaded PDF for training
+    // Handle uploaded PDF for F&I training
     if (file) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
@@ -23,19 +23,28 @@ export async function POST(req) {
         contentType: file.type,
       });
 
-      fileUrl = (await fileRef.getSignedUrl({
+      const [signedUrl] = await fileRef.getSignedUrl({
         action: "read",
         expires: "03-01-2035",
-      }))[0];
+      });
+
+      fileUrl = signedUrl;
     }
 
-    // Save text training
+    // Handle typed text
     if (text) {
       await saveFITraining({ text, fileUrl });
     }
 
-    return NextResponse.json({ message: "F&I training saved." });
-  } catch (err) {
-    return NextResponse.json({ message: "Error saving F&I training." }, { status: 500 });
+    return NextResponse.json(
+      { message: "F&I training saved." },
+      { status: 200 }
+    );
+
+  } catch (error) {
+    return NextResponse.json(
+      { message: "Error saving F&I training." },
+      { status: 500 }
+    );
   }
 }
