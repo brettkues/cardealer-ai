@@ -5,18 +5,13 @@ import { getUserFromToken } from "../../../../lib/auth";
 
 export async function GET(req) {
   try {
-    // Read token from headers (runtime only, not static)
-    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader?.replace("Bearer ", "") || null;
 
-    if (!token) {
-      return NextResponse.json({ user: null }, { status: 200 });
-    }
-
-    const user = await getUserFromToken(token);
+    const user = token ? await getUserFromToken(token) : null;
 
     return NextResponse.json({ user }, { status: 200 });
-
-  } catch (error) {
+  } catch {
     return NextResponse.json({ user: null }, { status: 200 });
   }
 }
