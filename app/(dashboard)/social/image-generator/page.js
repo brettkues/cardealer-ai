@@ -4,12 +4,10 @@ import { useState } from "react";
 
 export default function ImageGeneratorPage() {
   const [stock, setStock] = useState("");
-  const [status, setStatus] = useState("");
-  const [preview, setPreview] = useState(null);
+  const [message, setMessage] = useState("");
 
-  async function handleGenerate() {
-    setStatus("Gathering images…");
-    setPreview(null);
+  const startPreview = async () => {
+    if (!stock.trim()) return;
 
     const res = await fetch("/api/social/generate", {
       method: "POST",
@@ -18,46 +16,30 @@ export default function ImageGeneratorPage() {
     });
 
     const data = await res.json();
-    setStatus(data.message || "Working…");
-
-    // real image preview generation will be added later
-    setPreview("placeholder");
-  }
+    setMessage(data.message || "Started.");
+  };
 
   return (
-    <div className="max-w-xl">
-      <h1 className="text-2xl font-semibold mb-6">Social Image Generator</h1>
+    <div>
+      <h1 className="text-2xl font-semibold mb-4">Image Generator</h1>
 
-      <div className="space-y-4">
-
-        {/* Stock Number */}
+      <div className="space-y-4 max-w-lg">
         <input
           type="text"
           className="w-full p-3 border rounded"
-          placeholder="Enter Stock Number or last 8 of VIN"
+          placeholder="Enter Stock # or VIN"
           value={stock}
           onChange={(e) => setStock(e.target.value)}
         />
 
-        {/* Generate Button */}
         <button
-          onClick={handleGenerate}
-          className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
+          onClick={startPreview}
+          className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
         >
-          Generate Images
+          Start Preview
         </button>
 
-        {/* Status */}
-        {status && <p className="text-gray-600">{status}</p>}
-
-        {/* Placeholder Preview */}
-        {preview && (
-          <div className="mt-6 p-6 bg-white border rounded shadow text-center">
-            Image preview placeholder  
-            <br />
-            (Full collage system activates after UI build)
-          </div>
-        )}
+        {message && <p>{message}</p>}
       </div>
     </div>
   );
