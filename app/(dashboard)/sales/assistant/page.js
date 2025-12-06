@@ -40,7 +40,7 @@ export default function SalesAssistantPage() {
         </button>
 
         {response && (
-          <div className="p-4 bg-white border rounded shadow">
+          <div className="p-4 bg-white border rounded shadow whitespace-pre-wrap">
             {response}
           </div>
         )}
