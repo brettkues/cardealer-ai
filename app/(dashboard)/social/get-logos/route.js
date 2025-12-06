@@ -13,7 +13,6 @@ export async function GET() {
         action: "read",
         expires: "03-01-2035",
       });
-
       urls.push(url);
     }
 
