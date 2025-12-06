@@ -3,24 +3,27 @@ import { cookies } from "next/headers";
 import { checkSubscription } from "@/lib/checkSubscription";
 
 export default async function DashboardPage() {
-  // Read uid from cookies (set at login)
-  const uid = cookies().get("uid")?.value;
+  // Read the UID from the session cookie
+  const cookieStore = cookies();
+  const uid = cookieStore.get("uid")?.value || null;
 
+  // No UID → user not logged in
   if (!uid) {
     redirect("/login");
   }
 
-  // Validate subscription on the server
-  const active = await checkSubscription(uid);
+  // Verify subscription server-side
+  const subscribed = await checkSubscription(uid);
 
-  if (!active) {
+  if (!subscribed) {
     redirect("/subscribe");
   }
 
+  // If logged in AND subscribed → show dashboard
   return (
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
-      <p>Welcome! Your subscription is active.</p>
+      <p>Your subscription is active.</p>
     </div>
   );
 }
