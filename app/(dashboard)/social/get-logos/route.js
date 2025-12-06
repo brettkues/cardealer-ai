@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminStorage } from "../../../../lib/firebaseAdmin";
+import { adminStorage } from "../../../../lib/firebaseAdmin"; // correct depth for route groups
 
 export async function GET() {
   try {
@@ -13,6 +13,7 @@ export async function GET() {
         action: "read",
         expires: "03-01-2035",
       });
+
       urls.push(url);
     }
 
