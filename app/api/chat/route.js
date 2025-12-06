@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runChat } from "../../../../lib/ai/openai";
+import { runChat } from "../../../lib/ai/openai";
 
 export const runtime = "nodejs";
 
