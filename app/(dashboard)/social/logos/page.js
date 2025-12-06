@@ -7,6 +7,12 @@ export default function LogoManagerPage() {
   const [urls, setUrls] = useState([]);
   const [message, setMessage] = useState("");
 
+  const loadLogos = async () => {
+    const res = await fetch("/api/social/get-logos");
+    const data = await res.json();
+    setUrls(data.logos || []);
+  };
+
   const uploadLogos = async () => {
     if (files.length === 0) return;
 
@@ -30,16 +36,14 @@ export default function LogoManagerPage() {
     }
   };
 
-  // Load logos from Firestore bucket (if we add listing API later)
   useEffect(() => {
-    // Placeholder — currently only loads newly uploaded ones
+    loadLogos();
   }, []);
 
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Logo Manager</h1>
 
-      {/* Upload Section */}
       <div className="space-y-4 max-w-xl mb-6">
         <input
           type="file"
@@ -58,7 +62,6 @@ export default function LogoManagerPage() {
         <p>{message}</p>
       </div>
 
-      {/* Display Uploaded Logos */}
       <div className="grid grid-cols-4 gap-4">
         {urls.map((url, i) => (
           <img
