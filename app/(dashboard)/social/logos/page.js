@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function LogoManagerPage() {
   const [files, setFiles] = useState([]);
+  const [urls, setUrls] = useState([]);
   const [message, setMessage] = useState("");
-  const [uploaded, setUploaded] = useState([]);
 
   const uploadLogos = async () => {
-    if (!files.length) return;
+    if (files.length === 0) return;
 
     const formData = new FormData();
     for (const file of files) {
       formData.append("logos", file);
     }
+
+    setMessage("Uploading…");
 
     const res = await fetch("/api/social/upload-logos", {
       method: "POST",
@@ -22,19 +24,28 @@ export default function LogoManagerPage() {
 
     const data = await res.json();
     setMessage(data.message || "");
-    setUploaded(data.urls || []);
+
+    if (data.urls) {
+      setUrls((prev) => [...prev, ...data.urls]);
+    }
   };
+
+  // Load logos from Firestore bucket (if we add listing API later)
+  useEffect(() => {
+    // Placeholder — currently only loads newly uploaded ones
+  }, []);
 
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Logo Manager</h1>
 
-      <div className="space-y-4 max-w-lg">
+      {/* Upload Section */}
+      <div className="space-y-4 max-w-xl mb-6">
         <input
           type="file"
-          multiple
           accept="image/*"
-          onChange={(e) => setFiles([...e.target.files])}
+          multiple
+          onChange={(e) => setFiles(Array.from(e.target.files))}
         />
 
         <button
@@ -44,20 +55,18 @@ export default function LogoManagerPage() {
           Upload Logos
         </button>
 
-        {message && <p>{message}</p>}
+        <p>{message}</p>
+      </div>
 
-        {uploaded.length > 0 && (
-          <div className="grid grid-cols-3 gap-4 mt-4">
-            {uploaded.map((url, i) => (
-              <img
-                key={i}
-                src={url}
-                className="border rounded shadow"
-                alt="Uploaded Logo"
-              />
-            ))}
-          </div>
-        )}
+      {/* Display Uploaded Logos */}
+      <div className="grid grid-cols-4 gap-4">
+        {urls.map((url, i) => (
+          <img
+            key={i}
+            src={url}
+            className="border rounded w-full h-32 object-contain bg-white p-2 shadow"
+          />
+        ))}
       </div>
     </div>
   );
