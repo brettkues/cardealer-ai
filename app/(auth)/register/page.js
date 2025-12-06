@@ -7,16 +7,16 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  async function register() {
+  async function registerUser() {
     setError("");
     setMessage("");
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      setMessage("Account created. You may now log in.");
+      setMessage("Account created successfully. You may now log in.");
     } catch (err) {
       setError(err.message);
     }
@@ -24,7 +24,7 @@ export default function RegisterPage() {
 
   return (
     <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
-      <h1 className="text-2xl font-semibold mb-4">Create an Account</h1>
+      <h1 className="text-2xl font-semibold mb-4">Create Account</h1>
 
       <input
         type="email"
@@ -43,7 +43,7 @@ export default function RegisterPage() {
       />
 
       <button
-        onClick={register}
+        onClick={registerUser}
         className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
       >
         Register
