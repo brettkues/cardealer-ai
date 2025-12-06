@@ -1,47 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../../lib/firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
 
-export default function ResetPasswordPage() {
+export default function ResetPage() {
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("");
 
-  const handleReset = async (e) => {
-    e.preventDefault();
+  async function handleReset() {
+    setStatus("");
+
     try {
       await sendPasswordResetEmail(auth, email);
-      setMessage("Password reset link sent.");
+      setStatus("A password reset link has been sent to your email.");
     } catch (err) {
-      setMessage("Error sending reset email.");
+      setStatus("Unable to send reset email.");
     }
-  };
+  }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 text-black">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-lg p-8">
-        <h1 className="text-2xl font-semibold mb-6 text-center">Reset Password</h1>
+    <div>
+      <h1 className="text-2xl font-semibold mb-6 text-center">Reset Password</h1>
 
-        {message && <p className="text-blue-600 text-center mb-4">{message}</p>}
+      <div className="space-y-4">
+        <input
+          type="email"
+          placeholder="Enter your email"
+          className="w-full p-3 border rounded"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-        <form onSubmit={handleReset} className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full p-3 border rounded"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+        <button
+          onClick={handleReset}
+          className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
+        >
+          Send Reset Link
+        </button>
 
-          <button className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition">
-            Send Reset Link
-          </button>
-        </form>
+        {status && (
+          <p className="text-center text-sm mt-2 text-gray-700">{status}</p>
+        )}
 
-        <div className="text-center mt-6">
-          <a href="/login" className="text-blue-600 hover:underline">Back to Login</a>
+        <div className="text-center mt-4">
+          <a href="/login" className="text-blue-600 underline block">
+            Back to login
+          </a>
         </div>
       </div>
     </div>
