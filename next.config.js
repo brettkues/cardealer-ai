@@ -3,27 +3,17 @@ const nextConfig = {
   reactStrictMode: false,
 
   experimental: {
-    serverActions: true,
-    webpackBuildWorker: true
-  },
-
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**"
-      }
-    ]
+    webpackBuildWorker: true, // VALID
   },
 
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
-      path: false
+      path: false,
     };
     return config;
-  }
+  },
 };
 
 module.exports = nextConfig;
