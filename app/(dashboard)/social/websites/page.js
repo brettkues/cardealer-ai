@@ -4,17 +4,11 @@ import { useState, useEffect } from "react";
 
 export default function WebsiteManagerPage() {
   const [url, setUrl] = useState("");
-  const [saved, setSaved] = useState([]);
   const [message, setMessage] = useState("");
+  const [websites, setWebsites] = useState([]);
 
-  async function loadWebsites() {
-    const res = await fetch("/api/social/get-websites");
-    const data = await res.json();
-    setSaved(data.websites || []);
-  }
-
-  async function saveWebsite() {
-    setMessage("Saving…");
+  const saveWebsite = async () => {
+    if (!url.trim()) return;
 
     const res = await fetch("/api/social/save-website", {
       method: "POST",
@@ -23,54 +17,47 @@ export default function WebsiteManagerPage() {
     });
 
     const data = await res.json();
-    setMessage(data.message);
-
+    setMessage(data.message || "");
     setUrl("");
     loadWebsites();
-  }
+  };
+
+  const loadWebsites = async () => {
+    const res = await fetch("/api/social/get-websites");
+    const data = await res.json();
+    setWebsites(data.websites || []);
+  };
 
   useEffect(() => {
     loadWebsites();
   }, []);
 
   return (
-    <div className="max-w-xl">
-      <h1 className="text-2xl font-semibold mb-6">Website Manager</h1>
+    <div>
+      <h1 className="text-2xl font-semibold mb-4">Website Manager</h1>
 
-      <p className="text-gray-600 mb-4">
-        Add dealership websites that the system will scrape images from.
-      </p>
+      <div className="space-y-4 max-w-lg">
+        <input
+          type="text"
+          placeholder="Enter dealership website URL…"
+          className="w-full p-3 border rounded"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
 
-      <input
-        type="text"
-        placeholder="https://www.exampledealership.com"
-        className="w-full p-3 border rounded mb-4"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
+        <button
+          onClick={saveWebsite}
+          className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
+        >
+          Save Website
+        </button>
 
-      <button
-        onClick={saveWebsite}
-        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
-      >
-        Save Website
-      </button>
+        {message && <p>{message}</p>}
 
-      {message && <p className="mt-4">{message}</p>}
-
-      <div className="mt-6">
-        <h2 className="font-semibold mb-2">Saved Websites</h2>
-
-        {saved.length === 0 && <p className="text-gray-500">No websites saved yet.</p>}
-
-        <ul className="space-y-2">
-          {saved.map((site, i) => (
-            <li
-              key={i}
-              className="p-3 bg-white border rounded shadow text-sm overflow-auto"
-            >
-              {site}
-            </li>
+        <h2 className="font-semibold mt-6">Saved Websites</h2>
+        <ul className="list-disc ml-6">
+          {websites.map((w, i) => (
+            <li key={i}>{w.url}</li>
           ))}
         </ul>
       </div>
