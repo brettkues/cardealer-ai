@@ -1,36 +1,54 @@
-import { redirect } from "next/navigation";
+"use client";
 
-// SERVER-SIDE SESSION LOOKUP
-async function getSession() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/session/get`, {
-    method: "GET",
-    cache: "no-store",
-  });
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-  if (!res.ok) return null;
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { checkSubscription } from "@/lib/checkSubscription";
 
-  const data = await res.json();
-  return data.session || null;
-}
+export default function DashboardPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [allowed, setAllowed] = useState(false);
 
-export default async function DashboardPage() {
-  const session = await getSession();
+  useEffect(() => {
+    const auth = getAuth();
 
-  // Not logged in
-  if (!session?.uid) {
-    redirect("/login");
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // check subscription client-side
+      const active = await checkSubscription(user.uid);
+
+      if (!active) {
+        router.push("/subscribe");
+        return;
+      }
+
+      setAllowed(true);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="h-screen bg-gray-900 text-white flex justify-center items-center">
+        Loading Dashboard…
+      </div>
+    );
   }
 
-  // Not subscribed
-  if (!session.subscribed) {
-    redirect("/subscribe");
-  }
+  if (!allowed) return null;
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Dashboard</h1>
-      <p>Your subscription is active.</p>
-      <p>User ID: {session.uid}</p>
+    <div className="min-h-screen bg-gray-900 text-white p-10">
+      <h1 className="text-4xl font-bold mb-4">Dashboard</h1>
+      <p className="text-lg">Welcome! Your subscription is active.</p>
     </div>
   );
 }
