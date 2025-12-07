@@ -1,33 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { auth, googleProvider } from "../../../lib/firebase";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  async function loginUser() {
+  const handleLogin = async () => {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError("Invalid email or password.");
     }
-  }
-
-  async function loginGoogle() {
-    setError("");
-    try {
-      await signInWithPopup(auth, googleProvider);
-      window.location.href = "/dashboard";
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  };
 
   return (
     <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
@@ -49,21 +41,23 @@ export default function LoginPage() {
         onChange={(e) => setPassword(e.target.value)}
       />
 
-      <button
-        onClick={loginUser}
-        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
-      >
-        Log In
-      </button>
+      {error && <p className="text-red-600 mb-3">{error}</p>}
 
       <button
-        onClick={loginGoogle}
-        className="w-full bg-red-600 text-white py-3 rounded hover:bg-red-700 mt-3"
+        onClick={handleLogin}
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
       >
-        Sign in with Google
+        Login
       </button>
 
-      {error && <p className="text-red-600 mt-3">{error}</p>}
+      <div className="mt-4 text-center">
+        <a href="/register" className="text-blue-600 underline mr-4">
+          Register
+        </a>
+        <a href="/reset" className="text-blue-600 underline">
+          Reset Password
+        </a>
+      </div>
     </div>
   );
 }
