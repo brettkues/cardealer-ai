@@ -6,49 +6,43 @@ import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   async function handleReset() {
-    setStatus("");
+    setMessage("");
+    setError("");
 
     try {
       await sendPasswordResetEmail(auth, email);
-      setStatus("A password reset link has been sent to your email.");
+      setMessage("Password reset email sent.");
     } catch (err) {
-      setStatus("Unable to send reset email.");
+      setError(err.message);
     }
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-6 text-center">Reset Password</h1>
+    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
+      <h1 className="text-2xl font-semibold mb-4">Reset Password</h1>
 
-      <div className="space-y-4">
-        <input
-          type="email"
-          placeholder="Enter your email"
-          className="w-full p-3 border rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+      <input
+        type="email"
+        className="w-full p-3 border rounded mb-3"
+        placeholder="Enter your email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
 
-        <button
-          onClick={handleReset}
-          className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
-        >
-          Send Reset Link
-        </button>
+      <button
+        onClick={handleReset}
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
+      >
+        Send Reset Email
+      </button>
 
-        {status && (
-          <p className="text-center text-sm mt-2 text-gray-700">{status}</p>
-        )}
-
-        <div className="text-center mt-4">
-          <a href="/login" className="text-blue-600 underline block">
-            Back to login
-          </a>
-        </div>
-      </div>
+      {message && <p className="text-green-600 mt-3">{message}</p>}
+      {error && <p className="text-red-600 mt-3">{error}</p>}
     </div>
   );
 }
+
