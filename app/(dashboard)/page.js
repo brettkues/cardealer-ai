@@ -1,6 +1,7 @@
-export const dynamic = "force-dynamic";
+// app/(dashboard)/page.js
+"use client";
 
-export default function DashboardPage() {
+export default function DashboardHome() {
   return (
     <div>
       <h1 className="text-3xl font-semibold mb-4">Welcome</h1>
