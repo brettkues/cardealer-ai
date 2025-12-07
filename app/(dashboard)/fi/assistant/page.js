@@ -9,6 +9,8 @@ export default function FIAssistantPage() {
   const askFIAI = async () => {
     if (!input.trim()) return;
 
+    setResponse("Processing...");
+
     const res = await fetch("/api/fi/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -16,18 +18,18 @@ export default function FIAssistantPage() {
     });
 
     const data = await res.json();
-    setResponse(data.response || "");
+    setResponse(data.response || "No response returned.");
   };
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">F&amp;I Assistant</h1>
+      <h1 className="text-2xl font-semibold mb-4">F&I Assistant</h1>
 
       <div className="space-y-4 max-w-2xl">
         <textarea
           className="w-full p-3 border rounded"
           rows={4}
-          placeholder="Ask the F&I AI anything..."
+          placeholder="Ask anything F&I–related..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
