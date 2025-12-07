@@ -1,46 +1,50 @@
 import { NextResponse } from "next/server";
-import { adminStorage } from "@/lib/firebaseAdmin";
+import { adminStorage, adminDB } from "@/lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
-    const form = await req.formData();
-    const files = form.getAll("logos");
+    const formData = await req.formData();
+    const files = formData.getAll("logos");
 
-    if (!files.length) {
+    if (!files || files.length === 0) {
       return NextResponse.json(
-        { message: "No files uploaded." },
-        { status: 200 }
+        { error: "No files uploaded." },
+        { status: 400 }
       );
     }
 
+    const bucket = adminStorage.bucket();
     const uploaded = [];
 
     for (const file of files) {
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
 
       const filename = `logos/${Date.now()}-${file.name}`;
-      const bucket = adminStorage.bucket();
-      const fileRef = bucket.file(filename);
+      const upload = bucket.file(filename);
 
-      await fileRef.save(buffer, { contentType: file.type });
-
-      const [signedUrl] = await fileRef.getSignedUrl({
-        action: "read",
-        expires: "03-01-2035",
+      await upload.save(buffer, {
+        contentType: file.type,
+        public: true,
       });
 
-      uploaded.push(signedUrl);
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+
+      await adminDB.collection("logos").add({
+        url: publicUrl,
+        createdAt: Date.now(),
+      });
+
+      uploaded.push(publicUrl);
     }
 
+    return NextResponse.json({
+      message: "Logos uploaded.",
+      urls: uploaded,
+    });
+  } catch (err) {
     return NextResponse.json(
-      { message: "Logos uploaded.", urls: uploaded },
-      { status: 200 }
-    );
-
-  } catch (error) {
-    return NextResponse.json(
-      { message: "Error uploading logos." },
+      { error: "Logo upload failed." },
       { status: 500 }
     );
   }
