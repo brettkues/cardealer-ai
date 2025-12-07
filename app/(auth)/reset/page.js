@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "../../../lib/firebase";
+import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function ResetPage() {
@@ -9,7 +9,7 @@ export default function ResetPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function handleReset() {
+  const handleReset = async () => {
     setMessage("");
     setError("");
 
@@ -17,9 +17,9 @@ export default function ResetPage() {
       await sendPasswordResetEmail(auth, email);
       setMessage("Password reset email sent.");
     } catch (err) {
-      setError(err.message);
+      setError("Failed to send reset email.");
     }
-  }
+  };
 
   return (
     <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
@@ -35,7 +35,7 @@ export default function ResetPage() {
 
       <button
         onClick={handleReset}
-        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
       >
         Send Reset Email
       </button>
@@ -45,4 +45,3 @@ export default function ResetPage() {
     </div>
   );
 }
-
