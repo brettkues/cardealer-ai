@@ -3,15 +3,24 @@ const nextConfig = {
   reactStrictMode: false,
 
   experimental: {
-    webpackBuildWorker: true, // VALID
+    serverActions: true,
+  },
+
+  api: {
+    responseLimit: "20mb",
+    bodyParser: {
+      sizeLimit: "15mb",
+    },
   },
 
   webpack: (config) => {
+    // Disable Node modules not available in Vercel Edge
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       path: false,
     };
+
     return config;
   },
 };
