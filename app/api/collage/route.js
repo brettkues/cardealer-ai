@@ -1,5 +1,4 @@
-import "server-only";
-export const runtime = "nodejs"; // REQUIRED FOR SHARP
+export const runtime = "nodejs"; // Required for Sharp
 
 import { NextResponse } from "next/server";
 import sharp from "sharp";
@@ -19,13 +18,13 @@ export async function POST(req) {
     const buffers = await Promise.all(
       imageUrls.map(async (url) => {
         const res = await fetch(url, {
-          headers: { "User-Agent": "Mozilla/5.0" }
+          headers: { "User-Agent": "Mozilla/5.0" },
         });
         return Buffer.from(await res.arrayBuffer());
       })
     );
 
-    // Resize each to 425x425
+    // Resize to 425x425
     const resized = await Promise.all(
       buffers.map((img) =>
         sharp(img)
@@ -41,13 +40,13 @@ export async function POST(req) {
         width: 850,
         height: 850,
         channels: 3,
-        background: "#ffffff"
-      }
+        background: "#ffffff",
+      },
     }).composite([
       { input: resized[0], left: 0, top: 0 },
       { input: resized[1], left: 425, top: 0 },
       { input: resized[2], left: 0, top: 425 },
-      { input: resized[3], left: 425, top: 425 }
+      { input: resized[3], left: 425, top: 425 },
     ]);
 
     const output = await collage.jpeg({ quality: 90 }).toBuffer();
@@ -55,11 +54,10 @@ export async function POST(req) {
     return new NextResponse(output, {
       status: 200,
       headers: {
-        "Content-Type": "image/jpeg"
-      }
+        "Content-Type": "image/jpeg",
+      },
     });
-
-  } catch (error) {
+  } catch (err) {
     return NextResponse.json(
       { error: "Failed to generate collage." },
       { status: 500 }
