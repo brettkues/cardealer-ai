@@ -2,20 +2,22 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    const { stock } = await req.json();
+    const { action } = await req.json();
 
-    if (!stock) {
-      return NextResponse.json({ message: "No stock number provided." });
+    if (!action) {
+      return NextResponse.json(
+        { error: "Missing action." },
+        { status: 400 }
+      );
     }
 
-    // Placeholder — actual scraper + collage logic added later
     return NextResponse.json({
-      message: `Preview generation started for stock/VIN: ${stock}`,
+      message: "Social generation placeholder.",
+      action,
     });
-
   } catch (err) {
     return NextResponse.json(
-      { message: "Error generating image." },
+      { error: "Failed to generate social output." },
       { status: 500 }
     );
   }
