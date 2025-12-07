@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import "../globals.css";
-import Sidebar from "../components/Sidebar.js";
+import Sidebar from "../../components/Sidebar.js";
 
 export const metadata = {
   title: "Dashboard",
