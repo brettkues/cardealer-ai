@@ -1,3 +1,41 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+export default function WebsiteManagerPage() {
+  const [url, setUrl] = useState("");
+  const [websites, setWebsites] = useState([]);
+  const [message, setMessage] = useState("");
+
+  // Fetch saved websites from Firestore
+  const loadWebsites = async () => {
+    const res = await fetch("/api/social/get-websites");
+    const data = await res.json();
+    setWebsites(data.websites || []);
+  };
+
+  const saveWebsite = async () => {
+    if (!url.trim()) return;
+
+    const res = await fetch("/api/social/save-website", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+
+    const data = await res.json();
+    setMessage(data.message || "");
+
+    setUrl("");
+    loadWebsites();
+  };
+
+  useEffect(() => {
+    loadWebsites();
+  }, []);
+
+  return (
+    <div>
       <h1 className="text-2xl font-semibold mb-4">Website Manager</h1>
 
       {/* Add Website */}
@@ -33,4 +71,3 @@
       </div>
     </div>
   );
-}
