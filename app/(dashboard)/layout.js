@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import "../globals.css";
-import Sidebar from "../components/Sidebar.js";  // ← CORRECT WORKING PATH
+import Sidebar from "../../components/Sidebar.js";  // ← CORRECT WORKING PATH
 
 export const metadata = {
   title: "Dashboard",
