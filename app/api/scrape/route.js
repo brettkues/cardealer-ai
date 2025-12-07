@@ -14,6 +14,7 @@ export async function POST(req) {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
+
     const html = await res.text();
 
     const imgRegex = /<img[^>]+src="([^">]+)"/g;
@@ -37,10 +38,9 @@ export async function POST(req) {
       { images: urls.slice(0, 20) },
       { status: 200 }
     );
-
-  } catch (error) {
+  } catch (err) {
     return NextResponse.json(
-      { error: "Failed to scrape images" },
+      { error: "Failed to scrape images." },
       { status: 500 }
     );
   }
