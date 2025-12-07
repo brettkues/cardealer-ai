@@ -1,5 +1,3 @@
-// /app/(dashboard)/layout.js
-
 export const dynamic = "force-dynamic";
 
 import "../globals.css";
