@@ -1,3 +1,4 @@
+import "server-only";
 export const runtime = "nodejs"; // REQUIRED FOR SHARP
 
 import { NextResponse } from "next/server";
