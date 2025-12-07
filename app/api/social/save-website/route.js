@@ -5,26 +5,22 @@ export async function POST(req) {
   try {
     const { url } = await req.json();
 
-    if (!url) {
+    if (!url || url.trim().length === 0) {
       return NextResponse.json(
-        { message: "No URL provided." },
-        { status: 200 }
+        { error: "URL is required." },
+        { status: 400 }
       );
     }
 
     await adminDB.collection("websites").add({
-      url,
+      url: url.trim(),
       createdAt: Date.now(),
     });
 
+    return NextResponse.json({ message: "Website saved." });
+  } catch (err) {
     return NextResponse.json(
-      { message: "Website saved." },
-      { status: 200 }
-    );
-
-  } catch (error) {
-    return NextResponse.json(
-      { message: "Error saving website." },
+      { error: "Failed to save website." },
       { status: 500 }
     );
   }
