@@ -9,6 +9,8 @@ export default function SalesAssistantPage() {
   const askSalesAI = async () => {
     if (!input.trim()) return;
 
+    setResponse("Processing...");
+
     const res = await fetch("/api/sales/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -16,7 +18,7 @@ export default function SalesAssistantPage() {
     });
 
     const data = await res.json();
-    setResponse(data.response || "");
+    setResponse(data.response || "No response returned.");
   };
 
   return (
