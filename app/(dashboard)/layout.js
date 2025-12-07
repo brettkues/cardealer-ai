@@ -1,9 +1,7 @@
-// app/(dashboard)/layout.js
-
 export const dynamic = "force-dynamic";
 
-import "../globals.css";
-import Sidebar from "../../components/Sidebar.js";  // ← CORRECT WORKING PATH
+import "../../globals.css";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata = {
   title: "Dashboard",
