@@ -7,7 +7,7 @@ export default function Sidebar() {
   const [role, setRole] = useState("user");
 
   useEffect(() => {
-    const load = async () => {
+    async function load() {
       try {
         const res = await fetch("/api/account/me");
         const data = await res.json();
@@ -15,7 +15,7 @@ export default function Sidebar() {
       } catch {
         setRole("user");
       }
-    };
+    }
     load();
   }, []);
 
@@ -97,13 +97,13 @@ export default function Sidebar() {
             Account
           </h3>
 
-            <Link href="/dashboard/account" className="block hover:underline">
-              My Account
-            </Link>
+          <Link href="/dashboard/account" className="block hover:underline">
+            My Account
+          </Link>
 
-            <Link href="/dashboard/admin" className="block hover:underline text-red-600">
-              Admin Panel
-            </Link>
+          <Link href="/dashboard/admin" className="block hover:underline text-red-600">
+            Admin Panel
+          </Link>
         </div>
 
         <a href="/logout" className="block text-gray-600 hover:underline mt-6">
