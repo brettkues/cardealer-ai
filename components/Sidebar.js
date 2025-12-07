@@ -1,4 +1,3 @@
-// components/Sidebar.js
 "use client";
 
 import Link from "next/link";
@@ -8,7 +7,7 @@ export default function Sidebar() {
   const [role, setRole] = useState("user");
 
   useEffect(() => {
-    const load = async () => {
+    const loadRole = async () => {
       try {
         const res = await fetch("/api/account/me");
         const data = await res.json();
@@ -17,7 +16,8 @@ export default function Sidebar() {
         setRole("user");
       }
     };
-    load();
+
+    loadRole();
   }, []);
 
   return (
@@ -25,6 +25,7 @@ export default function Sidebar() {
       <h2 className="text-xl font-semibold">Menu</h2>
 
       <nav className="space-y-2">
+
         <Link href="/dashboard" className="block hover:underline">
           Dashboard
         </Link>
@@ -92,9 +93,11 @@ export default function Sidebar() {
             My Account
           </Link>
 
-          <Link href="/dashboard/admin" className="block hover:underline text-red-600">
-            Admin Panel
-          </Link>
+          {role === "admin" && (
+            <Link href="/dashboard/admin" className="block hover:underline text-red-600">
+              Admin Panel
+            </Link>
+          )}
         </div>
 
         <a href="/logout" className="block text-gray-600 hover:underline mt-6">
@@ -104,4 +107,3 @@ export default function Sidebar() {
     </div>
   );
 }
-
