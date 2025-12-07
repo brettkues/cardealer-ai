@@ -1,16 +1,3 @@
-
-cardealer-ai
-
-oyWD5LdEq
-
-
-Find…
-F
-
-Source
-Output
-app/(dashboard)/social/logos/page.js
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -47,3 +34,43 @@ export default function LogoManagerPage() {
     if (data.urls) {
       setUrls((prev) => [...prev, ...data.urls]);
     }
+  };
+
+  useEffect(() => {
+    loadLogos();
+  }, []);
+
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold mb-4">Logo Manager</h1>
+
+      <div className="space-y-4 max-w-xl mb-6">
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => setFiles(Array.from(e.target.files))}
+        />
+
+        <button
+          onClick={uploadLogos}
+          className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
+        >
+          Upload Logos
+        </button>
+
+        <p>{message}</p>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        {urls.map((url, i) => (
+          <img
+            key={i}
+            src={url}
+            className="border rounded w-full h-32 object-contain bg-white p-2 shadow"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
