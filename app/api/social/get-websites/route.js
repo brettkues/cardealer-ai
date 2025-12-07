@@ -4,22 +4,15 @@ import { adminDB } from "@/lib/firebaseAdmin";
 export async function GET() {
   try {
     const snapshot = await adminDB.collection("websites").get();
-
-    const sites = snapshot.docs.map(doc => ({
-      id: doc.id,
+    const websites = snapshot.docs.map((doc) => ({
       url: doc.data().url,
-      createdAt: doc.data().createdAt,
     }));
 
+    return NextResponse.json({ websites });
+  } catch (err) {
     return NextResponse.json(
-      { websites: sites },
-      { status: 200 }
-    );
-
-  } catch (error) {
-    return NextResponse.json(
-      { websites: [] },
-      { status: 200 }
+      { error: "Failed to load websites." },
+      { status: 500 }
     );
   }
 }
