@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getUserFromToken } from "@/lib/auth";
 
@@ -12,8 +14,7 @@ export async function GET(req) {
 
     const user = await getUserFromToken(token);
     return NextResponse.json({ user: user || null });
-
-  } catch (err) {
+  } catch {
     return NextResponse.json({ user: null });
   }
 }
