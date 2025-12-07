@@ -34,3 +34,22 @@ export default function FITrainingUploadPage() {
         />
 
         <textarea
+          className="w-full p-3 border rounded"
+          rows={4}
+          placeholder="Or paste F&I training text here..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+
+        <button
+          onClick={uploadTraining}
+          className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
+        >
+          Upload Training
+        </button>
+
+        <p>{message}</p>
+      </div>
+    </div>
+  );
+}
