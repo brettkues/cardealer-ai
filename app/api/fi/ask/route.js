@@ -6,29 +6,36 @@ export async function POST(req) {
   try {
     const { input } = await req.json();
 
+    if (!input || input.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Missing input." },
+        { status: 400 }
+      );
+    }
+
+    // Retrieve similar stored training
     const related = await searchFITraining(input);
-    const context = related.map(r => r.text).join("\n\n");
+    const context = related.map((r) => r.text).join("\n\n");
 
     const messages = [
       {
         role: "system",
         content:
-          "You are a dealership Finance & Insurance Manager. You must be compliance-focused, factual, and correct. Do NOT quote rates or calculate payments. If the user mentions a payment, you may speak about it only within compliance rules."
+          "You are a Finance & Insurance Manager. Follow compliance rules. No quoting payments, APRs, or rates. Reference context when helpful.",
       },
       {
         role: "user",
-        content: `Training context:\n${context}\n\nUser question:\n${input}`
-      }
+        content: `Training context:\n${context}\n\nUser question:\n${input}`,
+      },
     ];
 
-    const response = await runChat("gpt-4o-mini", messages);
+    const answer = await runChat("gpt-4o-mini", messages);
 
-    return NextResponse.json({ response }, { status: 200 });
-
-  } catch (error) {
+    return NextResponse.json({ response: answer });
+  } catch (err) {
     return NextResponse.json(
-      { response: "Error processing F&I question." },
-      { status: 200 }
+      { error: "F&I AI failed." },
+      { status: 500 }
     );
   }
 }
