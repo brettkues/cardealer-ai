@@ -1,3 +1,22 @@
+"use client";
+
+import { useState } from "react";
+
+export default function SalesTrainingUploadPage() {
+  const [file, setFile] = useState(null);
+  const [text, setText] = useState("");
+  const [message, setMessage] = useState("");
+
+  const uploadTraining = async () => {
+    const formData = new FormData();
+
+    if (file) formData.append("file", file);
+    if (text.trim()) formData.append("text", text);
+
+    const res = await fetch("/api/sales/train", {
+      method: "POST",
+      body: formData,
+    });
 
     const data = await res.json();
     setMessage(data.message || "Uploaded.");
