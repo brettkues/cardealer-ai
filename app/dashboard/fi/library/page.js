@@ -1,3 +1,17 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+export default function FILibraryPage() {
+  const [entries, setEntries] = useState([]);
+
+  useEffect(() => {
+    const fetchLibrary = async () => {
+      const res = await fetch("/api/fi/library");
+      const data = await res.json();
+      setEntries(data.entries || []);
+    };
+
     fetchLibrary();
   }, []);
 
