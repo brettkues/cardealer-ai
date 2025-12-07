@@ -1,4 +1,29 @@
 
+"use client";
+
+import { useState } from "react";
+
+export default function FIAnalyzePage() {
+  const [file, setFile] = useState(null);
+  const [message, setMessage] = useState("");
+  const [analysis, setAnalysis] = useState("");
+
+  const analyzeDeal = async () => {
+    if (!file) {
+      setMessage("Please upload a PDF first.");
+      return;
+    }
+
+    setMessage("Analyzing…");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/fi/analyze", {
+      method: "POST",
+      body: formData,
+    });
+
     const data = await res.json();
 
     setMessage("");
