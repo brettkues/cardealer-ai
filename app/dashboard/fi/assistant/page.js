@@ -33,3 +33,20 @@ export default function FIAssistantPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
+
+        <button
+          onClick={askFIAI}
+          className="bg-blue-600 text-white py-3 px-6 rounded hover:bg-blue-700 transition"
+        >
+          Ask
+        </button>
+
+        {response && (
+          <div className="p-4 bg-white border rounded shadow whitespace-pre-wrap">
+            {response}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
