@@ -2,31 +2,22 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    const { images, ribbonText, logos, caption } = await req.json();
+    const { collageUrl } = await req.json();
 
-    if (!images || !images.length) {
+    if (!collageUrl) {
       return NextResponse.json(
-        { message: "No images provided." },
-        { status: 200 }
+        { error: "Missing collage URL." },
+        { status: 400 }
       );
     }
 
+    return NextResponse.json({
+      message: "Collage finalized.",
+      url: collageUrl,
+    });
+  } catch (err) {
     return NextResponse.json(
-      {
-        message: "Final image generation request accepted.",
-        details: {
-          images,
-          ribbonText,
-          logos,
-          caption,
-        },
-      },
-      { status: 200 }
-    );
-
-  } catch (error) {
-    return NextResponse.json(
-      { message: "Error finalizing image." },
+      { error: "Failed to finalize image." },
       { status: 500 }
     );
   }
