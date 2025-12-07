@@ -1,11 +1,13 @@
-// app/(dashboard)/page.js
-"use client";
+// app/page.js
 
-export default function DashboardHome() {
+export default function Home() {
   return (
-    <div>
-      <h1 className="text-3xl font-semibold mb-4">Welcome</h1>
-      <p>Select a tool from the sidebar to get started.</p>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold">CarDealer AI</h1>
+      <p className="mt-4">Welcome to your dashboard tools.</p>
+      <p className="text-gray-600 mt-2">
+        Please navigate using the sidebar.
+      </p>
     </div>
   );
 }
