@@ -1,3 +1,19 @@
+"use client";
+
+import { useState } from "react";
+
+export default function SalesAssistantPage() {
+  const [input, setInput] = useState("");
+  const [response, setResponse] = useState("");
+
+  const askSalesAI = async () => {
+    if (!input.trim()) return;
+
+    setResponse("Processing...");
+
+    const res = await fetch("/api/sales/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input }),
     });
 
