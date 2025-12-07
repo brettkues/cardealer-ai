@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import "../../globals.css";
+import "../globals.css";
 import Sidebar from "@/components/Sidebar.js";
 
 export const metadata = {
