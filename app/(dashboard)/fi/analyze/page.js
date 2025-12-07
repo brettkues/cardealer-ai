@@ -8,12 +8,15 @@ export default function FIAnalyzePage() {
   const [analysis, setAnalysis] = useState("");
 
   const analyzeDeal = async () => {
-    if (!file) return;
+    if (!file) {
+      setMessage("Please upload a PDF first.");
+      return;
+    }
+
+    setMessage("Analyzing…");
 
     const formData = new FormData();
     formData.append("file", file);
-
-    setMessage("Analyzing deal…");
 
     const res = await fetch("/api/fi/analyze", {
       method: "POST",
@@ -21,8 +24,9 @@ export default function FIAnalyzePage() {
     });
 
     const data = await res.json();
+
     setMessage("");
-    setAnalysis(data.analysis || "");
+    setAnalysis(data.analysis || "No analysis returned.");
   };
 
   return (
