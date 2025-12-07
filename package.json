@@ -8,12 +8,14 @@
     "start": "next start"
   },
   "dependencies": {
-    "firebase": "^10.7.1",
+    "firebase": "9.23.0",
+    "firebase-admin": "^12.0.0",
     "next": "14.0.0",
-    "openai": "^3.3.0",
+    "openai": "^4.20.0",
     "pdf-parse": "^1.1.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "sharp": "^0.33.1",
     "stripe": "^12.0.0"
   },
   "devDependencies": {
