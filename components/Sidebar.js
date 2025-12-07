@@ -1,3 +1,4 @@
+// components/Sidebar.js
 "use client";
 
 import Link from "next/link";
@@ -7,7 +8,7 @@ export default function Sidebar() {
   const [role, setRole] = useState("user");
 
   useEffect(() => {
-    async function load() {
+    const load = async () => {
       try {
         const res = await fetch("/api/account/me");
         const data = await res.json();
@@ -15,7 +16,7 @@ export default function Sidebar() {
       } catch {
         setRole("user");
       }
-    }
+    };
     load();
   }, []);
 
@@ -28,7 +29,6 @@ export default function Sidebar() {
           Dashboard
         </Link>
 
-        {/* Social Tools */}
         <div className="mt-4">
           <h3 className="text-sm font-semibold uppercase text-gray-500 mb-1">
             Social Tools
@@ -47,7 +47,6 @@ export default function Sidebar() {
           </Link>
         </div>
 
-        {/* Sales Tools */}
         <div className="mt-4">
           <h3 className="text-sm font-semibold uppercase text-gray-500 mb-1">
             Sales
@@ -56,22 +55,15 @@ export default function Sidebar() {
           <Link href="/dashboard/sales/assistant" className="block hover:underline">
             Sales Assistant
           </Link>
-
-          {(role === "admin" || role === "fi") && (
-            <Link href="/dashboard/sales/training" className="block hover:underline">
-              Sales Training Upload
-            </Link>
-          )}
         </div>
 
-        {/* F&I Tools */}
         <div className="mt-4">
           <h3 className="text-sm font-semibold uppercase text-gray-500 mb-1">
-            F&amp;I
+            F&I
           </h3>
 
           <Link href="/dashboard/fi/assistant" className="block hover:underline">
-            F&amp;I Assistant
+            F&I Assistant
           </Link>
 
           <Link href="/dashboard/fi/analyze" className="block hover:underline">
@@ -81,7 +73,7 @@ export default function Sidebar() {
           {(role === "admin" || role === "fi") && (
             <>
               <Link href="/dashboard/fi/training" className="block hover:underline">
-                F&amp;I Training Upload
+                F&I Training Upload
               </Link>
 
               <Link href="/dashboard/fi/library" className="block hover:underline">
@@ -91,7 +83,6 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Account */}
         <div className="mt-4">
           <h3 className="text-sm font-semibold uppercase text-gray-500 mb-1">
             Account
@@ -113,3 +104,4 @@ export default function Sidebar() {
     </div>
   );
 }
+
