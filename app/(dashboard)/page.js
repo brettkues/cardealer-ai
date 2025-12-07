@@ -1,19 +1,11 @@
 "use client";
-
 export const dynamic = "force-dynamic";
 
-import "../globals.css";
-import Sidebar from "@/components/Sidebar.js";
-
-export const metadata = {
-  title: "Dashboard",
-};
-
-export default function DashboardLayout({ children }) {
+export default function DashboardPage() {
   return (
-    <div className="flex min-h-screen bg-gray-100 text-black">
-      <Sidebar />
-      <main className="flex-1 p-6 overflow-auto">{children}</main>
+    <div>
+      <h1 className="text-3xl font-semibold mb-4">Dashboard</h1>
+      <p>Select a tool from the sidebar to get started.</p>
     </div>
   );
 }
