@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  signInWithRedirect,
+} from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -12,22 +15,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const finishLogin = async () => {
-    // Wait for Firebase to hydrate the ID token
-    const user = auth.currentUser;
-    if (user) {
-      await user.getIdToken(true);
-      router.push("/dashboard");
-    } else {
-      setError("Login failed to initialize session.");
-    }
-  };
-
   const handleLogin = async () => {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      await finishLogin();
+      router.push("/dashboard");
     } catch (err) {
       setError("Invalid email or password.");
     }
@@ -35,13 +27,9 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError("");
+    console.log("Google redirect started");
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-
-      // VERY IMPORTANT: hydrate token BEFORE redirect
-      await result.user.getIdToken(true);
-
-      router.push("/dashboard");
+      await signInWithRedirect(auth, googleProvider);
     } catch (err) {
       console.error("Google login error:", err);
       setError("Google login failed.");
