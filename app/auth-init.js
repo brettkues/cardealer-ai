@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
 
 export default function AuthInit() {
+  const [initialized, setInitialized] = useState(false);
+
   useEffect(() => {
-    // Ensure Firebase persists the session across reloads
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log("AuthInit: user restored", user.uid);
-        window.firebaseUser = user;
-      } else {
-        console.log("AuthInit: no user");
-        window.firebaseUser = null;
-      }
+    // Fix redirect flow for Google popup/popup-close
+    getRedirectResult(auth).catch((err) => {
+      console.error("Redirect result error:", err);
     });
+
+    // Ensure Firebase session hydrates BEFORE apps loads
+    const unsub = onAuthStateChanged(auth, () => {
+      setInitialized(true);
+    });
+
+    return () => unsub();
   }, []);
+
+  // Prevent the app from rendering before auth is ready
+  if (!initialized) return null;
 
   return null;
 }
-
