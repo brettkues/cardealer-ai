@@ -27,10 +27,12 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     console.log("Google redirect started (login)");
+    setError("");
+
     try {
       await signInWithRedirect(auth, googleProvider);
     } catch (err) {
-      console.error("Google login error:", err);
+      console.error("Google redirect login error:", err);
       setError("Google login failed.");
     }
   };
