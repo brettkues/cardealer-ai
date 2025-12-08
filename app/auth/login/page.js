@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "@/lib/firebase";
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { auth, googleProvider } from "@/lib/firebase";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -11,8 +11,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-
-  const provider = new GoogleAuthProvider();
 
   const handleLogin = async () => {
     setError("");
@@ -25,11 +23,15 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    console.log("Google login started"); // debugging
     setError("");
+
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, googleProvider);
+      console.log("Google login success:", result.user);
       router.push("/dashboard");
     } catch (err) {
+      console.error("Google login error:", err); // debugging
       setError("Google login failed.");
     }
   };
