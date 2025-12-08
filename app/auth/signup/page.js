@@ -1,34 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "@/lib/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth, googleProvider } from "@/lib/firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithRedirect,
+} from "firebase/auth";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
 
-  async function handleSignup() {
+  const handleSignup = async () => {
     setError("");
-    setMessage("");
-
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      setMessage("Account created successfully. You can now log in.");
+      router.push("/dashboard");
     } catch (err) {
       setError(err.message);
     }
-  }
+  };
+
+  const handleGoogleSignup = async () => {
+    console.log("Google redirect started (signup)");
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err) {
+      console.error("Google signup error:", err);
+      setError("Google signup failed.");
+    }
+  };
 
   return (
     <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
-      <h1 className="text-2xl font-semibold mb-4">Create Account</h1>
-
-      {error && <p className="text-red-500 mb-3">{error}</p>}
-      {message && <p className="text-green-600 mb-3">{message}</p>}
+      <h1 className="text-2xl font-semibold mb-4">Sign Up</h1>
 
       <input
         type="email"
@@ -46,16 +55,25 @@ export default function SignupPage() {
         onChange={(e) => setPassword(e.target.value)}
       />
 
+      {error && <p className="text-red-600 mb-3">{error}</p>}
+
       <button
         onClick={handleSignup}
-        className="w-full bg-blue-600 text-white py-3 rounded mb-4"
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition mb-4"
       >
-        Sign Up
+        Create Account
       </button>
 
-      <div className="text-center mt-4">
-        <Link href="/auth/login" className="text-blue-600">
-          Already have an account? Log in
+      <button
+        onClick={handleGoogleSignup}
+        className="w-full bg-red-600 text-white py-3 rounded hover:bg-red-700 transition mb-4"
+      >
+        Sign Up with Google
+      </button>
+
+      <div className="mt-4 text-center">
+        <Link href="/auth/login" className="text-blue-600 underline mr-4">
+          Login
         </Link>
       </div>
     </div>
