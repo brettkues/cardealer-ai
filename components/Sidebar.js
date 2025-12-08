@@ -2,22 +2,37 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function Sidebar() {
   const [role, setRole] = useState("user");
 
   useEffect(() => {
-    const loadRole = async () => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setRole("user");
+        return;
+      }
+
       try {
-        const res = await fetch("/api/account/me");
+        const token = await user.getIdToken();
+
+        const res = await fetch("/api/account/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
         const data = await res.json();
+
         if (data.user?.role) setRole(data.user.role);
       } catch {
         setRole("user");
       }
-    };
+    });
 
-    loadRole();
+    return () => unsub();
   }, []);
 
   return (
@@ -25,7 +40,6 @@ export default function Sidebar() {
       <h2 className="text-xl font-semibold">Menu</h2>
 
       <nav className="space-y-2">
-
         <Link href="/dashboard" className="block hover:underline">
           Dashboard
         </Link>
