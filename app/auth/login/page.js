@@ -1,72 +1,47 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
-import {
-  signInWithEmailAndPassword,
-  signInWithRedirect,
-  getRedirectResult,
-} from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // ================================
-  // HANDLE GOOGLE REDIRECT LOGIN
-  // ================================
-  useEffect(() => {
-    async function finishGoogleLogin() {
-      if (typeof window === "undefined") return;
-      if (!auth) return;
-
-      try {
-        const result = await getRedirectResult(auth);
-
-        if (result?.user) {
-          console.log("Google redirect login success:", result.user);
-          router.push("/dashboard");
-        }
-      } catch (err) {
-        console.error("Google redirect error:", err);
-      }
+  const finishLogin = async () => {
+    // Wait for Firebase to hydrate the ID token
+    const user = auth.currentUser;
+    if (user) {
+      await user.getIdToken(true);
+      router.push("/dashboard");
+    } else {
+      setError("Login failed to initialize session.");
     }
+  };
 
-    // Delay ensures Firebase auth is fully hydrated
-    const timer = setTimeout(() => {
-      finishGoogleLogin();
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [router]);
-
-  // ================================
-  // EMAIL/PASSWORD LOGIN
-  // ================================
   const handleLogin = async () => {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
+      await finishLogin();
     } catch (err) {
       setError("Invalid email or password.");
     }
   };
 
-  // ================================
-  // GOOGLE LOGIN
-  // ================================
   const handleGoogleLogin = async () => {
     setError("");
-
     try {
-      console.log("Google login started");
-      await signInWithRedirect(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+
+      // VERY IMPORTANT: hydrate token BEFORE redirect
+      await result.user.getIdToken(true);
+
+      router.push("/dashboard");
     } catch (err) {
       console.error("Google login error:", err);
       setError("Google login failed.");
