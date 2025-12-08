@@ -1,16 +1,30 @@
-import { db } from "@/lib/firebaseAdmin";
+import { adminDb } from "@/lib/firebaseAdmin"; 
 import { doc, setDoc } from "firebase/firestore";
 
-async function assignAdmin() {
-  const adminUid = "AHOzcYo7lTedRczBr4PVRHAusn12"; // Brett’s UID
-  await setDoc(doc(db, "users", adminUid), { role: "admin" }, { merge: true });
-  return Response.json({ success: true, message: "Admin role assigned." });
-}
-
 export async function GET() {
-  return assignAdmin();
+  try {
+    const adminUid = "AHOzcYo7lTedRczBr4PVRHAusn12";
+
+    await setDoc(
+      doc(adminDb, "users", adminUid),
+      { role: "admin" },
+      { merge: true }
+    );
+
+    return Response.json({
+      success: true,
+      message: "Admin role assigned."
+    });
+
+  } catch (error) {
+    console.error("Admin setup error:", error);
+    return Response.json({
+      success: false,
+      message: error.message
+    });
+  }
 }
 
 export async function POST() {
-  return assignAdmin();
+  return GET();
 }
