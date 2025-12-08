@@ -21,7 +21,7 @@ export default function SignupPage() {
       await createUserWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError("Signup failed.");
     }
   };
 
@@ -73,7 +73,10 @@ export default function SignupPage() {
 
       <div className="mt-4 text-center">
         <Link href="/auth/login" className="text-blue-600 underline mr-4">
-          Login
+          Log In
+        </Link>
+        <Link href="/auth/reset" className="text-blue-600 underline">
+          Reset Password
         </Link>
       </div>
     </div>
