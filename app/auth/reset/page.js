@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
+import Link from "next/link";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
@@ -42,6 +43,12 @@ export default function ResetPage() {
 
       {message && <p className="text-green-600 mt-3">{message}</p>}
       {error && <p className="text-red-600 mt-3">{error}</p>}
+
+      <div className="mt-4 text-center">
+        <Link href="/auth/login" className="text-blue-600 underline">
+          Back to Login
+        </Link>
+      </div>
     </div>
   );
 }
