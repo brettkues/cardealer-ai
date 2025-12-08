@@ -54,7 +54,7 @@ export default function SignupPage() {
       </button>
 
       <div className="text-center mt-4">
-        <Link href="/login" className="text-blue-600">
+        <Link href="/auth/login" className="text-blue-600">
           Already have an account? Log in
         </Link>
       </div>
