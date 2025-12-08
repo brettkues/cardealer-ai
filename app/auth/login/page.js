@@ -12,25 +12,42 @@ import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // Handle Google redirect result
+  // ================================
+  // HANDLE GOOGLE REDIRECT LOGIN
+  // ================================
   useEffect(() => {
     async function finishGoogleLogin() {
+      if (typeof window === "undefined") return;
+      if (!auth) return;
+
       try {
         const result = await getRedirectResult(auth);
+
         if (result?.user) {
+          console.log("Google redirect login success:", result.user);
           router.push("/dashboard");
         }
       } catch (err) {
         console.error("Google redirect error:", err);
       }
     }
-    finishGoogleLogin();
+
+    // Delay ensures Firebase auth is fully hydrated
+    const timer = setTimeout(() => {
+      finishGoogleLogin();
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [router]);
 
+  // ================================
+  // EMAIL/PASSWORD LOGIN
+  // ================================
   const handleLogin = async () => {
     setError("");
     try {
@@ -41,9 +58,14 @@ export default function LoginPage() {
     }
   };
 
+  // ================================
+  // GOOGLE LOGIN
+  // ================================
   const handleGoogleLogin = async () => {
     setError("");
+
     try {
+      console.log("Google login started");
       await signInWithRedirect(auth, googleProvider);
     } catch (err) {
       console.error("Google login error:", err);
