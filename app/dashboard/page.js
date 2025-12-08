@@ -1,26 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { authFetch } from "@/lib/authClient";
 
 export default function DashboardPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
+    const loadUser = async () => {
+      try {
+        const res = await authFetch("/api/account/me");   // FIX
+        const data = await res.json();
+
+        if (data.user?.role === "admin") {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error("Dashboard auth error:", err);
         setIsAdmin(false);
-        return;
       }
+    };
 
-      const res = await fetch(`/api/user/${user.uid}`);
-      const data = await res.json();
-
-      setIsAdmin(data.role === "admin");
-    });
-
-    return () => unsubscribe();
+    loadUser();
   }, []);
 
   return (
