@@ -1,15 +1,13 @@
-import { adminDb } from "@/lib/firebaseAdmin"; 
-import { doc, setDoc } from "firebase/firestore";
+import { adminDb } from "@/lib/firebaseAdmin";
 
 export async function GET() {
   try {
     const adminUid = "AHOzcYo7lTedRczBr4PVRHAusn12";
 
-    await setDoc(
-      doc(adminDb, "users", adminUid),
-      { role: "admin" },
-      { merge: true }
-    );
+    await adminDb
+      .collection("users")
+      .doc(adminUid)
+      .set({ role: "admin" }, { merge: true });
 
     return Response.json({
       success: true,
