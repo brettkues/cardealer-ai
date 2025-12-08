@@ -51,7 +51,7 @@ export default function LoginPage() {
       </button>
 
       <div className="mt-4 text-center">
-        <a href="/signup" className="text-blue-600 underline mr-4">
+        <a href="/auth/signup" className="text-blue-600 underline mr-4">
   Sign Up
 </a>
         <a href="/reset" className="text-blue-600 underline">
