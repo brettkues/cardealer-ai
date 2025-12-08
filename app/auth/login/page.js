@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { auth } from "@/lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  const provider = new GoogleAuthProvider();
 
   const handleLogin = async () => {
     setError("");
@@ -18,6 +21,16 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err) {
       setError("Invalid email or password.");
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    try {
+      await signInWithPopup(auth, provider);
+      router.push("/dashboard");
+    } catch (err) {
+      setError("Google login failed.");
     }
   };
 
@@ -45,18 +58,25 @@ export default function LoginPage() {
 
       <button
         onClick={handleLogin}
-        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition mb-4"
       >
         Login
       </button>
 
+      <button
+        onClick={handleGoogleLogin}
+        className="w-full bg-red-600 text-white py-3 rounded hover:bg-red-700 transition mb-4"
+      >
+        Login with Google
+      </button>
+
       <div className="mt-4 text-center">
-        <a href="/auth/signup" className="text-blue-600 underline mr-4">
-  Sign Up
-</a>
-        <a href="/auth/reset" className="text-blue-600 underline">
+        <Link href="/auth/signup" className="text-blue-600 underline mr-4">
+          Sign Up
+        </Link>
+        <Link href="/auth/reset" className="text-blue-600 underline">
           Reset Password
-        </a>
+        </Link>
       </div>
     </div>
   );
