@@ -1,5 +1,4 @@
 import "./globals.css";
-import AuthInit from "./auth-init";
 
 export const metadata = {
   title: "CarDealer AI",
@@ -10,9 +9,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="bg-gray-100 text-black">
-        <AuthInit />
         {children}
       </body>
     </html>
   );
 }
+
