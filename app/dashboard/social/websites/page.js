@@ -7,13 +7,16 @@ export default function WebsiteManagerPage() {
   const [websites, setWebsites] = useState([]);
   const [message, setMessage] = useState("");
 
-  // Fetch saved websites from Firestore
+  // Load all websites from Firestore
   const loadWebsites = async () => {
     const res = await fetch("/api/social/get-websites");
     const data = await res.json();
+
+    // website objects must include { id, url }
     setWebsites(data.websites || []);
   };
 
+  // Save new website
   const saveWebsite = async () => {
     if (!url.trim()) return;
 
@@ -27,6 +30,18 @@ export default function WebsiteManagerPage() {
     setMessage(data.message || "");
 
     setUrl("");
+    loadWebsites();
+  };
+
+  // Delete website
+  const deleteWebsite = async (id) => {
+    const res = await fetch("/api/social/delete-website", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    await res.json();
     loadWebsites();
   };
 
@@ -60,12 +75,19 @@ export default function WebsiteManagerPage() {
 
       {/* Website List */}
       <div className="space-y-2">
-        {websites.map((site, i) => (
+        {websites.map((site) => (
           <div
-            key={i}
+            key={site.id}
             className="p-3 bg-white border rounded shadow flex justify-between items-center"
           >
             <span>{site.url}</span>
+
+            <button
+              onClick={() => deleteWebsite(site.id)}
+              className="text-red-600 hover:underline"
+            >
+              Delete
+            </button>
           </div>
         ))}
       </div>
