@@ -25,14 +25,9 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      console.log("Starting Google redirect login…");
-      await signInWithRedirect(auth, googleProvider); // REDIRECT, not popup
-    } catch (err) {
-      console.error("Google redirect error:", err);
-      setError("Google login failed.");
-    }
+  const handleGoogleLogin = () => {
+    console.log("Google redirect login starting...");
+    signInWithRedirect(auth, googleProvider);
   };
 
   return (
