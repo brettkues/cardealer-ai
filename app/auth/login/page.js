@@ -54,7 +54,7 @@ export default function LoginPage() {
         <a href="/auth/signup" className="text-blue-600 underline mr-4">
   Sign Up
 </a>
-        <a href="/reset" className="text-blue-600 underline">
+        <a href="/auth/reset" className="text-blue-600 underline">
           Reset Password
         </a>
       </div>
