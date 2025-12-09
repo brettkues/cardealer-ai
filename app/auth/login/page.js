@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { auth, googleProvider } from "@/lib/firebase";
-import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  signInWithRedirect,
+} from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -17,23 +20,19 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
-    } catch (err) {
-      console.error(err);
+    } catch {
       setError("Invalid email or password.");
     }
   };
 
   const handleGoogleLogin = async () => {
-    console.log("Google login started");
     setError("");
-
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log("Google login success:", result.user);
-      router.push("/dashboard");
+      console.log("Google login started (redirect)");
+      await signInWithRedirect(auth, googleProvider);
     } catch (err) {
-      console.error("Google login ERROR:", err);
-      setError("Google Login Failed.");
+      console.error("Google login error:", err);
+      setError("Google login failed.");
     }
   };
 
@@ -61,7 +60,7 @@ export default function LoginPage() {
 
       <button
         onClick={handleLogin}
-        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition mb-3"
+        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition mb-4"
       >
         Login
       </button>
@@ -70,7 +69,7 @@ export default function LoginPage() {
         onClick={handleGoogleLogin}
         className="w-full bg-red-600 text-white py-3 rounded hover:bg-red-700 transition"
       >
-        Continue with Google
+        Login with Google
       </button>
 
       <div className="mt-4 text-center">
