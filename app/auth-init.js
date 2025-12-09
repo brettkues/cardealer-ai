@@ -2,33 +2,21 @@
 
 import { useEffect } from "react";
 import { auth } from "@/lib/firebase";
-import { getRedirectResult, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
 
 export default function AuthInit() {
   useEffect(() => {
-    // Expose Firebase Auth globally for debugging & redirect session handling
-    window.firebaseAuth = auth;
+    // Capture redirect result (Google login flow sometimes uses this internally)
+    getRedirectResult(auth).catch((err) =>
+      console.error("Google redirect handler error:", err)
+    );
 
-    // Handle Google redirect login result
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          console.log("Google redirect complete:", result.user.email);
-          window.location.href = "/dashboard"; // force navigation
-        }
-      })
-      .catch((err) => {
-        console.error("Redirect error:", err);
-      });
-
-    // Ensure Firebase session is hydrated on page load
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log("User session detected:", user.email);
-      } else {
-        console.log("No user session detected");
-      }
+    // Make sure Firebase session loads before app renders
+    const unsub = onAuthStateChanged(auth, (user) => {
+      console.log("Auth state changed:", user?.email || "not logged in");
     });
+
+    return () => unsub();
   }, []);
 
   return null;
