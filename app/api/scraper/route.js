@@ -1,23 +1,19 @@
 import { NextResponse } from "next/server";
-import axios from "axios";
-import * as cheerio from "cheerio";
 
 function fixUrl(base, src) {
-  if (!src) return null;
-  if (src.startsWith("http")) return src;
-  if (src.startsWith("//")) return "https:" + src;
-
-  const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base;
-  if (src.startsWith("/")) return cleanBase + src;
-  return cleanBase + "/" + src;
+  try {
+    return new URL(src, base).href;
+  } catch {
+    return null;
+  }
 }
 
-function parseTitle(text) {
-  if (!text) return null;
+function parseVehicle(title) {
+  if (!title) return null;
 
-  const parts = text.split(" ");
+  const parts = title.trim().split(/\s+/);
 
-  const year = parts[0]?.match(/^\d{4}$/) ? parts[0] : null;
+  const year = /^\d{4}$/.test(parts[0]) ? parts[0] : null;
   if (!year) return null;
 
   const make = parts[1] || null;
@@ -28,70 +24,73 @@ function parseTitle(text) {
   return { year, make, model };
 }
 
-async function scrapeInventoryPage(url) {
-  const response = await axios.get(url, {
+async function scrapePage(url) {
+  const res = await fetch(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     },
   });
 
-  const $ = cheerio.load(response.data);
+  const html = await res.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
 
   let vehicles = [];
 
-  $(".vehicle-card, .inventory-card, .result-item, .vehicle, .product").each(
-    (i, el) => {
-      const title =
-        $(el).find(".title").text().trim() ||
-        $(el).find("h2").text().trim() ||
-        $(el).find("h3").text().trim() ||
-        $(el).text().trim().substring(0, 50);
-
-      const parsed = parseTitle(title);
-
-      if (!parsed) return;
-
-      let photos = [];
-
-      $(el)
-        .find("img")
-        .each((j, img) => {
-          const raw =
-            $(img).attr("data-src") ||
-            $(img).attr("data-original") ||
-            $(img).attr("src");
-
-          if (!raw) return;
-
-          if (
-            raw.endsWith(".jpg") ||
-            raw.endsWith(".jpeg") ||
-            raw.endsWith(".png")
-          ) {
-            photos.push(fixUrl(url, raw));
-          }
-        });
-
-      photos = [...new Set(photos)];
-
-      vehicles.push({
-        year: parsed.year,
-        make: parsed.make,
-        model: parsed.model,
-        photos,
-      });
-    }
+  const cards = doc.querySelectorAll(
+    ".vehicle-card, .inventory-card, .result-item, .vehicle, .product, .card"
   );
 
-  // PAGINATION DETECTION
+  cards.forEach((card) => {
+    const titleElement =
+      card.querySelector(".title, h2, h3") || card;
+
+    const title = titleElement.textContent.trim();
+    const parsed = parseVehicle(title);
+
+    if (!parsed) return;
+
+    let photos = [];
+
+    const imgs = card.querySelectorAll("img");
+    imgs.forEach((img) => {
+      const raw =
+        img.getAttribute("data-src") ||
+        img.getAttribute("data-original") ||
+        img.getAttribute("src");
+
+      if (!raw) return;
+
+      if (
+        raw.endsWith(".jpg") ||
+        raw.endsWith(".jpeg") ||
+        raw.endsWith(".png")
+      ) {
+        const fixed = fixUrl(url, raw);
+        if (fixed) photos.push(fixed);
+      }
+    });
+
+    photos = [...new Set(photos)];
+
+    vehicles.push({
+      year: parsed.year,
+      make: parsed.make,
+      model: parsed.model,
+      photos,
+    });
+  });
+
+  // Pagination
   let nextPage = null;
-  $('a[href*="page"], a[rel="next"]').each((_, el) => {
-    const href = $(el).attr("href");
+  const pageLinks = doc.querySelectorAll('a[href*="page"], a[rel="next"]');
+
+  pageLinks.forEach((a) => {
+    const href = a.getAttribute("href");
     if (!href) return;
 
     const full = fixUrl(url, href);
-
     if (full !== url) nextPage = full;
   });
 
@@ -101,32 +100,37 @@ async function scrapeInventoryPage(url) {
 export async function POST(req) {
   try {
     const { url } = await req.json();
-    if (!url) {
-      return NextResponse.json({ error: "URL required" }, { status: 400 });
-    }
+    if (!url)
+      return NextResponse.json(
+        { error: "URL required" },
+        { status: 400 }
+      );
 
-    let allVehicles = [];
-    let nextUrl = url;
-    let count = 0;
+    let all = [];
+    let next = url;
+    let limit = 0;
 
-    while (nextUrl && count < 10) {
-      const { vehicles, nextPage } = await scrapeInventoryPage(nextUrl);
+    while (next && limit < 10) {
+      const { vehicles, nextPage } = await scrapePage(next);
 
-      allVehicles.push(...vehicles);
+      all.push(...vehicles);
 
-      if (!nextPage || nextPage === nextUrl) break;
+      if (!nextPage || nextPage === next) break;
 
-      nextUrl = nextPage;
-      count++;
+      next = nextPage;
+      limit++;
     }
 
     return NextResponse.json({
-      vehicles: allVehicles,
-      count: allVehicles.length,
-      pages: count + 1,
+      vehicles: all,
+      count: all.length,
+      pages: limit + 1,
     });
-  } catch (err) {
-    console.error("SCRAPER ERROR:", err);
-    return NextResponse.json({ error: "failed" }, { status: 500 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "scraper failed" },
+      { status: 500 }
+    );
   }
 }
