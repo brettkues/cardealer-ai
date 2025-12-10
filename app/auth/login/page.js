@@ -1,42 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { auth, googleProvider } from "@/lib/firebase";
-import {
-  signInWithEmailAndPassword,
-  signInWithRedirect,
-} from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../../lib/firebase";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  const router = useRouter();
 
   const handleLogin = async () => {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
-    } catch {
-      setError("Invalid email or password.");
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setError("");
-    try {
-      await signInWithRedirect(auth, googleProvider);
-    } catch {
-      setError("Google login failed.");
+    } catch (err) {
+      setError("Invalid login.");
     }
   };
 
   return (
     <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
-      <h1 className="text-2xl font-semibold mb-4">Login</h1>
+      <h1 className="text-2xl mb-4">Login</h1>
 
       <input
         type="email"
@@ -58,26 +46,24 @@ export default function LoginPage() {
 
       <button
         onClick={handleLogin}
-        className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition mb-4"
+        className="w-full bg-blue-600 text-white p-3 rounded"
       >
         Login
       </button>
 
       <button
-        onClick={handleGoogleLogin}
-        className="w-full bg-red-600 text-white py-3 rounded hover:bg-red-700 transition"
+        onClick={() => router.push("/auth/reset")}
+        className="w-full mt-3 underline text-sm"
       >
-        Login with Google
+        Forgot password?
       </button>
 
-      <div className="mt-4 text-center">
-        <Link href="/auth/signup" className="text-blue-600 underline mr-4">
-          Sign Up
-        </Link>
-        <Link href="/auth/reset" className="text-blue-600 underline">
-          Reset Password
-        </Link>
-      </div>
+      <button
+        onClick={() => router.push("/auth/register")}
+        className="w-full mt-3 underline text-sm"
+      >
+        Create account
+      </button>
     </div>
   );
 }
