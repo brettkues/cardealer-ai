@@ -12,7 +12,23 @@ function fixUrl(base, src) {
   return cleanBase + "/" + src;
 }
 
-async function scrapePage(url) {
+function parseTitle(text) {
+  if (!text) return null;
+
+  const parts = text.split(" ");
+
+  const year = parts[0]?.match(/^\d{4}$/) ? parts[0] : null;
+  if (!year) return null;
+
+  const make = parts[1] || null;
+  const model = parts[2] || null;
+
+  if (!make || !model) return null;
+
+  return { year, make, model };
+}
+
+async function scrapeInventoryPage(url) {
   const response = await axios.get(url, {
     headers: {
       "User-Agent":
@@ -21,54 +37,96 @@ async function scrapePage(url) {
   });
 
   const $ = cheerio.load(response.data);
-  let images = [];
 
-  $("img").each((_, el) => {
-    const raw =
-      $(el).attr("data-src") ||
-      $(el).attr("data-original") ||
-      $(el).attr("src");
+  let vehicles = [];
 
-    if (!raw) return;
+  $(".vehicle-card, .inventory-card, .result-item, .vehicle, .product").each(
+    (i, el) => {
+      const title =
+        $(el).find(".title").text().trim() ||
+        $(el).find("h2").text().trim() ||
+        $(el).find("h3").text().trim() ||
+        $(el).text().trim().substring(0, 50);
 
-    if (
-      raw.endsWith(".jpg") ||
-      raw.endsWith(".jpeg") ||
-      raw.endsWith(".png")
-    ) {
-      images.push(fixUrl(url, raw));
+      const parsed = parseTitle(title);
+
+      if (!parsed) return;
+
+      let photos = [];
+
+      $(el)
+        .find("img")
+        .each((j, img) => {
+          const raw =
+            $(img).attr("data-src") ||
+            $(img).attr("data-original") ||
+            $(img).attr("src");
+
+          if (!raw) return;
+
+          if (
+            raw.endsWith(".jpg") ||
+            raw.endsWith(".jpeg") ||
+            raw.endsWith(".png")
+          ) {
+            photos.push(fixUrl(url, raw));
+          }
+        });
+
+      photos = [...new Set(photos)];
+
+      vehicles.push({
+        year: parsed.year,
+        make: parsed.make,
+        model: parsed.model,
+        photos,
+      });
     }
-  });
+  );
 
-  // Find next page link
+  // PAGINATION DETECTION
   let nextPage = null;
-
-  $('a[href*="page"]').each((_, el) => {
+  $('a[href*="page"], a[rel="next"]').each((_, el) => {
     const href = $(el).attr("href");
     if (!href) return;
 
     const full = fixUrl(url, href);
+
     if (full !== url) nextPage = full;
   });
 
-  return { images, nextPage };
+  return { vehicles, nextPage };
 }
 
 export async function POST(req) {
   try {
     const { url } = await req.json();
     if (!url) {
-      return NextResponse.json({ error: "Missing URL" }, { status: 400 });
+      return NextResponse.json({ error: "URL required" }, { status: 400 });
     }
 
-    let allImages = new Set();
+    let allVehicles = [];
     let nextUrl = url;
-    let pageCount = 0;
+    let count = 0;
 
-    while (nextUrl && pageCount < 10) {
-      const { images, nextPage } = await scrapePage(nextUrl);
+    while (nextUrl && count < 10) {
+      const { vehicles, nextPage } = await scrapeInventoryPage(nextUrl);
 
-      images.forEach((img) => allImages.add(img));
+      allVehicles.push(...vehicles);
 
-      // Stop if no more pages
-      if (!nextPage ||
+      if (!nextPage || nextPage === nextUrl) break;
+
+      nextUrl = nextPage;
+      count++;
+    }
+
+    return NextResponse.json({
+      vehicles: allVehicles,
+      count: allVehicles.length,
+      pages: count + 1,
+    });
+  } catch (err) {
+    console.error("SCRAPER ERROR:", err);
+    return NextResponse.json({ error: "failed" }, { status: 500 });
+  }
+}
