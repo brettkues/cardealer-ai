@@ -17,17 +17,27 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, password);
+      // CREATE AUTH USER
+      const res = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
-      // Assign default role
+      // CREATE FIRESTORE RECORD
       await setDoc(doc(db, "users", res.user.uid), {
         email,
         role: "user",
       });
 
+      // SET COOKIES FOR MIDDLEWARE
+      document.cookie = `loggedIn=true; path=/;`;
+      document.cookie = `role=user; path=/;`;
+
       router.push("/dashboard");
     } catch (err) {
-      setError("Unable to register.");
+      console.log("REGISTER ERROR:", err);
+      setError(err.message || "Registration failed.");
     }
   };
 
