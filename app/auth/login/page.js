@@ -17,21 +17,18 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Firebase login
       const res = await signInWithEmailAndPassword(auth, email, password);
       const uid = res.user.uid;
 
-      // Get role
       const snap = await getDoc(doc(db, "users", uid));
       const role = snap.exists() ? snap.data().role : "user";
 
-      // Set cookies for middleware
       document.cookie = `loggedIn=true; path=/;`;
       document.cookie = `role=${role}; path=/;`;
 
       router.push("/dashboard");
     } catch (err) {
-      console.error(err);
+      console.error("LOGIN ERROR:", err);
       setError("Invalid login.");
     }
   };
