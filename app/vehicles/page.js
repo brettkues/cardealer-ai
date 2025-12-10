@@ -18,7 +18,7 @@ export default function VehiclesPage() {
 
     const data = await res.json();
 
-    // Save for detail pages
+    // Save for detail view
     sessionStorage.setItem(
       "scrapedVehicles",
       JSON.stringify(data.vehicles || [])
@@ -58,3 +58,26 @@ export default function VehiclesPage() {
             href={`/vehicles/${i}`}
             className="block bg-white shadow rounded overflow-hidden hover:shadow-lg transition"
           >
+            {v.photos && v.photos[0] ? (
+              <img
+                src={v.photos[0]}
+                className="w-full h-40 object-cover"
+                alt=""
+              />
+            ) : (
+              <div className="w-full h-40 bg-gray-300 flex items-center justify-center">
+                No Image
+              </div>
+            )}
+
+            <div className="p-3 text-center">
+              <div className="font-bold">{v.year}</div>
+              <div>{v.make}</div>
+              <div className="text-gray-600">{v.model}</div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
