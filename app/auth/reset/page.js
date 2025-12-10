@@ -15,10 +15,12 @@ export default function ResetPage() {
   const handleReset = async () => {
     setError("");
     setMessage("");
+
     try {
       await sendPasswordResetEmail(auth, email);
       setMessage("Password reset email sent.");
-    } catch {
+    } catch (err) {
+      console.error("RESET ERROR:", err);
       setError("Unable to send reset email.");
     }
   };
