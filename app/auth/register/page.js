@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../../lib/firebase";
+import { auth, db } from "../../../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
@@ -14,8 +15,16 @@ export default function RegisterPage() {
 
   const handleRegister = async () => {
     setError("");
+
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const res = await createUserWithEmailAndPassword(auth, email, password);
+
+      // Assign default role
+      await setDoc(doc(db, "users", res.user.uid), {
+        email,
+        role: "user",
+      });
+
       router.push("/dashboard");
     } catch (err) {
       setError("Unable to register.");
