@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../../lib/firebase";
+import { auth, db } from "../../../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -14,10 +15,23 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     setError("");
+
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // Firebase login
+      const res = await signInWithEmailAndPassword(auth, email, password);
+      const uid = res.user.uid;
+
+      // Get role
+      const snap = await getDoc(doc(db, "users", uid));
+      const role = snap.exists() ? snap.data().role : "user";
+
+      // Set cookies for middleware
+      document.cookie = `loggedIn=true; path=/;`;
+      document.cookie = `role=${role}; path=/;`;
+
       router.push("/dashboard");
     } catch (err) {
+      console.error(err);
       setError("Invalid login.");
     }
   };
