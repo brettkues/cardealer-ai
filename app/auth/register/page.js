@@ -17,27 +17,29 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      // CREATE AUTH USER
-      const res = await createUserWithEmailAndPassword(
+      // Create Auth user
+      const userCred = await createUserWithEmailAndPassword(
         auth,
         email,
         password
       );
 
-      // CREATE FIRESTORE RECORD
-      await setDoc(doc(db, "users", res.user.uid), {
-        email,
+      const uid = userCred.user.uid;
+
+      // Create Firestore user record
+      await setDoc(doc(db, "users", uid), {
+        email: email,
         role: "user",
       });
 
-      // SET COOKIES FOR MIDDLEWARE
+      // Set cookies for middleware
       document.cookie = `loggedIn=true; path=/;`;
       document.cookie = `role=user; path=/;`;
 
       router.push("/dashboard");
     } catch (err) {
-      console.log("REGISTER ERROR:", err);
-      setError(err.message || "Registration failed.");
+      console.error("REGISTER ERROR:", err);
+      setError(err.message || "Unable to register.");
     }
   };
 
@@ -79,3 +81,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+
