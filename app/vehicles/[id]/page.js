@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function VehicleDetail({ params }) {
   const [vehicles, setVehicles] = useState([]);
   const id = parseInt(params.id);
+  const router = useRouter();
 
   useEffect(() => {
     const saved = sessionStorage.getItem("scrapedVehicles");
@@ -29,6 +31,15 @@ export default function VehicleDetail({ params }) {
     );
   }
 
+  function createCollage() {
+    const selected = v.photos.slice(0, 4);
+
+    sessionStorage.setItem("collageImages", JSON.stringify(selected));
+    sessionStorage.setItem("collageText", `${v.year} ${v.make} ${v.model}`);
+
+    router.push("/collage");
+  }
+
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-4">
@@ -46,6 +57,21 @@ export default function VehicleDetail({ params }) {
         ))}
       </div>
 
-      <a
-        href="/vehicles"
-        cla
+      <div className="flex gap-4 mt-6">
+        <button
+          onClick={createCollage}
+          className="px-4 py-2 bg-blue-600 text-white rounded shadow"
+        >
+          Create Collage
+        </button>
+
+        <a
+          href="/vehicles"
+          className="px-4 py-2 bg-gray-700 text-white rounded shadow"
+        >
+          Back
+        </a>
+      </div>
+    </div>
+  );
+}
