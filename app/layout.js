@@ -25,16 +25,21 @@ export default function RootLayout({ children }) {
       if (u) {
         setUser(u);
 
-        // Load role from Firestore
         const snap = await getDoc(doc(db, "users", u.uid));
         if (snap.exists()) {
           setRole(snap.data().role || "user");
         } else {
           setRole("user");
         }
+
+        document.cookie = `loggedIn=true; path=/;`;
+        document.cookie = `role=${snap.exists() ? snap.data().role : "user"}; path=/;`;
       } else {
         setUser(null);
         setRole("user");
+
+        document.cookie = "loggedIn=false; path=/;";
+        document.cookie = "role=user; path=/;";
       }
 
       setLoading(false);
@@ -51,9 +56,17 @@ export default function RootLayout({ children }) {
 
   if (loading) return null;
 
+  const handleLogout = async () => {
+    document.cookie = "loggedIn=false; path=/;";
+    document.cookie = "role=user; path=/;";
+    await signOut(auth);
+    router.push("/auth/login");
+  };
+
   return (
     <html lang="en">
       <body className="bg-gray-100 text-black">
+
         {!isAuthPage && user && (
           <header className="bg-white shadow p-4 flex justify-between items-center">
             <div>
@@ -61,7 +74,7 @@ export default function RootLayout({ children }) {
             </div>
 
             <button
-              onClick={() => signOut(auth)}
+              onClick={handleLogout}
               className="px-4 py-2 bg-red-600 text-white rounded"
             >
               Logout
