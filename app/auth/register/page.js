@@ -17,7 +17,6 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      // Create Auth user
       const userCred = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -26,13 +25,11 @@ export default function RegisterPage() {
 
       const uid = userCred.user.uid;
 
-      // Create Firestore user record
       await setDoc(doc(db, "users", uid), {
         email: email,
         role: "user",
       });
 
-      // Set cookies for middleware
       document.cookie = `loggedIn=true; path=/;`;
       document.cookie = `role=user; path=/;`;
 
@@ -81,4 +78,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-
