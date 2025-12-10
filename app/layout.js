@@ -3,11 +3,13 @@
 import "./globals.css";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { usePathname, useRouter } from "next/navigation";
 
 export default function RootLayout({ children }) {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState("user");
   const [loading, setLoading] = useState(true);
 
   const pathname = usePathname();
@@ -19,10 +21,25 @@ export default function RootLayout({ children }) {
     pathname.startsWith("/auth/reset");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+
+        // Load role from Firestore
+        const snap = await getDoc(doc(db, "users", u.uid));
+        if (snap.exists()) {
+          setRole(snap.data().role || "user");
+        } else {
+          setRole("user");
+        }
+      } else {
+        setUser(null);
+        setRole("user");
+      }
+
       setLoading(false);
     });
+
     return () => unsub();
   }, []);
 
@@ -30,7 +47,7 @@ export default function RootLayout({ children }) {
     if (!loading && !user && !isAuthPage) {
       router.push("/auth/login");
     }
-  }, [loading, user, isAuthPage, router]);
+  }, [loading, user, isAuthPage]);
 
   if (loading) return null;
 
@@ -39,7 +56,10 @@ export default function RootLayout({ children }) {
       <body className="bg-gray-100 text-black">
         {!isAuthPage && user && (
           <header className="bg-white shadow p-4 flex justify-between items-center">
-            <div>Logged in as: {user.email}</div>
+            <div>
+              Logged in as: {user.email} ({role})
+            </div>
+
             <button
               onClick={() => signOut(auth)}
               className="px-4 py-2 bg-red-600 text-white rounded"
@@ -48,6 +68,7 @@ export default function RootLayout({ children }) {
             </button>
           </header>
         )}
+
         <div className="p-4">{children}</div>
       </body>
     </html>
