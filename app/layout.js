@@ -19,30 +19,27 @@ export default function RootLayout({ children }) {
     pathname.startsWith("/auth/reset");
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
   useEffect(() => {
     if (!loading && !user && !isAuthPage) {
       router.push("/auth/login");
     }
-  }, [user, loading, isAuthPage, router]);
+  }, [loading, user, isAuthPage, router]);
 
-  if (loading) return null; // prevents flash of wrong screen
+  if (loading) return null;
 
   return (
     <html lang="en">
       <body className="bg-gray-100 text-black">
-
-        {/* HEADER SHOWING LOGIN STATUS */}
         {!isAuthPage && user && (
-          <header className="w-full bg-white shadow p-4 flex justify-between items-center">
+          <header className="bg-white shadow p-4 flex justify-between items-center">
             <div>Logged in as: {user.email}</div>
-
             <button
               onClick={() => signOut(auth)}
               className="px-4 py-2 bg-red-600 text-white rounded"
@@ -51,10 +48,7 @@ export default function RootLayout({ children }) {
             </button>
           </header>
         )}
-
-        {/* MAIN CONTENT */}
         <div className="p-4">{children}</div>
-
       </body>
     </html>
   );
