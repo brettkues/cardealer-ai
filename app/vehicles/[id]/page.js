@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 export default function VehicleDetail({ params }) {
   const [vehicles, setVehicles] = useState([]);
@@ -17,11 +16,21 @@ export default function VehicleDetail({ params }) {
   const v = vehicles[id];
 
   if (!v) {
-    return <p className="p-4">Vehicle not found.</p>;
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-4">Vehicle Not Found</h1>
+        <a
+          href="/vehicles"
+          className="px-4 py-2 bg-gray-700 text-white rounded"
+        >
+          Back
+        </a>
+      </div>
+    );
   }
 
   return (
-    <div>
+    <div className="p-6">
       <h1 className="text-3xl font-bold mb-4">
         {v.year} {v.make} {v.model}
       </h1>
@@ -31,7 +40,7 @@ export default function VehicleDetail({ params }) {
           <img
             key={i}
             src={p}
-            className="w-full h-48 object-cover shadow rounded"
+            className="w-full h-48 object-cover rounded shadow"
             alt=""
           />
         ))}
@@ -39,10 +48,4 @@ export default function VehicleDetail({ params }) {
 
       <a
         href="/vehicles"
-        className="mt-6 inline-block px-4 py-2 bg-gray-700 text-white rounded"
-      >
-        Back
-      </a>
-    </div>
-  );
-}
+        cla
