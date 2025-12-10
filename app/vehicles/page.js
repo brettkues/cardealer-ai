@@ -17,6 +17,13 @@ export default function VehiclesPage() {
     });
 
     const data = await res.json();
+
+    // Save for detail pages
+    sessionStorage.setItem(
+      "scrapedVehicles",
+      JSON.stringify(data.vehicles || [])
+    );
+
     setVehicles(data.vehicles || []);
     setLoading(false);
   }
@@ -40,7 +47,9 @@ export default function VehiclesPage() {
         Scrape Inventory
       </button>
 
-      {loading && <p className="mt-4 text-gray-600">Loading...</p>}
+      {loading && (
+        <p className="mt-4 text-gray-600 text-lg">Loading...</p>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
         {vehicles.map((v, i) => (
@@ -49,26 +58,3 @@ export default function VehiclesPage() {
             href={`/vehicles/${i}`}
             className="block bg-white shadow rounded overflow-hidden hover:shadow-lg transition"
           >
-            {v.photos[0] ? (
-              <img
-                src={v.photos[0]}
-                className="w-full h-40 object-cover"
-                alt=""
-              />
-            ) : (
-              <div className="w-full h-40 bg-gray-300 flex items-center justify-center">
-                No Image
-              </div>
-            )}
-
-            <div className="p-3 text-center">
-              <div className="font-bold">{v.year}</div>
-              <div>{v.make}</div>
-              <div className="text-gray-600">{v.model}</div>
-            </div>
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-}
