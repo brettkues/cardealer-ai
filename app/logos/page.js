@@ -1,60 +1,76 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { auth, db } from "@/lib/firebaseClient";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  doc,
+} from "firebase/firestore";
+import { useRouter } from "next/navigation";
 
-export default function LogoManager() {
+export default function LogosPage() {
+  const router = useRouter();
   const [logos, setLogos] = useState([]);
-  const [uploading, setUploading] = useState(false);
-
-  async function load() {
-    const res = await fetch("/api/logos");
-    const data = await res.json();
-    setLogos(data.logos || []);
-  }
-
-  async function upload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploading(true);
-
-    const form = new FormData();
-    form.append("file", file);
-
-    await fetch("/api/logos", {
-      method: "POST",
-      body: form,
-    });
-
-    await load();
-    setUploading(false);
-  }
-
-  async function remove(id) {
-    await fetch("/api/logos", {
-      method: "DELETE",
-      body: JSON.stringify({ id }),
-    });
-    await load();
-  }
+  const [url, setUrl] = useState("");
 
   useEffect(() => {
-    load();
+    if (!auth.currentUser) router.push("/auth/login");
   }, []);
 
+  useEffect(() => {
+    const ref = collection(db, "logos");
+    const unsub = onSnapshot(ref, (snap) => {
+      setLogos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, []);
+
+  async function addLogo() {
+    if (!url.trim()) return;
+    await addDoc(collection(db, "logos"), { url });
+    setUrl("");
+  }
+
+  async function removeLogo(id) {
+    await deleteDoc(doc(db, "logos", id));
+  }
+
   return (
-    <div className="max-w-3xl mx-auto mt-10 bg-white shadow p-6 rounded">
-      <h1 className="text-3xl font-bold mb-6">Logo Manager</h1>
+    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-bold mb-4">Logo Manager</h1>
 
-      <input type="file" onChange={upload} disabled={uploading} className="mb-6" />
+      <div className="flex gap-2 mb-6">
+        <input
+          className="flex-1 p-3 border"
+          placeholder="Logo URL"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+          onClick={addLogo}
+        >
+          Add
+        </button>
+      </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         {logos.map((l) => (
-          <div key={l.id} className="bg-gray-50 p-3 border rounded shadow">
-            <img src={l.url} className="w-full h-32 object-contain rounded" />
+          <div
+            key={l.id}
+            className="p-3 border rounded flex flex-col items-center"
+          >
+            <img
+              src={l.url}
+              className="max-h-20 mb-2"
+              alt="logo"
+            />
             <button
-              onClick={() => remove(l.id)}
-              className="mt-2 bg-red-600 text-white w-full p-2 rounded"
+              className="text-red-600 underline"
+              onClick={() => removeLogo(l.id)}
             >
               Delete
             </button>
