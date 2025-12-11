@@ -1,5 +1,8 @@
-import { redirect } from "next/navigation";
-
 export default function HomePage() {
-  redirect("/dashboard");
+  return (
+    <div style={{ padding: "2rem", textAlign: "center" }}>
+      <h1>Welcome to the AI Dealership Platform</h1>
+      <p>Please <a href="/login">log in</a> to access your tools.</p>
+    </div>
+  );
 }
