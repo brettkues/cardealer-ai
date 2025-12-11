@@ -1,100 +1,49 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
+import { auth } from "@/lib/firebaseClient";
+import { useRouter } from "next/navigation";
 
 export default function SalesAssistantPage() {
+  const router = useRouter();
+  const fileInputRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [replying, setReplying] = useState(false);
-  const [websites, setWebsites] = useState([]);
-  const [selectedWebsite, setSelectedWebsite] = useState("");
+  const [userInput, setUserInput] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Load user's websites (already stored via your /social API)
-  useEffect(() => {
-    async function loadWebsites() {
-      const res = await fetch("/social/get-websites");
-      const data = await res.json();
-      if (data?.websites) {
-        setWebsites(data.websites);
-        if (data.websites.length > 0) {
-          setSelectedWebsite(data.websites[0].url);
-        }
-      }
-    }
-    loadWebsites();
-  }, []);
-
-  async function sendMessage() {
-    if (!input.trim()) return;
-
-    const newMessage = { role: "user", content: input };
-    setMessages((prev) => [...prev, newMessage]);
-    setInput("");
-    setReplying(true);
-
-    const res = await fetch("/api/sales-assistant", {
-      method: "POST",
-      body: JSON.stringify({
-        messages: [...messages, newMessage],
-        website: selectedWebsite,
-      }),
-    });
-
-    const data = await res.json();
-    const reply = data?.reply || "No response.";
-
-    setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    setReplying(false);
+  if (typeof window !== "undefined" && !auth.currentUser) {
+    router.push("/login");
   }
 
-  return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-semibold mb-6">Sales Assistant</h1>
+  const SYSTEM_PROMPT =
+    "You are a helpful Sales Assistant for an automotive dealership. Provide friendly and informative answers. If the user provides an image or file, analyze it and use it in your response.";
 
-      {/* Website selector */}
-      <div className="mb-4">
-        <label className="block mb-1 text-sm font-medium">Website</label>
-        <select
-          value={selectedWebsite}
-          onChange={(e) => setSelectedWebsite(e.target.value)}
-          className="border rounded p-2 w-full"
-        >
-          {websites.map((w) => (
-            <option key={w.id} value={w.url}>
-              {w.url}
-            </option>
-          ))}
-        </select>
-      </div>
+  async function handleSend() {
+    try {
+      if (!userInput && !uploadFile) return;
 
-      {/* Chat window */}
-      <div className="border rounded h-80 p-3 overflow-y-auto bg-white mb-4">
-        {messages.map((m, i) => (
-          <div key={i} className="mb-3">
-            <strong>{m.role === "user" ? "You" : "Assistant"}:</strong>
-            <p>{m.content}</p>
-          </div>
-        ))}
+      setError("");
+      setLoading(true);
 
-        {replying && <p className="text-gray-500">Assistant is typing…</p>}
-      </div>
+      const newUserMsg = { role: "user", content: userInput || "" };
+      let imageDataUrl = null;
 
-      {/* Input row */}
-      <div className="flex gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          className="flex-1 border rounded p-2"
-          placeholder="Ask a sales question..."
-        />
-        <button
-          onClick={sendMessage}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
+      if (uploadFile) {
+        const file = uploadFile;
+
+        if (file.type.startsWith("image/")) {
+          imageDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          newUserMsg.imageDataUrl = imageDataUrl;
+          newUserMsg.fileName = file.name;
+        } else if (file.type === "text/plain") {
+          const textContent = await file.text();
+          newUserMsg.fileName = file.name
