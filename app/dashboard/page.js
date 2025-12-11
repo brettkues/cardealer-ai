@@ -1,12 +1,12 @@
 "use client";
 
 import { auth } from "@/lib/firebaseClient";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("");
 
   useEffect(() => {
     if (!auth.currentUser) {
@@ -14,33 +14,44 @@ export default function DashboardPage() {
       return;
     }
 
-    setEmail(auth.currentUser.email || "");
+    const storedRole = document.cookie
+      .split("; ")
+      .find((x) => x.startsWith("role="))
+      ?.split("=")[1];
+
+    setRole(storedRole || "user");
   }, []);
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 bg-white p-6 shadow rounded">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-
-      <p className="text-lg mb-6">
-        Logged in as <strong>{email}</strong>
-      </p>
+    <div className="p-6 space-y-6">
+      <h1 className="text-3xl font-bold">Dashboard</h1>
 
       <div className="grid grid-cols-2 gap-4">
-        <a href="/assistant/sales" className="block p-4 bg-gray-100 rounded shadow text-center">
+
+        <a href="/image-generator" className="p-4 bg-gray-100 rounded shadow text-center">
+          Image Generator
+        </a>
+
+        <a href="/assistant/sales" className="p-4 bg-gray-100 rounded shadow text-center">
           Sales Assistant
         </a>
 
-        <a href="/assistant/fi" className="block p-4 bg-gray-100 rounded shadow text-center">
+        <a href="/assistant/fi" className="p-4 bg-gray-100 rounded shadow text-center">
           F&I Assistant
         </a>
 
-        <a href="/websites" className="block p-4 bg-gray-100 rounded shadow text-center">
-          Website Manager
-        </a>
+        {(role === "admin" || role === "manager") && (
+          <>
+            <a href="/train" className="p-4 bg-gray-100 rounded shadow text-center">
+              Train Your AI
+            </a>
 
-        <a href="/logos" className="block p-4 bg-gray-100 rounded shadow text-center">
-          Logo Manager
-        </a>
+            <a href="/admin" className="p-4 bg-gray-100 rounded shadow text-center">
+              Admin Panel
+            </a>
+          </>
+        )}
+
       </div>
     </div>
   );
