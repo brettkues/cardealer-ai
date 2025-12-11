@@ -4,41 +4,48 @@ import { useState } from "react";
 
 export default function SalesAssistant() {
   const [input, setInput] = useState("");
-  const [response, setResponse] = useState("");
+  const [output, setOutput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function sendMessage() {
-    if (!input) return;
+  async function askAI() {
+    if (!input.trim()) return;
+
+    setLoading(true);
+    setOutput("");
 
     const res = await fetch("/api/assistant/sales", {
       method: "POST",
-      body: JSON.stringify({ message: input }),
+      body: JSON.stringify({ prompt: input }),
     });
 
     const data = await res.json();
-    setResponse(data.reply || "No response returned.");
+
+    setOutput(data.response || "No response returned.");
+    setLoading(false);
   }
 
   return (
-    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
+    <div className="max-w-2xl mx-auto mt-10 bg-white shadow p-6 rounded">
       <h1 className="text-3xl font-bold mb-4">Sales Assistant</h1>
 
       <textarea
         className="w-full p-3 border rounded mb-3 h-32"
-        placeholder="Ask the assistant..."
+        placeholder="Ask something about sales process, objections, follow-up, scripts..."
         value={input}
         onChange={(e) => setInput(e.target.value)}
       />
 
       <button
-        onClick={sendMessage}
-        className="w-full bg-blue-600 text-white p-3 rounded mb-6"
+        className="w-full bg-blue-600 text-white p-3 rounded mb-4"
+        onClick={askAI}
+        disabled={loading}
       >
-        Send
+        {loading ? "Thinking..." : "Ask"}
       </button>
 
-      {response && (
-        <div className="bg-gray-100 p-4 rounded shadow">
-          {response}
+      {output && (
+        <div className="p-4 border rounded bg-gray-50 whitespace-pre-wrap">
+          {output}
         </div>
       )}
     </div>
