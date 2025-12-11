@@ -1,36 +1,63 @@
 "use client";
 
-export default function AdminHome() {
+import { useEffect, useState } from "react";
+
+export default function AdminPage() {
+  const [users, setUsers] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  async function loadUsers() {
+    const res = await fetch("/api/admin/users");
+    const data = await res.json();
+    setUsers(data.users || []);
+  }
+
+  async function updateRole(uid, newRole) {
+    setSaving(true);
+
+    await fetch("/api/admin/role", {
+      method: "POST",
+      body: JSON.stringify({ uid, role: newRole }),
+    });
+
+    setSaving(false);
+    loadUsers();
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
+    <div className="max-w-2xl mx-auto mt-10 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-bold mb-6">Admin — User Roles</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {saving && (
+        <div className="mb-4 text-blue-600 font-semibold">Saving...</div>
+      )}
 
-        <a
-          href="/admin/users"
-          className="p-6 bg-white shadow rounded hover:bg-gray-50 block"
-        >
-          <h2 className="text-xl font-semibold">User Management</h2>
-          <p>View and edit user roles</p>
-        </a>
+      <div className="space-y-4">
+        {users.map((u) => (
+          <div
+            key={u.uid}
+            className="bg-gray-100 p-4 rounded flex justify-between items-center"
+          >
+            <div>
+              <div className="font-bold">{u.email}</div>
+              <div className="text-sm text-gray-600">Role: {u.role}</div>
+            </div>
 
-        <a
-          href="/admin/settings"
-          className="p-6 bg-white shadow rounded hover:bg-gray-50 block"
-        >
-          <h2 className="text-xl font-semibold">Global Settings</h2>
-          <p>Configure system-wide options</p>
-        </a>
-
-        <a
-          href="/admin/tools"
-          className="p-6 bg-white shadow rounded hover:bg-gray-50 block"
-        >
-          <h2 className="text-xl font-semibold">Tool Settings</h2>
-          <p>Collage generator & scraper configuration</p>
-        </a>
-
+            <select
+              className="border p-2 rounded"
+              value={u.role}
+              onChange={(e) => updateRole(u.uid, e.target.value)}
+            >
+              <option value="user">User</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        ))}
       </div>
     </div>
   );
