@@ -5,20 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
-    "next": "14.0.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
     "axios": "^1.6.7",
     "cheerio": "^1.0.0-rc.12",
-    "firebase": "^10.7.1",
+    "firebase": "^10.7.0",
+    "next": "14.1.0",
+    "openai": "^4.0.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
     "sharp": "^0.33.2"
-  },
-  "devDependencies": {
-    "eslint": "8.53.0",
-    "eslint-config-next": "14.0.0"
   }
 }
