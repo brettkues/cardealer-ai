@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function VehicleDetail({ params }) {
   const { id } = params;
+  const router = useRouter();
+
   const [vehicle, setVehicle] = useState(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("scrapedVehicles");
-
     if (!stored) return;
 
     const list = JSON.parse(stored);
@@ -23,28 +25,42 @@ export default function VehicleDetail({ params }) {
     );
   }
 
+  const createCollage = () => {
+    sessionStorage.setItem("collageSource", JSON.stringify(vehicle));
+    router.push("/social");
+  };
+
   return (
-    <div className="max-w-2xl mx-auto mt-10 bg-white shadow p-6 rounded">
+    <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-4">
         {vehicle.year} {vehicle.make} {vehicle.model}
       </h1>
 
-      {vehicle.photos?.[0] && (
-        <img
-          src={vehicle.photos[0]}
-          className="w-full rounded mb-4"
-          alt="Vehicle"
-        />
-      )}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {vehicle.photos?.map((p, i) => (
+          <img
+            key={i}
+            src={p}
+            className="w-full h-48 object-cover rounded shadow"
+            alt=""
+          />
+        ))}
+      </div>
 
-      <div className="space-y-2">
-        <p><strong>Year:</strong> {vehicle.year}</p>
-        <p><strong>Make:</strong> {vehicle.make}</p>
-        <p><strong>Model:</strong> {vehicle.model}</p>
+      <div className="flex gap-4 mt-6">
+        <button
+          onClick={createCollage}
+          className="px-4 py-2 bg-blue-600 text-white rounded shadow"
+        >
+          Create Collage
+        </button>
 
-        {vehicle.trim && <p><strong>Trim:</strong> {vehicle.trim}</p>}
-        {vehicle.mileage && <p><strong>Mileage:</strong> {vehicle.mileage}</p>}
-        {vehicle.price && <p><strong>Price:</strong> {vehicle.price}</p>}
+        <a
+          href="/vehicles"
+          className="px-4 py-2 bg-gray-700 text-white rounded shadow"
+        >
+          Back
+        </a>
       </div>
     </div>
   );
