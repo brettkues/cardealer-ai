@@ -1,103 +1,60 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "@/lib/firebaseClient";
-import { useRouter } from "next/navigation";
 
-export default function SalesAssistantPage() {
-  const router = useRouter();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [file, setFile] = useState(null);
+export default function SalesAssistant() {
+  const [msg, setMsg] = useState("");
+  const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  if (typeof window !== "undefined" && !auth.currentUser) {
-    router.push("/auth/login");
-  }
-
   async function sendMessage() {
-    if (!input && !file) return;
+    if (!msg) return;
 
+    const newChat = [...chat, { role: "user", content: msg }];
+    setChat(newChat);
+    setMsg("");
     setLoading(true);
-
-    let imageDataUrl = null;
-
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise((resolve) => {
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-      imageDataUrl = dataUrl;
-    }
-
-    const newMsg = { role: "user", content: input };
-    if (imageDataUrl) newMsg.imageDataUrl = imageDataUrl;
-
-    setMessages((prev) => [...prev, newMsg]);
 
     const res = await fetch("/api/sales-assistant", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: messages.concat(newMsg).map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        imageDataUrl,
-        systemPrompt:
-          "You are a dealership Sales Assistant. Respond clearly and helpfully.",
-      }),
+      body: JSON.stringify({ messages: newChat })
     });
 
     const data = await res.json();
 
-    setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-
-    setInput("");
-    setFile(null);
+    setChat([...newChat, { role: "assistant", content: data.reply }]);
     setLoading(false);
   }
 
   return (
-    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
-      <h1 className="text-3xl font-bold mb-4">Sales Assistant</h1>
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Sales Assistant</h1>
 
-      <div className="h-64 overflow-y-auto border p-3 mb-4 rounded bg-gray-50">
-        {messages.map((msg, i) => (
-          <div key={i} className="mb-4">
-            <strong>{msg.role === "user" ? "You" : "Assistant"}:</strong>
-            <p>{msg.content}</p>
+      <div className="space-y-4">
+        <div className="border rounded p-4 h-96 overflow-auto bg-white">
+          {chat.map((m, i) => (
+            <div key={i} className="mb-3">
+              <b>{m.role === "user" ? "You" : "AI"}:</b> {m.content}
+            </div>
+          ))}
+          {loading && <div>AI is typing...</div>}
+        </div>
 
-            {msg.imageDataUrl && (
-              <img src={msg.imageDataUrl} className="max-h-32 mt-2" />
-            )}
-          </div>
-        ))}
-        {loading && <p>Thinking…</p>}
+        <div className="flex gap-2">
+          <input
+            className="flex-1 p-3 border rounded"
+            placeholder="Ask something..."
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+          />
+          <button
+            onClick={sendMessage}
+            className="px-4 bg-blue-600 text-white rounded"
+          >
+            Send
+          </button>
+        </div>
       </div>
-
-      <textarea
-        className="w-full p-3 border rounded mb-3"
-        rows={3}
-        placeholder="Type message..."
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
-
-      <input
-        type="file"
-        className="mb-3"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-      />
-
-      <button
-        onClick={sendMessage}
-        disabled={loading}
-        className="w-full bg-blue-600 text-white py-2 rounded"
-      >
-        {loading ? "Sending..." : "Send"}
-      </button>
     </div>
   );
 }
