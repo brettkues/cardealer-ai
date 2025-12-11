@@ -2,16 +2,8 @@
 const nextConfig = {
   reactStrictMode: false,
   experimental: {
-    serverActions: true,
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/__/auth/:path*",
-        destination: "/__/auth/:path*",
-      },
-    ];
-  },
+    serverComponentsExternalPackages: ["@napi-rs/canvas"]
+  }
 };
 
 module.exports = nextConfig;
