@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db, storage } from "../../../lib/firebase";
+import { db } from "../../../lib/firebase";
 import {
   collection,
   addDoc,
@@ -7,8 +7,8 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
+// GET — list training files
 export async function GET() {
   try {
     const snap = await getDocs(collection(db, "training"));
@@ -19,49 +19,49 @@ export async function GET() {
   }
 }
 
+// POST — add a new file metadata record (upload happens client-side)
 export async function POST(req) {
   try {
-    const form = await req.formData();
-    const file = form.get("file");
-    const bytes = await file.arrayBuffer();
+    const { name, url } = await req.json();
 
-    const fileRef = ref(storage, `training/${Date.now()}-${file.name}`);
-    await uploadBytes(fileRef, Buffer.from(bytes));
-    const url = await getDownloadURL(fileRef);
+    if (!name || !url) {
+      return NextResponse.json(
+        { error: "Missing name or URL" },
+        { status: 400 }
+      );
+    }
 
     const docRef = await addDoc(collection(db, "training"), {
-      name: file.name,
+      name,
       url,
+      createdAt: Date.now(),
     });
 
     return NextResponse.json({
       id: docRef.id,
-      name: file.name,
+      name,
       url,
     });
   } catch (err) {
     return NextResponse.json(
-      { error: "Upload failed" },
+      { error: "Insert failed" },
       { status: 500 }
     );
   }
 }
 
+// DELETE — delete Firestore entry only
 export async function DELETE(req) {
   try {
     const { id } = await req.json();
-    const snap = await getDocs(collection(db, "training"));
-    const target = snap.docs.find((d) => d.id === id);
 
-    if (!target) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!id) {
+      return NextResponse.json(
+        { error: "Missing ID" },
+        { status: 400 }
+      );
     }
 
-    const url = target.data().url;
-    const path = url.split("/o/")[1].split("?")[0];
-    const decoded = decodeURIComponent(path);
-
-    await deleteObject(ref(storage, decoded));
     await deleteDoc(doc(db, "training", id));
 
     return NextResponse.json({ success: true });
