@@ -1,44 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { auth, db } from "../../../lib/firebase";
+import { auth } from "../../../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-
-  async function handleLogin() {
-    setError("");
+  async function login() {
+    setErr("");
 
     try {
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
-      const u = userCred.user;
-
-      const snap = await getDoc(doc(db, "users", u.uid));
-      const role = snap.exists() ? snap.data().role : "user";
-
-      document.cookie = `loggedIn=true; path=/;`;
-      document.cookie = `email=${u.email}; path=/;`;
-      document.cookie = `role=${role}; path=/;`;
-
+      await signInWithEmailAndPassword(auth, email, pass);
+      document.cookie = `email=${email}; path=/;`;
       router.push("/dashboard");
-    } catch (err) {
-      setError("Invalid email or password.");
+    } catch (e) {
+      setErr("Invalid login.");
     }
   }
 
   return (
     <div className="max-w-md mx-auto mt-20 bg-white shadow p-6 rounded">
-      <h1 className="text-3xl font-bold mb-6">Login</h1>
+      <h1 className="text-3xl font-bold mb-4">Login</h1>
 
       <input
-        type="email"
         className="w-full p-3 border rounded mb-3"
         placeholder="Email"
         value={email}
@@ -49,24 +39,18 @@ export default function LoginPage() {
         type="password"
         className="w-full p-3 border rounded mb-3"
         placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        value={pass}
+        onChange={(e) => setPass(e.target.value)}
       />
 
-      {error && <p className="text-red-600 mb-3">{error}</p>}
+      {err && <p className="text-red-600 mb-3">{err}</p>}
 
       <button
-        onClick={handleLogin}
-        className="w-full bg-blue-600 text-white p-3 rounded mb-4"
+        onClick={login}
+        className="w-full bg-blue-600 text-white p-3 rounded"
       >
         Login
       </button>
-
-      <div className="text-sm">
-        <a href="/auth/reset" className="underline text-blue-700">Forgot password?</a>
-        <br />
-        <a href="/auth/register" className="underline text-blue-700">Create account</a>
-      </div>
     </div>
   );
 }
