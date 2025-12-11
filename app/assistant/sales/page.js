@@ -7,7 +7,7 @@ export default function SalesAssistant() {
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function askAI() {
+  async function askSalesAI() {
     if (!input.trim()) return;
 
     setLoading(true);
@@ -19,8 +19,8 @@ export default function SalesAssistant() {
     });
 
     const data = await res.json();
-
     setOutput(data.response || "No response returned.");
+
     setLoading(false);
   }
 
@@ -30,15 +30,15 @@ export default function SalesAssistant() {
 
       <textarea
         className="w-full p-3 border rounded mb-3 h-32"
-        placeholder="Ask something about sales process, objections, follow-up, scripts..."
+        placeholder="Ask anything related to selling cars, sales steps, follow-up, objections, closing..."
         value={input}
         onChange={(e) => setInput(e.target.value)}
       />
 
       <button
-        className="w-full bg-blue-600 text-white p-3 rounded mb-4"
-        onClick={askAI}
+        onClick={askSalesAI}
         disabled={loading}
+        className="w-full bg-blue-600 text-white p-3 rounded mb-4"
       >
         {loading ? "Thinking..." : "Ask"}
       </button>
