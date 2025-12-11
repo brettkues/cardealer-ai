@@ -1,90 +1,99 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { auth, db } from "@/lib/firebaseClient";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  doc,
+} from "firebase/firestore";
 
 export default function WebsitesPage() {
-  const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [websites, setWebsites] = useState([]);
-
-  async function load() {
-    const res = await fetch("/api/websites");
-    const data = await res.json();
-    setWebsites(data.websites || []);
-  }
-
-  async function add() {
-    if (!label.trim() || !url.trim()) return;
-
-    await fetch("/api/websites", {
-      method: "POST",
-      body: JSON.stringify({ label, url }),
-    });
-
-    setLabel("");
-    setUrl("");
-
-    await load();
-  }
-
-  async function remove(id) {
-    await fetch("/api/websites", {
-      method: "DELETE",
-      body: JSON.stringify({ id }),
-    });
-
-    await load();
-  }
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    load();
+    const unsub = auth.onAuthStateChanged((u) => {
+      setUser(u);
+
+      if (u) {
+        const ref = collection(db, "users", u.uid, "websites");
+        return onSnapshot(ref, (snap) => {
+          const list = snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }));
+          setWebsites(list);
+        });
+      }
+    });
+
+    return () => unsub();
   }, []);
 
+  async function handleAdd() {
+    if (!user || !url.trim()) return;
+
+    await addDoc(collection(db, "users", user.uid, "websites"), {
+      url,
+      createdAt: Date.now(),
+    });
+
+    setUrl("");
+  }
+
+  async function handleDelete(id) {
+    if (!user) return;
+
+    await deleteDoc(doc(db, "users", user.uid, "websites", id));
+  }
+
+  if (!user) {
+    return (
+      <div className="p-10 text-center text-xl">
+        Please <a href="/login" className="underline text-blue-600">log in</a>.
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-3xl mx-auto mt-10 bg-white shadow p-6 rounded">
-      <h1 className="text-3xl font-bold mb-6">Website Manager</h1>
+    <div className="max-w-2xl mx-auto mt-10 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-semibold mb-4">Website Manager</h1>
 
-      <input
-        className="w-full p-3 border rounded mb-3"
-        placeholder="Label (e.g., Pischke Nissan)"
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-      />
+      <div className="flex gap-2 mb-6">
+        <input
+          className="flex-1 p-3 border rounded"
+          placeholder="Enter dealership website URL"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <button
+          onClick={handleAdd}
+          className="bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700"
+        >
+          Add
+        </button>
+      </div>
 
-      <input
-        className="w-full p-3 border rounded mb-3"
-        placeholder="Website URL"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
-
-      <button
-        onClick={add}
-        className="w-full bg-blue-600 text-white p-3 rounded mb-6"
-      >
-        Add Website
-      </button>
-
-      <div className="space-y-3">
-        {websites.map((w) => (
-          <div
-            key={w.id}
-            className="p-3 border rounded bg-gray-50 flex justify-between items-center"
+      <ul className="space-y-3">
+        {websites.map((site) => (
+          <li
+            key={site.id}
+            className="flex justify-between items-center p-3 border rounded"
           >
-            <div>
-              <div className="font-bold">{w.label}</div>
-              <div className="text-sm text-gray-600">{w.url}</div>
-            </div>
-
+            <span>{site.url}</span>
             <button
-              onClick={() => remove(w.id)}
-              className="bg-red-600 text-white px-3 py-1 rounded"
+              onClick={() => handleDelete(site.id)}
+              className="text-red-600 underline"
             >
               Delete
             </button>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
