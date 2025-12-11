@@ -14,24 +14,20 @@ export default function AdminPage() {
 
   async function updateRole(uid, role) {
     setLoading(true);
-
     await fetch("/api/admin/users", {
       method: "POST",
       body: JSON.stringify({ uid, role }),
     });
-
     await loadUsers();
     setLoading(false);
   }
 
   async function deleteUser(uid) {
     setLoading(true);
-
     await fetch("/api/admin/users", {
       method: "DELETE",
       body: JSON.stringify({ uid }),
     });
-
     await loadUsers();
     setLoading(false);
   }
