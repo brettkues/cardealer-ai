@@ -1,66 +1,114 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { auth } from "@/lib/firebaseClient";
+import { useRouter } from "next/navigation";
 
-export default function FIAssistantPage() {
+export default function FinanceAssistantPage() {
+  const router = useRouter();
+  const fileInputRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [replying, setReplying] = useState(false);
+  const [userInput, setUserInput] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function sendMessage() {
-    if (!input.trim()) return;
+  if (typeof window !== "undefined" && !auth.currentUser) {
+    router.push("/login");
+  }
 
-    const newMessage = { role: "user", content: input };
-    setMessages((prev) => [...prev, newMessage]);
-    setInput("");
-    setReplying(true);
+  const SYSTEM_PROMPT =
+    "You are an expert Finance & Insurance Assistant for an automotive dealership. Provide clear and professional answers. If the user provides an image or document, incorporate it into your response.";
 
-    const res = await fetch("/api/f-i-assistant", {
-      method: "POST",
-      body: JSON.stringify({
-        messages: [...messages, newMessage],
-      }),
-    });
+  async function handleSend() {
+    try {
+      if (!userInput && !uploadFile) return;
 
-    const data = await res.json();
-    const reply = data?.reply || "No response.";
+      setError("");
+      setLoading(true);
 
-    setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    setReplying(false);
+      const newUserMsg = { role: "user", content: userInput || "" };
+      let imageDataUrl = null;
+
+      if (uploadFile) {
+        const file = uploadFile;
+
+        if (file.type.startsWith("image/")) {
+          imageDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          newUserMsg.imageDataUrl = imageDataUrl;
+          newUserMsg.fileName = file.name;
+        } else if (
+          file.type === "text/plain" ||
+          file.type === "application/json"
+        ) {
+          const textContent = await file.text();
+          newUserMsg.fileName = file.name;
+          newUserMsg.content += `\n[File content: ${textContent.slice(
+            0,
+            5000
+          )}]`;
+        } else {
+          newUserMsg.fileName = file.name;
+          newUserMsg.content += `\n[Attached file ${file.name} (${file.type}) attached]`;
+        }
+      }
+
+      setMessages((prev) => [...prev, newUserMsg]);
+      setUserInput("");
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      const body = {
+        messages: messages.concat(newUserMsg).map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        imageDataUrl,
+        systemPrompt: SYSTEM_PROMPT,
+      };
+
+      const res = await fetch("/api/f-i-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+
+      const data = await res.json();
+
+      const assistantMsg = { role: "assistant", content: data.reply };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      setError(err.message || "Sending failed.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-semibold mb-6">F&I Assistant</h1>
+    <div style={{ maxWidth: "600px", margin: "2rem auto" }}>
+      <h2>F&I Assistant</h2>
 
-      {/* Chat history */}
-      <div className="border rounded h-80 p-3 overflow-y-auto bg-white mb-4">
-        {messages.map((m, i) => (
-          <div key={i} className="mb-3">
-            <strong>{m.role === "user" ? "You" : "Assistant"}:</strong>
-            <p>{m.content}</p>
-          </div>
-        ))}
-
-        {replying && <p className="text-gray-500">Assistant is typing…</p>}
-      </div>
-
-      {/* Input and send button */}
-      <div className="flex gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          className="flex-1 border rounded p-2"
-          placeholder="Ask an F&I question..."
-        />
-        <button
-          onClick={sendMessage}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
+      <div
+        style={{
+          border: "1px solid #ccc",
+          padding: "1rem",
+          minHeight: "300px",
+          marginBottom: "1rem",
+        }}
+      >
+        {messages.map((msg, i) => (
+          <div key={i} style={{ marginBottom: "1rem" }}>
+            <strong>{msg.role === "assistant" ? "Assistant:" : "You:"}</strong>
+            <p>{msg.content}</p>
+            {msg.imageDataUrl && (
+              <img
+                src={msg.imageDataUrl}
