@@ -48,29 +48,31 @@ export default function ImageGenerator() {
     setLogos(arr);
   }
 
-  // -------------------------------
+  // --------------------------
   // WEBSITE MANAGEMENT
-  // -------------------------------
+  // --------------------------
 
   async function addWebsite() {
     if (!newWebsiteName || !newWebsiteURL) return;
+
     await addDoc(collection(db, "websites"), {
       name: newWebsiteName,
       url: newWebsiteURL,
     });
+
     setNewWebsiteName("");
     setNewWebsiteURL("");
-    await loadWebsites();
+    loadWebsites();
   }
 
   async function removeWebsite(id) {
     await deleteDoc(doc(db, "websites", id));
-    await loadWebsites();
+    loadWebsites();
   }
 
-  // -------------------------------
+  // --------------------------
   // LOGO MANAGEMENT
-  // -------------------------------
+  // --------------------------
 
   async function uploadLogo() {
     if (!logoUploadFile) return;
@@ -84,7 +86,7 @@ export default function ImageGenerator() {
       });
 
       setLogoUploadFile(null);
-      await loadLogos();
+      loadLogos();
     };
 
     reader.readAsDataURL(logoUploadFile);
@@ -92,33 +94,33 @@ export default function ImageGenerator() {
 
   async function deleteLogo(id) {
     await deleteDoc(doc(db, "logos", id));
-    await loadLogos();
-    setSelectedLogos(selectedLogos.filter((l) => l !== id));
+    setSelectedLogos(selectedLogos.filter((x) => x !== id));
+    loadLogos();
   }
 
   function toggleLogo(id) {
     if (selectedLogos.includes(id)) {
-      setSelectedLogos(selectedLogos.filter((x) => x !== id));
+      setSelectedLogos(selectedLogos.filter((l) => l !== id));
     } else {
       if (selectedLogos.length >= 3) return;
       setSelectedLogos([...selectedLogos, id]);
     }
   }
 
-  // -------------------------------
-  // GENERATE IMAGE
-  // -------------------------------
+  // --------------------------
+  // IMAGE GENERATION
+  // --------------------------
 
   async function generateImage() {
-    setResultImage(null);
     setLoading(true);
+    setResultImage(null);
 
-    const websiteToUse = manualURL.trim() || selectedWebsite;
+    const siteToUse = manualURL.trim() || selectedWebsite;
 
     const lookup = await fetch("/api/lookupVehicle", {
       method: "POST",
       body: JSON.stringify({
-        website: websiteToUse,
+        website: siteToUse,
         identifier,
       }),
     });
@@ -145,48 +147,42 @@ export default function ImageGenerator() {
 
     const result = await build.json();
     setResultImage(result.output);
+
     setLoading(false);
   }
 
-  // -------------------------------
-  // RENDER TABS
-  // -------------------------------
+  // --------------------------
+  // RENDER PAGE
+  // --------------------------
 
   return (
     <div className="max-w-2xl mx-auto p-6">
 
       {/* TABS */}
-      <div className="flex gap-4 mb-6 border-b pb-2">
+      <div className="flex gap-6 mb-6 border-b pb-2 text-lg font-medium">
         <button
           onClick={() => setTab("generate")}
-          className={`pb-2 ${
-            tab === "generate" ? "border-b-2 border-blue-600 font-bold" : ""
-          }`}
+          className={tab === "generate" ? "border-b-2 border-blue-600 pb-2" : ""}
         >
           Generate Image
         </button>
 
         <button
           onClick={() => setTab("websites")}
-          className={`pb-2 ${
-            tab === "websites" ? "border-b-2 border-blue-600 font-bold" : ""
-          }`}
+          className={tab === "websites" ? "border-b-2 border-blue-600 pb-2" : ""}
         >
           Websites
         </button>
 
         <button
           onClick={() => setTab("logos")}
-          className={`pb-2 ${
-            tab === "logos" ? "border-b-2 border-blue-600 font-bold" : ""
-          }`}
+          className={tab === "logos" ? "border-b-2 border-blue-600 pb-2" : ""}
         >
           Logo Vault
         </button>
       </div>
 
-      {/* TAB CONTENT */}
-
+      {/* ---------------- GENERATE TAB ---------------- */}
       {tab === "generate" && (
         <div className="space-y-6">
 
@@ -229,7 +225,7 @@ export default function ImageGenerator() {
 
           {/* CAPTION */}
           <div>
-            <label className="font-semibold">Caption (85 chars max)</label>
+            <label className="font-semibold">Caption (85 characters max)</label>
             <input
               maxLength={85}
               className="w-full p-3 border rounded mt-1"
@@ -240,8 +236,23 @@ export default function ImageGenerator() {
 
           {/* LOGO SELECTION */}
           <div>
-            <label className="font-semibold">Select up to 3 logos</label>
+            <label className="font-semibold flex justify-between">
+              <span>Select up to 3 logos</span>
+              <button
+                onClick={() => setTab("logos")}
+                className="text-blue-600 underline text-sm"
+              >
+                Manage Logos
+              </button>
+            </label>
+
             <div className="grid grid-cols-3 gap-3 mt-2">
+              {logos.length === 0 && (
+                <div className="col-span-3 text-center text-gray-600 text-sm">
+                  No logos uploaded yet. Click “Manage Logos” to add some.
+                </div>
+              )}
+
               {logos.map((l) => (
                 <div
                   key={l.id}
@@ -280,12 +291,10 @@ export default function ImageGenerator() {
         </div>
       )}
 
-      {/* ---------------------- */}
-      {/* WEBSITES TAB */}
-      {/* ---------------------- */}
-
+      {/* ---------------- WEBSITES TAB ---------------- */}
       {tab === "websites" && (
         <div className="space-y-6">
+
           <div>
             <label className="font-semibold">Website Name</label>
             <input
@@ -315,16 +324,16 @@ export default function ImageGenerator() {
             {websites.map((w) => (
               <div
                 key={w.id}
-                className="flex justify-between items-center border p-3 rounded"
+                className="border p-3 rounded flex justify-between"
               >
                 <div>
                   <div className="font-semibold">{w.name}</div>
-                  <div className="text-sm text-gray-700">{w.url}</div>
+                  <div className="text-sm text-gray-600">{w.url}</div>
                 </div>
 
                 <button
-                  onClick={() => removeWebsite(w.id)}
                   className="bg-red-600 text-white px-3 py-1 rounded"
+                  onClick={() => removeWebsite(w.id)}
                 >
                   Delete
                 </button>
@@ -334,12 +343,10 @@ export default function ImageGenerator() {
         </div>
       )}
 
-      {/* ---------------------- */}
-      {/* LOGO VAULT TAB */}
-      {/* ---------------------- */}
-
+      {/* ---------------- LOGO VAULT TAB ---------------- */}
       {tab === "logos" && (
         <div className="space-y-6">
+
           <div>
             <label className="font-semibold">Upload Logo</label>
             <input
@@ -364,13 +371,14 @@ export default function ImageGenerator() {
 
                 <button
                   onClick={() => deleteLogo(l.id)}
-                  className="absolute top-1 right-1 bg-red-600 text-white rounded px-2 py-1 text-xs"
+                  className="absolute top-1 right-1 bg-red-600 text-white rounded px-2 py-0.5 text-xs"
                 >
                   X
                 </button>
               </div>
             ))}
           </div>
+
         </div>
       )}
 
