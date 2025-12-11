@@ -1,3 +1,5 @@
+export const runtime = "nodejs"; // Required for canvas on Vercel
+
 import { NextResponse } from "next/server";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
@@ -21,7 +23,7 @@ export async function POST(req) {
     const canvas = createCanvas(850, 850);
     const ctx = canvas.getContext("2d");
 
-    // BACKGROUND
+    // Background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, 850, 850);
 
@@ -32,12 +34,12 @@ export async function POST(req) {
 
     const valid = loaded.filter(Boolean).slice(0, 4);
 
-    // Draw 4 images in 2×2 grid
+    // Layout positions
     const positions = [
-      [0, 0],         // top left
-      [425, 0],       // top right
-      [0, 425],       // bottom left
-      [425, 425]      // bottom right
+      [0, 0],         // top-left
+      [425, 0],       // top-right
+      [0, 425],       // bottom-left
+      [425, 425]      // bottom-right
     ];
 
     valid.forEach((img, i) => {
@@ -45,17 +47,17 @@ export async function POST(req) {
       ctx.drawImage(img, x, y, 425, 425);
     });
 
-    // RIBBON BAR
+    // Ribbon bar
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(0, 390, 850, 70);
 
-    // Ribbon text (centered)
+    // Ribbon text
     ctx.font = "28px sans-serif";
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.fillText(ribbonText || ymm || "", 425, 432);
 
-    // DISCLOSURE (if any)
+    // Disclosure
     if (disclosure) {
       ctx.font = "16px sans-serif";
       ctx.fillStyle = "#000000";
@@ -63,7 +65,7 @@ export async function POST(req) {
       ctx.fillText(disclosure, 10, 840);
     }
 
-    // LOGOS
+    // Logos
     if (logos && Array.isArray(logos)) {
       let offsetX = 20;
 
