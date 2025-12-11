@@ -6,18 +6,18 @@ import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
 
-  async function handleReset() {
-    setMessage("");
-    setError("");
+  async function reset() {
+    setMsg("");
+    setErr("");
 
     try {
       await sendPasswordResetEmail(auth, email);
-      setMessage("Password reset email sent.");
-    } catch (err) {
-      setError("Could not send reset email.");
+      setMsg("Password reset email sent.");
+    } catch (e) {
+      setErr("Unable to send reset email.");
     }
   }
 
@@ -33,15 +33,15 @@ export default function ResetPage() {
         onChange={(e) => setEmail(e.target.value)}
       />
 
+      {msg && <p className="text-green-600 mb-3">{msg}</p>}
+      {err && <p className="text-red-600 mb-3">{err}</p>}
+
       <button
-        onClick={handleReset}
+        onClick={reset}
         className="w-full bg-blue-600 text-white p-3 rounded"
       >
         Send Reset Email
       </button>
-
-      {message && <p className="text-green-600 mt-3">{message}</p>}
-      {error && <p className="text-red-600 mt-3">{error}</p>}
     </div>
   );
 }
