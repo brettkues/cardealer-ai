@@ -6,132 +6,94 @@ import {
   collection,
   addDoc,
   deleteDoc,
-  doc,
   onSnapshot,
+  doc,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-export default function WebsitesManagerPage() {
+export default function WebsitesPage() {
   const router = useRouter();
-
-  const [sites, setSites] = useState([]);
-  const [newName, setNewName] = useState("");
-  const [newUrl, setNewUrl] = useState("");
-  const [error, setError] = useState("");
+  const [websites, setWebsites] = useState([]);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
 
   useEffect(() => {
-    if (!auth.currentUser) {
-      router.push("/login");
-    }
-  }, [router]);
+    if (!auth.currentUser) router.push("/auth/login");
+  }, []);
 
   useEffect(() => {
-    const colRef = collection(db, "websites");
-
-    const unsub = onSnapshot(
-      colRef,
-      (snapshot) => {
-        const list = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
-        setSites(list);
-      },
-      () => {
-        setError("Failed to load websites.");
-      }
-    );
-
+    const ref = collection(db, "websites");
+    const unsub = onSnapshot(ref, (snap) => {
+      setWebsites(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
     return () => unsub();
   }, []);
 
-  async function handleAdd(e) {
-    e.preventDefault();
-    setError("");
-
-    if (!newName.trim() || !newUrl.trim()) {
-      setError("Name and URL required.");
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, "websites"), {
-        name: newName.trim(),
-        url: newUrl.trim(),
-      });
-
-      setNewName("");
-      setNewUrl("");
-    } catch {
-      setError("Failed to add website.");
-    }
+  async function addWebsite() {
+    if (!name.trim() || !url.trim()) return;
+    await addDoc(collection(db, "websites"), { name, url });
+    setName("");
+    setUrl("");
   }
 
-  async function handleDelete(id) {
-    try {
-      await deleteDoc(doc(db, "websites", id));
-    } catch {
-      alert("Failed to delete.");
-    }
-  }
-
-  async function handleLogout() {
-    await auth.signOut();
-    router.push("/login");
+  async function removeWebsite(id) {
+    await deleteDoc(doc(db, "websites", id));
   }
 
   return (
-    <div style={{ maxWidth: "600px", margin: "2rem auto" }}>
-      <h2>Website Manager</h2>
-      <button
-        onClick={handleLogout}
-        style={{ float: "right", marginTop: "-2.5rem" }}
-      >
-        Log Out
-      </button>
+    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
 
-      <div style={{ marginBottom: "1.5rem", clear: "both" }}>
-        <form onSubmit={handleAdd} style={{ display: "flex", gap: "0.5rem" }}>
-          <input
-            type="text"
-            placeholder="Website Name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <input
-            type="url"
-            placeholder="https://website.com"
-            value={newUrl}
-            onChange={(e) => setNewUrl(e.target.value)}
-            style={{ flex: 2 }}
-          />
-          <button type="submit">Add</button>
-        </form>
+      <h1 className="text-3xl font-bold mb-4">Website Manager</h1>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
+      <div className="flex flex-col gap-3 mb-6">
+        <input
+          className="p-3 border rounded"
+          placeholder="Website Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="p-3 border rounded"
+          placeholder="https://example.com"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+
+        <button
+          className="w-full bg-blue-600 text-white py-2 rounded"
+          onClick={addWebsite}
+        >
+          Add Website
+        </button>
       </div>
 
-      {sites.length === 0 ? (
-        <p>No websites added.</p>
-      ) : (
-        <ul>
-          {sites.map((site) => (
-            <li key={site.id} style={{ marginBottom: "0.5rem" }}>
-              <strong>{site.name}:</strong>{" "}
-              <a href={site.url} target="_blank">
+      <div className="space-y-4">
+        {websites.map((site) => (
+          <div
+            key={site.id}
+            className="p-4 border rounded flex justify-between items-center"
+          >
+            <div>
+              <p className="font-semibold">{site.name}</p>
+              <a
+                href={site.url}
+                className="text-blue-600 underline"
+                target="_blank"
+              >
                 {site.url}
               </a>
-              <button
-                onClick={() => handleDelete(site.id)}
-                style={{ marginLeft: "1rem" }}
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
+
+            <button
+              className="text-red-600 underline"
+              onClick={() => removeWebsite(site.id)}
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }
