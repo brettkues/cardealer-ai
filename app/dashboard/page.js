@@ -29,19 +29,27 @@ export default function Dashboard() {
         <p className="text-lg">
           Logged in as <strong>{email}</strong>
         </p>
-        <p className="text-lg capitalize">Role: <strong>{role}</strong></p>
+        <p className="text-lg capitalize">
+          Role: <strong>{role}</strong>
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/vehicles">Vehicle Browser</a>
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/social">Social Generator</a>
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/websites">Website Manager</a>
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/logos">Logo Manager</a>
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/assistant/sales">Sales Assistant</a>
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/assistant/fi">F&I Assistant</a>
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/manager/train">Training Manager</a>
+        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/websites">
+          Website Manager
+        </a>
 
-        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/admin">Admin Panel</a>
+        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/logos">
+          Logo Manager
+        </a>
+
+        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/assistant/sales">
+          Sales Assistant
+        </a>
+
+        <a className="p-4 bg-gray-100 rounded shadow text-center" href="/assistant/fi">
+          F&I Assistant
+        </a>
       </div>
     </div>
   );
