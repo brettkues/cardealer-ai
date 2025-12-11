@@ -1,48 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../../../lib/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const router = useRouter();
-
-  const handleRegister = async () => {
+  async function handleRegister() {
     setError("");
 
     try {
-      const userCred = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const u = userCred.user;
 
-      const uid = userCred.user.uid;
-
-      await setDoc(doc(db, "users", uid), {
-        email: email,
+      await setDoc(doc(db, "users", u.uid), {
+        email: u.email,
         role: "user",
       });
 
       document.cookie = `loggedIn=true; path=/;`;
+      document.cookie = `email=${u.email}; path=/;`;
       document.cookie = `role=user; path=/;`;
 
       router.push("/dashboard");
     } catch (err) {
-      console.error("REGISTER ERROR:", err);
-      setError(err.message || "Unable to register.");
+      setError("Registration failed.");
     }
-  };
+  }
 
   return (
-    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
-      <h1 className="text-2xl mb-4">Create Account</h1>
+    <div className="max-w-md mx-auto mt-20 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-bold mb-6">Create Account</h1>
 
       <input
         type="email"
@@ -64,17 +59,14 @@ export default function RegisterPage() {
 
       <button
         onClick={handleRegister}
-        className="w-full bg-green-600 text-white p-3 rounded"
+        className="w-full bg-green-600 text-white p-3 rounded mb-4"
       >
         Register
       </button>
 
-      <button
-        onClick={() => router.push("/auth/login")}
-        className="w-full mt-3 underline text-sm"
-      >
-        Back to login
-      </button>
+      <div className="text-sm">
+        <a href="/auth/login" className="underline text-blue-700">Already have an account?</a>
+      </div>
     </div>
   );
 }
