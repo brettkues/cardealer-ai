@@ -1,24 +1,36 @@
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function POST(req) {
   try {
-    const { message } = await req.json();
+    const { prompt } = await req.json();
 
-    if (!message) {
+    if (!prompt || prompt.trim() === "") {
       return NextResponse.json(
-        { error: "No message provided." },
+        { error: "Missing prompt." },
         { status: 400 }
       );
     }
 
-    // Temporary placeholder response
-    return NextResponse.json({
-      reply: `F&I Assistant received: ${message}`
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are an automotive F&I expert. You explain service contracts, GAP, tire & wheel, maintenance plans, and compliance rules clearly and accurately." },
+        { role: "user", content: prompt }
+      ],
+      max_tokens: 300
     });
 
+    const text = completion.choices?.[0]?.message?.content || "";
+
+    return NextResponse.json({ response: text });
   } catch (err) {
     return NextResponse.json(
-      { error: "Assistant error" },
+      { error: "AI request failed" },
       { status: 500 }
     );
   }
