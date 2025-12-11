@@ -3,10 +3,10 @@
 import "./globals.css";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth, db } from "../lib/firebase";
+import { auth, db } from "@/lib/firebaseClient";
 import { doc, getDoc } from "firebase/firestore";
-import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function RootLayout({ children }) {
   const [user, setUser] = useState(null);
@@ -70,20 +70,26 @@ export default function RootLayout({ children }) {
 
         {!isAuthPage && user && (
           <>
-            <nav className="w-full bg-black text-white p-4 flex gap-4">
-              <Link href="/dashboard">Dashboard</Link>
-              <Link href="/websites">Websites</Link>
-              <Link href="/logos">Logos</Link>
+            {/* TOP NAVIGATION */}
+            <nav className="w-full bg-black text-white p-4 flex gap-6 text-lg font-medium">
+
+              <Link href="/image-generator">Image Generator</Link>
+
               <Link href="/assistant/sales">Sales Assistant</Link>
+
               <Link href="/assistant/fi">F&I Assistant</Link>
 
               {(role === "manager" || role === "admin") && (
-                <Link href="/manager/train">Training</Link>
+                <Link href="/train">Train Your AI</Link>
               )}
 
-              {role === "admin" && <Link href="/admin">Admin</Link>}
+              {role === "admin" && (
+                <Link href="/admin">Admin Panel</Link>
+              )}
+
             </nav>
 
+            {/* USER HEADER */}
             <header className="bg-white shadow p-4 flex justify-between items-center">
               <div>
                 Logged in as: {user.email} ({role})
@@ -99,7 +105,8 @@ export default function RootLayout({ children }) {
           </>
         )}
 
-        <div className="p-4">{children}</div>
+        <div className="p-6">{children}</div>
+
       </body>
     </html>
   );
