@@ -1,39 +1,43 @@
 import { NextResponse } from "next/server";
 import { db } from "../../../lib/firebase";
-import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 
 export async function GET() {
-  const snapshot = await getDocs(collection(db, "logos"));
-  const logos = snapshot.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  }));
-  return NextResponse.json({ logos });
+  const snap = await getDocs(collection(db, "logos"));
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return NextResponse.json({ logos: list });
 }
 
 export async function POST(req) {
-  const { url } = await req.json();
+  const form = await req.formData();
+  const file = form.get("file");
 
-  if (!url) {
-    return NextResponse.json({ error: "Missing URL" }, { status: 400 });
-  }
+  const buffer = await file.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+  const mime = file.type;
 
-  await addDoc(collection(db, "logos"), {
+  const url = `data:${mime};base64,${base64}`;
+
+  const ref = await addDoc(collection(db, "logos"), {
+    name: file.name,
     url,
-    createdAt: Date.now(),
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    id: ref.id,
+    name: file.name,
+    url,
+  });
 }
 
 export async function DELETE(req) {
   const { id } = await req.json();
-
-  if (!id) {
-    return NextResponse.json({ error: "Missing ID" }, { status: 400 });
-  }
-
   await deleteDoc(doc(db, "logos", id));
-
   return NextResponse.json({ success: true });
 }
