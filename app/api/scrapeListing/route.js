@@ -1,70 +1,107 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parse } from "node-html-parser";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req = new NextRequest()) {
   try {
-    const { messages, imageDataUrl, systemPrompt } = await req.json();
+    const { url } = await req.json();
 
-    if (!messages || !systemPrompt) {
-      return NextResponse.json(
-        { error: "Invalid request payload" },
-        { status: 400 }
-      );
+    if (!url) {
+      return NextResponse.json({ error: "Missing URL" }, { status: 400 });
     }
 
-    const apiMessages = [];
-
-    apiMessages.push({ role: "system", content: systemPrompt });
-
-    for (const msg of messages) {
-      if (msg.role === "user" && imageDataUrl) {
-        const textPart = msg.content || "";
-
-        const contentParts = [];
-        if (textPart.trim()) {
-          contentParts.push({ type: "text", text: textPart });
-        }
-
-        contentParts.push({
-          type: "image_url",
-          image_url: { url: imageDataUrl },
-        });
-
-        apiMessages.push({ role: "user", content: contentParts });
-      } else {
-        apiMessages.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("Missing OpenAI API key");
-
-    const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4-vision",
-        messages: apiMessages,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!openAiRes.ok) {
-      const err = await openAiRes.text();
+    const res = await fetch(url);
+    if (!res.ok) {
       return NextResponse.json(
-        { error: "OpenAI API call failed", details: err },
+        { error: "Failed to fetch URL" },
         { status: 500 }
       );
     }
 
-    const completion = await openAiRes.json();
-    const assistantReply = completion?.choices?.[0]?.message?.content;
+    const html = await res.text();
+    const root = parse(html);
 
-    if (!assistantReply) {
-      return NextResponse.json({ error: "No reply from AI" }, { status: 500 });
+    let titleText = root.querySelector("title")?.innerText || "";
+    const ogTitle = root
+      .querySelector('meta[property="og:title"]')
+      ?.getAttribute("content");
+    if (ogTitle) titleText = ogTitle;
+
+    const ldScripts = root.querySelectorAll(
+      'script[type="application/ld+json"]'
+    );
+
+    for (const script of ldScripts) {
+      try {
+        const data = JSON.parse(script.innerText);
+        if (
+          data["@type"] === "Vehicle" ||
+          data["@type"] === "Car" ||
+          data["@type"] === "Product"
+        ) {
+          if (typeof data.name === "string" && data.name.length > 0) {
+            titleText = data.name;
+            break;
+          }
+        }
+      } catch {}
     }
 
-    return NextResponse.json({ reply: assistantReply });
-  } catc
+    let year = "";
+    let make = "";
+    let model = "";
+
+    if (titleText) {
+      const match = titleText.match(
+        /^(?<year>\d{4})\s+(?<make>\w+)\s+(?<model>.+)/
+      );
+
+      if (match?.groups) {
+        ({ year, make, model } = match.groups);
+      } else {
+        const parts = titleText.split(" ");
+        if (parts.length >= 3) {
+          year = parts[0];
+          make = parts[1];
+          model = parts.slice(2).join(" ");
+        } else {
+          model = titleText;
+        }
+      }
+    }
+
+    const images = [];
+
+    root.querySelectorAll('meta[property="og:image"]').forEach((tag) => {
+      const src = tag.getAttribute("content");
+      if (src) images.push(src);
+    });
+
+    if (images.length === 0) {
+      root.querySelectorAll("img").forEach((img) => {
+        const src = img.getAttribute("src");
+        if (
+          src &&
+          src.startsWith("http") &&
+          !src.toLowerCase().includes("logo") &&
+          images.length < 5
+        ) {
+          images.push(src);
+        }
+      });
+    }
+
+    return NextResponse.json({
+      year,
+      make,
+      model,
+      images,
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
+}
