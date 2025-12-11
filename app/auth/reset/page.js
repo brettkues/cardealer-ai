@@ -1,44 +1,37 @@
 "use client";
 
 import { useState } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../../lib/firebase";
-import { useRouter } from "next/navigation";
+import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const router = useRouter();
-
-  const handleReset = async () => {
-    setError("");
+  async function handleReset() {
     setMessage("");
+    setError("");
 
     try {
       await sendPasswordResetEmail(auth, email);
       setMessage("Password reset email sent.");
     } catch (err) {
-      console.error("RESET ERROR:", err);
-      setError("Unable to send reset email.");
+      setError("Could not send reset email.");
     }
-  };
+  }
 
   return (
-    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
-      <h1 className="text-2xl mb-4">Reset Password</h1>
+    <div className="max-w-md mx-auto mt-20 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-bold mb-4">Reset Password</h1>
 
       <input
         type="email"
         className="w-full p-3 border rounded mb-3"
-        placeholder="Email"
+        placeholder="Enter your email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-
-      {message && <p className="text-green-600 mb-3">{message}</p>}
-      {error && <p className="text-red-600 mb-3">{error}</p>}
 
       <button
         onClick={handleReset}
@@ -47,12 +40,8 @@ export default function ResetPage() {
         Send Reset Email
       </button>
 
-      <button
-        onClick={() => router.push("/auth/login")}
-        className="w-full mt-3 underline text-sm"
-      >
-        Back to login
-      </button>
+      {message && <p className="text-green-600 mt-3">{message}</p>}
+      {error && <p className="text-red-600 mt-3">{error}</p>}
     </div>
   );
 }
