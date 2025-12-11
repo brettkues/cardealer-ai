@@ -1,13 +1,10 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import axios from "axios";
-import * as cheerio from "cheerio";
 
 export async function POST(req) {
   try {
     const { url } = await req.json();
-
     if (!url) {
       return NextResponse.json({ error: "URL required" }, { status: 400 });
     }
@@ -17,24 +14,25 @@ export async function POST(req) {
     let loops = 0;
 
     while (nextPage && loops < 5) {
-      const { data } = await axios.get(nextPage);
-      const $ = cheerio.load(data);
+      const html = await fetch(nextPage).then((r) => r.text());
+      const dom = new JSDOM(html);
+      const doc = dom.window.document;
 
-      $(".vehicle-card, .result-item, .inventory-card").each((i, el) => {
-        const year = $(el).find(".year, .vehicle-year").text().trim();
-        const make = $(el).find(".make, .vehicle-make").text().trim();
-        const model = $(el).find(".model, .vehicle-model").text().trim();
+      const items = doc.querySelectorAll(
+        ".vehicle-card, .result-item, .inventory-card"
+      );
 
-        const photos = [];
-        $(el)
-          .find("img")
-          .each((_, img) => {
-            const src =
-              $(img).attr("data-src") ||
-              $(img).attr("src") ||
-              "";
-            if (src && src.startsWith("http")) photos.push(src);
-          });
+      items.forEach((el, i) => {
+        const year =
+          el.querySelector(".year, .vehicle-year")?.textContent.trim() || "";
+        const make =
+          el.querySelector(".make, .vehicle-make")?.textContent.trim() || "";
+        const model =
+          el.querySelector(".model, .vehicle-model")?.textContent.trim() || "";
+
+        const photos = Array.from(el.querySelectorAll("img"))
+          .map((img) => img.src)
+          .filter((src) => src.startsWith("http"));
 
         if (year && make && model) {
           vehicles.push({
@@ -47,21 +45,27 @@ export async function POST(req) {
         }
       });
 
-      const nextBtn =
-        $("a.next, a[rel='next']").attr("href") ||
-        $(".pagination .next a").attr("href");
+      const nextLink =
+        doc.querySelector("a.next, a[rel='next'], .pagination .next a")?.href ||
+        "";
 
-      if (!nextBtn) break;
+      if (!nextLink) break;
 
-      nextPage = nextBtn.startsWith("http")
-        ? nextBtn
-        : new URL(nextBtn, url).toString();
+      nextPage = nextLink.startsWith("http")
+        ? nextLink
+        : new URL(nextLink, nextPage).toString();
 
       loops++;
     }
 
     return NextResponse.json({ vehicles });
   } catch (err) {
-    return NextResponse.json({ error: "Scraper failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Scraper failed" },
+      { status: 500 }
+    );
   }
 }
+
+// Required for DOM parsing without Cheerio
+import { JSDOM } from "jsdom";
