@@ -1,118 +1,131 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth } from "@/lib/firebaseClient";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { saveAs } from "file-saver";
 
 export default function ImageGeneratorPage() {
-  const router = useRouter();
-
   const [caption, setCaption] = useState("");
-  const [selectedWebsite, setSelectedWebsite] = useState("");
-  const [websites, setWebsites] = useState([]);
-
-  const [logoA, setLogoA] = useState(null);
-  const [logoB, setLogoB] = useState(null);
-  const [logoC, setLogoC] = useState(null);
-
   const [vehicleUrl, setVehicleUrl] = useState("");
+  const [site, setSite] = useState("");
+  const [logos, setLogos] = useState([]);
 
-  useEffect(() => {
-    if (!auth.currentUser) router.push("/auth/login");
-  }, []);
+  const [resultImg, setResultImg] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // TEMP — will connect to Firestore later
-  useEffect(() => {
-    setWebsites([
-      { id: "temp1", name: "Example Nissan", url: "https://example.com" },
-      { id: "temp2", name: "Example CDJR", url: "https://example2.com" },
-    ]);
-  }, []);
+  async function handleGenerate() {
+    try {
+      setLoading(true);
+      setResultImg(null);
+
+      // 1. SCRAPE DATA
+      const scrapeRes = await fetch("/api/scrapeListing", {
+        method: "POST",
+        body: JSON.stringify({ url: vehicleUrl })
+      }).then(r => r.json());
+
+      const images = scrapeRes.images || [];
+      const ymm = scrapeRes.ymm || "Vehicle";
+
+      // 2. GET RIBBON DETAILS
+      const ribbonRes = await fetch("/api/ribbon", {
+        method: "POST",
+        body: JSON.stringify({ caption, ymm })
+      }).then(r => r.json());
+
+      // 3. DISCLOSURE ENGINE
+      const discRes = await fetch("/api/disclosure", {
+        method: "POST",
+        body: JSON.stringify({ caption })
+      }).then(r => r.json());
+
+      // Upload logo files to base64
+      const logoFiles = await Promise.all(
+        logos.map(file => fileToBase64(file))
+      );
+
+      // 4. BUILD FINAL IMAGE
+      const finalRes = await fetch("/api/buildImage", {
+        method: "POST",
+        body: JSON.stringify({
+          images,
+          ribbonText: ribbonRes.shortRibbonText,
+          disclosure: discRes.disclosure || "",
+          logos: logoFiles,
+          ymm
+        })
+      });
+
+      const blob = await finalRes.blob();
+      const url = URL.createObjectURL(blob);
+      setResultImg(url);
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate image.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function fileToBase64(file) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Social Image Generator</h1>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
 
-        {/* WEBSITE SELECTOR */}
+        <input
+          className="w-full p-3 border rounded"
+          placeholder="Vehicle URL"
+          value={vehicleUrl}
+          onChange={e => setVehicleUrl(e.target.value)}
+        />
+
+        <input
+          className="w-full p-3 border rounded"
+          placeholder="Caption (85 chars)"
+          maxLength={85}
+          value={caption}
+          onChange={e => setCaption(e.target.value)}
+        />
+
         <div>
-          <label className="block font-semibold mb-2">Select Website</label>
-          <select
-            className="w-full p-3 border rounded"
-            value={selectedWebsite}
-            onChange={(e) => setSelectedWebsite(e.target.value)}
-          >
-            <option value="">Select...</option>
-            {websites.map((w) => (
-              <option key={w.id} value={w.url}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-
-          <a
-            href="/image-generator/websites"
-            className="text-blue-600 underline mt-2 inline-block"
-          >
-            Manage Websites
-          </a>
+          <p className="font-semibold mb-2">Upload up to 3 logos:</p>
+          <input type="file" accept="image/*" onChange={e => setLogos([e.target.files[0]])} />
+          <input type="file" accept="image/*" onChange={e => setLogos(prev => [...prev, e.target.files[0]])} />
+          <input type="file" accept="image/*" onChange={e => setLogos(prev => [...prev, e.target.files[0]])} />
         </div>
 
-        {/* VEHICLE URL */}
-        <div>
-          <label className="block font-semibold mb-2">
-            Vehicle URL (to scrape)
-          </label>
-          <input
-            className="w-full p-3 border rounded"
-            placeholder="Paste vehicle page URL..."
-            value={vehicleUrl}
-            onChange={(e) => setVehicleUrl(e.target.value)}
-          />
-        </div>
-
-        {/* CAPTION */}
-        <div>
-          <label className="block font-semibold mb-2">Caption</label>
-          <input
-            maxLength={85}
-            className="w-full p-3 border rounded"
-            placeholder="Type your caption (85 characters max)"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-          />
-        </div>
-
-        {/* LOGO UPLOADS */}
-        <div>
-          <label className="block font-semibold mb-2">Logos (up to 3)</label>
-
-          <div className="space-y-2">
-            <input type="file" accept="image/*" onChange={(e) => setLogoA(e.target.files?.[0] || null)} />
-            <input type="file" accept="image/*" onChange={(e) => setLogoB(e.target.files?.[0] || null)} />
-            <input type="file" accept="image/*" onChange={(e) => setLogoC(e.target.files?.[0] || null)} />
-
-            <a
-              href="/image-generator/logos"
-              className="text-blue-600 underline mt-2 inline-block"
-            >
-              Manage Logos
-            </a>
-          </div>
-        </div>
-
-        {/* GENERATE BUTTON */}
         <button
+          onClick={handleGenerate}
           className="w-full bg-blue-600 text-white p-3 rounded font-semibold"
         >
-          Generate Image
+          {loading ? "Processing..." : "Generate Image"}
         </button>
 
-        {/* RESULT PREVIEW — PHASE 3 */}
-        <div className="mt-8 border rounded p-4 text-center text-gray-500">
-          Final image preview will appear here.
-        </div>
+        {resultImg && (
+          <div className="mt-6 text-center">
+            <img
+              src={resultImg}
+              className="border rounded shadow"
+              width="425"
+            />
+            <button
+              className="mt-4 bg-green-600 text-white px-6 py-2 rounded"
+              onClick={() => saveAs(resultImg, "facebook-image.jpg")}
+            >
+              Download Image
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );
