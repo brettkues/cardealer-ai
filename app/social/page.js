@@ -7,13 +7,19 @@ export default function SocialImageGenerator() {
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
   const [finalImage, setFinalImage] = useState(null);
-  const [vehiclePhotos, setVehiclePhotos] = useState([]);
+
+  const [vehicle, setVehicle] = useState(null);
+  const [selectedPhotos, setSelectedPhotos] = useState([]);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("collageSource");
     if (stored) {
       const v = JSON.parse(stored);
-      setVehiclePhotos(v.photos || []);
+
+      const best = v.photos?.slice(0, 4) || [];
+
+      setVehicle(v);
+      setSelectedPhotos(best);
     }
   }, []);
 
@@ -23,13 +29,20 @@ export default function SocialImageGenerator() {
     setWebsites(data.websites || []);
   }
 
+  useEffect(() => {
+    loadWebsites();
+  }, []);
+
   async function generateCollage() {
     const res = await fetch("/api/collage", {
       method: "POST",
       body: JSON.stringify({
         url,
         text,
-        photos: vehiclePhotos,
+        photos: selectedPhotos,
+        year: vehicle?.year,
+        make: vehicle?.make,
+        model: vehicle?.model,
       }),
     });
 
@@ -37,24 +50,22 @@ export default function SocialImageGenerator() {
     setFinalImage(data.image || null);
   }
 
-  useEffect(() => {
-    loadWebsites();
-  }, []);
-
   return (
     <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-bold mb-6">Social Image Generator</h1>
 
-      <h1 className="text-3xl font-bold mb-4">Social Image Generator</h1>
-
-      {vehiclePhotos.length > 0 && (
+      {vehicle && (
         <div className="mb-4">
-          <h2 className="text-xl font-semibold mb-2">Vehicle Photos Loaded</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {vehiclePhotos.map((p, i) => (
+          <h2 className="text-xl font-semibold mb-2">
+            {vehicle.year} {vehicle.make} {vehicle.model}
+          </h2>
+
+          <div className="grid grid-cols-2 gap-3">
+            {selectedPhotos.map((p, i) => (
               <img
                 key={i}
                 src={p}
-                className="w-full h-24 object-cover rounded shadow"
+                className="w-full h-32 object-cover rounded shadow"
               />
             ))}
           </div>
@@ -75,7 +86,7 @@ export default function SocialImageGenerator() {
 
       <input
         type="text"
-        placeholder="Or enter a website URL manually..."
+        placeholder="Or enter a URL manually..."
         className="w-full p-3 border rounded mb-3"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
