@@ -4,16 +4,19 @@ import { useEffect, useState } from "react";
 
 export default function LogoManager() {
   const [logos, setLogos] = useState([]);
-  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
-  async function loadLogos() {
+  async function load() {
     const res = await fetch("/api/logos");
     const data = await res.json();
     setLogos(data.logos || []);
   }
 
-  async function uploadLogo() {
+  async function upload(e) {
+    const file = e.target.files[0];
     if (!file) return;
+
+    setUploading(true);
 
     const form = new FormData();
     form.append("file", file);
@@ -23,45 +26,35 @@ export default function LogoManager() {
       body: form,
     });
 
-    setFile(null);
-    loadLogos();
+    await load();
+    setUploading(false);
   }
 
-  async function deleteLogo(id) {
+  async function remove(id) {
     await fetch("/api/logos", {
       method: "DELETE",
       body: JSON.stringify({ id }),
     });
-
-    loadLogos();
+    await load();
   }
 
   useEffect(() => {
-    loadLogos();
+    load();
   }, []);
 
   return (
-    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
-      <h1 className="text-3xl font-bold mb-4">Logo Manager</h1>
+    <div className="max-w-3xl mx-auto mt-10 bg-white shadow p-6 rounded">
+      <h1 className="text-3xl font-bold mb-6">Logo Manager</h1>
 
-      <input type="file" className="mb-4" onChange={(e) => setFile(e.target.files[0])} />
+      <input type="file" onChange={upload} disabled={uploading} className="mb-6" />
 
-      <button
-        onClick={uploadLogo}
-        className="w-full bg-blue-600 text-white p-3 rounded mb-6"
-      >
-        Upload Logo
-      </button>
-
-      <h2 className="text-xl font-semibold mb-3">Saved Logos</h2>
-
-      <div className="grid grid-cols-2 gap-4">
-        {logos.map((logo) => (
-          <div key={logo.id} className="bg-gray-100 p-3 rounded shadow">
-            <img src={logo.url} className="w-full h-32 object-contain" />
+      <div className="grid grid-cols-3 gap-4">
+        {logos.map((l) => (
+          <div key={l.id} className="bg-gray-50 p-3 border rounded shadow">
+            <img src={l.url} className="w-full h-32 object-contain rounded" />
             <button
-              onClick={() => deleteLogo(logo.id)}
-              className="w-full mt-2 bg-red-600 text-white p-2 rounded"
+              onClick={() => remove(l.id)}
+              className="mt-2 bg-red-600 text-white w-full p-2 rounded"
             >
               Delete
             </button>
