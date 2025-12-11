@@ -10,14 +10,21 @@ export async function POST(req) {
     const { prompt } = await req.json();
 
     if (!prompt || prompt.trim() === "") {
-      return NextResponse.json({ error: "Missing prompt." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing prompt." },
+        { status: 400 }
+      );
     }
 
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are a professional automotive sales expert assistant." },
-        { role: "user", content: prompt }
+        {
+          role: "system",
+          content:
+            "You are a master automotive sales trainer. You teach objections, follow-up, discovery, product presentation, and closing.",
+        },
+        { role: "user", content: prompt },
       ],
       max_tokens: 300,
     });
