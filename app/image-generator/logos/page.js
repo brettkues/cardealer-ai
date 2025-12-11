@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, storage, db } from "@/lib/firebaseClient";
+import { storage, db } from "@/lib/firebaseClient";
 import { ref, uploadBytes, getDownloadURL, listAll } from "firebase/storage";
 import { collection, setDoc, doc, getDocs } from "firebase/firestore";
 
@@ -14,25 +14,32 @@ export default function LogosPage() {
   }, []);
 
   async function loadSaved() {
-    const list = await getDocs(collection(db, "logos"));
-    const arr = [];
-    list.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-    setSaved(arr);
+    const folderRef = ref(storage, "logos/");
+    const all = await listAll(folderRef);
+
+    const urls = await Promise.all(
+      all.items.map(async (item) => {
+        const url = await getDownloadURL(item);
+        return { id: item.name, url };
+      })
+    );
+
+    setSaved(urls);
   }
 
   async function handleUpload() {
-    if (files.length === 0) return;
+    if (!files.length) return;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const id = `logo_${Date.now()}_${i}`;
+      const fileId = `logo_${Date.now()}_${i}`;
 
-      const storageRef = ref(storage, `logos/${id}`);
-      await uploadBytes(storageRef, file);
+      const fileRef = ref(storage, `logos/${fileId}`);
+      await uploadBytes(fileRef, file);
 
-      const url = await getDownloadURL(storageRef);
+      const url = await getDownloadURL(fileRef);
 
-      await setDoc(doc(db, "logos", id), { url });
+      await setDoc(doc(db, "logos", fileId), { url });
     }
 
     setFiles([]);
@@ -43,8 +50,8 @@ export default function LogosPage() {
     <div className="p-6 max-w-xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Manage Logos</h1>
 
+      {/* Upload Section */}
       <div className="space-y-4">
-
         <input
           type="file"
           accept="image/*"
@@ -59,6 +66,7 @@ export default function LogosPage() {
           Upload Logos
         </button>
 
+        {/* Saved Logos */}
         <h2 className="text-xl font-semibold mt-6">Saved Logos</h2>
 
         <div className="grid grid-cols-3 gap-4 mt-3">
@@ -72,3 +80,4 @@ export default function LogosPage() {
     </div>
   );
 }
+
