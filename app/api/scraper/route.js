@@ -1,70 +1,6 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
-import cheerio from "cheerio";
-
-async function scrapePage(url) {
-  try {
-    const { data } = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-
-    const $ = cheerio.load(data);
-    const vehicles = [];
-
-    $(".vehicle, .inventory-card, .result-item, .card").each((i, el) => {
-      const text = $(el).text().trim();
-
-      const year =
-        text.match(/\b(20\d{2}|19\d{2})\b/)?.[0] || "";
-
-      const make =
-        text.match(
-          /\b(Ford|Chevrolet|Chevy|Toyota|Honda|Nissan|Jeep|Dodge|Ram|Chrysler|GMC|Hyundai|Kia|Volkswagen|Subaru|BMW|Mercedes|Lexus|Audi)\b/i
-        )?.[0] || "";
-
-      const model = text
-        .replace(year, "")
-        .replace(make, "")
-        .trim()
-        .split(/\s+/)[0] || "";
-
-      const photos = [];
-      $(el)
-        .find("img")
-        .each((_, img) => {
-          const src =
-            $(img).attr("data-src") ||
-            $(img).attr("src") ||
-            "";
-          if (src && src.startsWith("http")) photos.push(src);
-        });
-
-      if (year && make && model) {
-        vehicles.push({
-          year,
-          make,
-          model,
-          photos: photos.slice(0, 10),
-        });
-      }
-    });
-
-    let nextPage = $("a.next, a[rel='next']").attr("href");
-
-    if (nextPage && !nextPage.startsWith("http")) {
-      try {
-        const base = new URL(url).origin;
-        nextPage = base + nextPage;
-      } catch {
-        nextPage = null;
-      }
-    }
-
-    return { vehicles, nextPage: nextPage || null };
-  } catch (err) {
-    return { vehicles: [], nextPage: null };
-  }
-}
+import * as cheerio from "cheerio";
 
 export async function POST(req) {
   try {
@@ -74,26 +10,56 @@ export async function POST(req) {
       return NextResponse.json({ error: "URL required" }, { status: 400 });
     }
 
-    let all = [];
-    let next = url;
-    let limit = 0;
+    const vehicles = [];
+    let nextPage = url;
+    let loops = 0;
 
-    while (next && limit < 10) {
-      const { vehicles, nextPage } = await scrapePage(next);
-      all.push(...vehicles);
+    while (nextPage && loops < 5) {
+      const { data } = await axios.get(nextPage);
+      const $ = cheerio.load(data);
 
-      if (!nextPage || nextPage === next) break;
+      $(".vehicle-card, .result-item, .inventory-card").each((i, el) => {
+        const year = $(el).find(".year, .vehicle-year").text().trim();
+        const make = $(el).find(".make, .vehicle-make").text().trim();
+        const model = $(el).find(".model, .vehicle-model").text().trim();
 
-      next = nextPage;
-      limit++;
+        const photos = [];
+        $(el)
+          .find("img")
+          .each((_, img) => {
+            const src =
+              $(img).attr("data-src") ||
+              $(img).attr("src") ||
+              "";
+            if (src && src.startsWith("http")) photos.push(src);
+          });
+
+        if (year && make && model) {
+          vehicles.push({
+            id: `${Date.now()}-${i}`,
+            year,
+            make,
+            model,
+            photos,
+          });
+        }
+      });
+
+      const nextBtn =
+        $("a.next, a[rel='next']").attr("href") ||
+        $(".pagination .next a").attr("href");
+
+      if (!nextBtn) break;
+
+      nextPage = nextBtn.startsWith("http")
+        ? nextBtn
+        : new URL(nextBtn, url).toString();
+
+      loops++;
     }
 
-    return NextResponse.json({
-      vehicles: all,
-      count: all.length,
-      pages: limit + 1,
-    });
-  } catch (error) {
-    return NextResponse.json({ error: "scraper failed" }, { status: 500 });
+    return NextResponse.json({ vehicles });
+  } catch (err) {
+    return NextResponse.json({ error: "Scraper failed." }, { status: 500 });
   }
 }
