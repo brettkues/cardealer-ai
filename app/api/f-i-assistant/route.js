@@ -1,76 +1,56 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
-export async function POST(req = new NextRequest()) {
+export const runtime = "nodejs";
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function POST(req) {
   try {
-    const { messages, imageDataUrl, systemPrompt } = await req.json();
+    const contentType = req.headers.get("content-type");
 
-    if (!messages || !systemPrompt) {
-      return NextResponse.json(
-        { error: "Invalid request payload" },
-        { status: 400 }
-      );
+    // TEXT CHAT
+    if (contentType.includes("application/json")) {
+      const { messages } = await req.json();
+
+      const res = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        temperature: 0.5
+      });
+
+      return NextResponse.json({ reply: res.choices[0].message.content });
     }
 
-    const apiMessages = [];
+    // PDF ANALYSIS
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      const file = form.get("file");
 
-    apiMessages.push({ role: "system", content: systemPrompt });
+      const buffer = Buffer.from(await file.arrayBuffer());
 
-    for (const msg of messages) {
-      if (msg.role === "user" && imageDataUrl) {
-        const textPart = msg.content || "";
+      const analysis = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze this automotive contract for compliance issues." },
+              { type: "input_file", input_file: { data: buffer, mime_type: "application/pdf" } }
+            ]
+          }
+        ],
+        temperature: 0.4
+      });
 
-        const contentParts = [];
-        if (textPart.trim()) {
-          contentParts.push({ type: "text", text: textPart });
-        }
-
-        contentParts.push({
-          type: "image_url",
-          image_url: { url: imageDataUrl },
-        });
-
-        apiMessages.push({ role: "user", content: contentParts });
-      } else {
-        apiMessages.push({ role: msg.role, content: msg.content });
-      }
+      return NextResponse.json({
+        analysis: analysis.choices[0].message.content
+      });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("Missing OpenAI API key");
+    return NextResponse.json({ error: "Unsupported request" }, { status: 400 });
 
-    const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4-vision",
-        messages: apiMessages,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!openAiRes.ok) {
-      const err = await openAiRes.text();
-      return NextResponse.json(
-        { error: "OpenAI API call failed", details: err },
-        { status: 500 }
-      );
-    }
-
-    const completion = await openAiRes.json();
-    const assistantReply = completion?.choices?.[0]?.message?.content;
-
-    if (!assistantReply) {
-      return NextResponse.json({ error: "No reply from AI" }, { status: 500 });
-    }
-
-    return NextResponse.json({ reply: assistantReply });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: 500 }
-    );
+  } catch (e) {
+    return NextResponse.json({ error: "AI error" }, { status: 500 });
   }
 }
