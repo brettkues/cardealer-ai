@@ -22,25 +22,23 @@ export async function POST(req = new NextRequest()) {
     const html = await res.text();
     const root = parse(html);
 
+    // Title extraction
     let titleText = root.querySelector("title")?.innerText || "";
+
     const ogTitle = root
       .querySelector('meta[property="og:title"]')
       ?.getAttribute("content");
+
     if (ogTitle) titleText = ogTitle;
 
-    const ldScripts = root.querySelectorAll(
-      'script[type="application/ld+json"]'
-    );
-
-    for (const script of ldScripts) {
+    // JSON-LD vehicle data
+    const ld = root.querySelectorAll('script[type="application/ld+json"]');
+    for (const tag of ld) {
       try {
-        const data = JSON.parse(script.innerText);
-        if (
-          data["@type"] === "Vehicle" ||
-          data["@type"] === "Car" ||
-          data["@type"] === "Product"
-        ) {
-          if (typeof data.name === "string" && data.name.length > 0) {
+        const data = JSON.parse(tag.innerText);
+
+        if (data?.["@type"] === "Vehicle" || data?.["@type"] === "Car") {
+          if (data.name) {
             titleText = data.name;
             break;
           }
@@ -48,45 +46,38 @@ export async function POST(req = new NextRequest()) {
       } catch {}
     }
 
+    // Year/Make/Model parsing
     let year = "";
     let make = "";
     let model = "";
 
-    if (titleText) {
-      const match = titleText.match(
-        /^(?<year>\d{4})\s+(?<make>\w+)\s+(?<model>.+)/
-      );
+    const match = titleText.match(/^(?<year>\d{4})\s+(?<make>\w+)\s+(?<model>.+)/);
 
-      if (match?.groups) {
-        ({ year, make, model } = match.groups);
+    if (match?.groups) {
+      ({ year, make, model } = match.groups);
+    } else {
+      const parts = titleText.split(" ");
+      if (parts.length >= 3) {
+        year = parts[0];
+        make = parts[1];
+        model = parts.slice(2).join(" ");
       } else {
-        const parts = titleText.split(" ");
-        if (parts.length >= 3) {
-          year = parts[0];
-          make = parts[1];
-          model = parts.slice(2).join(" ");
-        } else {
-          model = titleText;
-        }
+        model = titleText;
       }
     }
 
+    // Image extraction
     const images = [];
 
-    root.querySelectorAll('meta[property="og:image"]').forEach((tag) => {
-      const src = tag.getAttribute("content");
+    root.querySelectorAll('meta[property="og:image"]').forEach((m) => {
+      const src = m.getAttribute("content");
       if (src) images.push(src);
     });
 
     if (images.length === 0) {
       root.querySelectorAll("img").forEach((img) => {
         const src = img.getAttribute("src");
-        if (
-          src &&
-          src.startsWith("http") &&
-          !src.toLowerCase().includes("logo") &&
-          images.length < 5
-        ) {
+        if (src && src.startsWith("http") && images.length < 5) {
           images.push(src);
         }
       });
