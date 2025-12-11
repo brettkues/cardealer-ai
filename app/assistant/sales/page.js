@@ -1,53 +1,99 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { auth, db } from "@/lib/firebaseClient";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  doc,
+} from "firebase/firestore";
+import { useRouter } from "next/navigation";
 
-export default function SalesAssistant() {
-  const [input, setInput] = useState("");
-  const [output, setOutput] = useState("");
-  const [loading, setLoading] = useState(false);
+export default function WebsitesPage() {
+  const router = useRouter();
+  const [websites, setWebsites] = useState([]);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
 
-  async function askSalesAI() {
-    if (!input.trim()) return;
+  useEffect(() => {
+    if (!auth.currentUser) router.push("/auth/login");
+  }, []);
 
-    setLoading(true);
-    setOutput("");
-
-    const res = await fetch("/api/assistant/sales", {
-      method: "POST",
-      body: JSON.stringify({ prompt: input }),
+  useEffect(() => {
+    const ref = collection(db, "websites");
+    const unsub = onSnapshot(ref, (snap) => {
+      setWebsites(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
+    return () => unsub();
+  }, []);
 
-    const data = await res.json();
-    setOutput(data.response || "No response returned.");
+  async function addWebsite() {
+    if (!name.trim() || !url.trim()) return;
+    await addDoc(collection(db, "websites"), { name, url });
+    setName("");
+    setUrl("");
+  }
 
-    setLoading(false);
+  async function removeWebsite(id) {
+    await deleteDoc(doc(db, "websites", id));
   }
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 bg-white shadow p-6 rounded">
-      <h1 className="text-3xl font-bold mb-4">Sales Assistant</h1>
+    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
 
-      <textarea
-        className="w-full p-3 border rounded mb-3 h-32"
-        placeholder="Ask anything related to selling cars, sales steps, follow-up, objections, closing..."
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
+      <h1 className="text-3xl font-bold mb-4">Website Manager</h1>
 
-      <button
-        onClick={askSalesAI}
-        disabled={loading}
-        className="w-full bg-blue-600 text-white p-3 rounded mb-4"
-      >
-        {loading ? "Thinking..." : "Ask"}
-      </button>
+      <div className="flex flex-col gap-3 mb-6">
+        <input
+          className="p-3 border rounded"
+          placeholder="Website Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="p-3 border rounded"
+          placeholder="https://example.com"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
 
-      {output && (
-        <div className="p-4 border rounded bg-gray-50 whitespace-pre-wrap">
-          {output}
-        </div>
-      )}
+        <button
+          className="w-full bg-blue-600 text-white py-2 rounded"
+          onClick={addWebsite}
+        >
+          Add Website
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        {websites.map((site) => (
+          <div
+            key={site.id}
+            className="p-4 border rounded flex justify-between items-center"
+          >
+            <div>
+              <p className="font-semibold">{site.name}</p>
+              <a
+                href={site.url}
+                className="text-blue-600 underline"
+                target="_blank"
+              >
+                {site.url}
+              </a>
+            </div>
+
+            <button
+              className="text-red-600 underline"
+              onClick={() => removeWebsite(site.id)}
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }
