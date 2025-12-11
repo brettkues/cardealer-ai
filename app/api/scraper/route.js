@@ -1,110 +1,93 @@
 import { NextResponse } from "next/server";
+import axios from "axios";
+import cheerio from "cheerio";
 
-function fixUrl(base, src) {
-  try {
-    return new URL(src, base).href;
-  } catch {
-    return null;
-  }
-}
-
-function parseVehicle(title) {
-  if (!title) return null;
-
-  const parts = title.trim().split(/\s+/);
-
-  const year = /^\d{4}$/.test(parts[0]) ? parts[0] : null;
-  if (!year) return null;
-
-  const make = parts[1] || null;
-  const model = parts[2] || null;
-
-  if (!make || !model) return null;
-
-  return { year, make, model };
-}
-
+/**
+ * Extract vehicles + next-page link from a single page.
+ */
 async function scrapePage(url) {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
-  });
+  try {
+    const { data } = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
 
-  const html = await res.text();
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
+    const $ = cheerio.load(data);
+    const vehicles = [];
 
-  let vehicles = [];
+    // Extract vehicles
+    $(".vehicle, .inventory-card, .result-item, .card").each((i, el) => {
+      const text = $(el).text().trim();
 
-  const cards = doc.querySelectorAll(
-    ".vehicle-card, .inventory-card, .result-item, .vehicle, .product, .card"
-  );
+      const year =
+        text.match(/\b(20\d{2}|19\d{2})\b/)?.[0] || "";
 
-  cards.forEach((card) => {
-    const titleElement =
-      card.querySelector(".title, h2, h3") || card;
+      const make =
+        text.match(
+          /\b(Ford|Chevrolet|Chevy|Toyota|Honda|Nissan|Jeep|Dodge|Ram|Chrysler|GMC|Hyundai|Kia|Volkswagen|Subaru|BMW|Mercedes|Lexus|Audi)\b/i
+        )?.[0] || "";
 
-    const title = titleElement.textContent.trim();
-    const parsed = parseVehicle(title);
+      const model = text
+        .replace(year, "")
+        .replace(make, "")
+        .trim()
+        .split(/\s+/)[0] || "";
 
-    if (!parsed) return;
+      const photos = [];
+      $(el)
+        .find("img")
+        .each((_, img) => {
+          const src =
+            $(img).attr("data-src") ||
+            $(img).attr("src") ||
+            "";
+          if (src && src.startsWith("http")) photos.push(src);
+        });
 
-    let photos = [];
-
-    const imgs = card.querySelectorAll("img");
-    imgs.forEach((img) => {
-      const raw =
-        img.getAttribute("data-src") ||
-        img.getAttribute("data-original") ||
-        img.getAttribute("src");
-
-      if (!raw) return;
-
-      if (
-        raw.endsWith(".jpg") ||
-        raw.endsWith(".jpeg") ||
-        raw.endsWith(".png")
-      ) {
-        const fixed = fixUrl(url, raw);
-        if (fixed) photos.push(fixed);
+      if (year && make && model) {
+        vehicles.push({
+          year,
+          make,
+          model,
+          photos: photos.slice(0, 10),
+        });
       }
     });
 
-    photos = [...new Set(photos)];
+    // Find next page
+    let nextPage = $("a.next, a[rel='next']")
+      .attr("href");
 
-    vehicles.push({
-      year: parsed.year,
-      make: parsed.make,
-      model: parsed.model,
-      photos,
-    });
-  });
+    if (nextPage && !nextPage.startsWith("http")) {
+      try {
+        const base = new URL(url).origin;
+        nextPage = base + nextPage;
+      } catch {
+        nextPage = null;
+      }
+    }
 
-  // Pagination
-  let nextPage = null;
-  const pageLinks = doc.querySelectorAll('a[href*="page"], a[rel="next"]');
-
-  pageLinks.forEach((a) => {
-    const href = a.getAttribute("href");
-    if (!href) return;
-
-    const full = fixUrl(url, href);
-    if (full !== url) nextPage = full;
-  });
-
-  return { vehicles, nextPage };
+    return {
+      vehicles,
+      nextPage: nextPage || null,
+    };
+  } catch (err) {
+    return { vehicles: [], nextPage: null };
+  }
 }
 
+/**
+ * Main API route
+ */
 export async function POST(req) {
   try {
     const { url } = await req.json();
-    if (!url)
+
+    if (!url) {
       return NextResponse.json(
         { error: "URL required" },
         { status: 400 }
       );
+    }
 
     let all = [];
     let next = url;
