@@ -2,116 +2,115 @@
 
 import { useEffect, useState } from "react";
 
-export default function SocialImageGenerator() {
+export default function SocialGenerator() {
   const [websites, setWebsites] = useState([]);
-  const [url, setUrl] = useState("");
+  const [selected, setSelected] = useState("");
+  const [vehicles, setVehicles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [collage, setCollage] = useState(null);
   const [text, setText] = useState("");
-  const [finalImage, setFinalImage] = useState(null);
-
-  const [vehicle, setVehicle] = useState(null);
-  const [selectedPhotos, setSelectedPhotos] = useState([]);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("collageSource");
-    if (stored) {
-      const v = JSON.parse(stored);
-
-      const best = v.photos?.slice(0, 4) || [];
-
-      setVehicle(v);
-      setSelectedPhotos(best);
+    async function loadSites() {
+      const res = await fetch("/api/websites");
+      const data = await res.json();
+      setWebsites(data.websites || []);
     }
+    loadSites();
   }, []);
 
-  async function loadWebsites() {
-    const res = await fetch("/api/websites");
+  async function scrape() {
+    if (!selected) return;
+
+    setLoading(true);
+    const res = await fetch("/api/scraper", {
+      method: "POST",
+      body: JSON.stringify({ url: selected }),
+    });
+
     const data = await res.json();
-    setWebsites(data.websites || []);
+    setVehicles(data.vehicles || []);
+    localStorage.setItem("scrapedVehicles", JSON.stringify(data.vehicles || []));
+    setLoading(false);
   }
 
-  useEffect(() => {
-    loadWebsites();
-  }, []);
-
-  async function generateCollage() {
+  async function makeCollage(v) {
     const res = await fetch("/api/collage", {
       method: "POST",
       body: JSON.stringify({
-        url,
-        text,
-        photos: selectedPhotos,
-        year: vehicle?.year,
-        make: vehicle?.make,
-        model: vehicle?.model,
+        images: v.photos.slice(0, 4),
+        ribbonText: text || `${v.year} ${v.make} ${v.model}`,
       }),
     });
 
     const data = await res.json();
-    setFinalImage(data.image || null);
+    setCollage(data.image);
   }
 
   return (
-    <div className="max-w-xl mx-auto mt-10 bg-white shadow p-6 rounded">
+    <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Social Image Generator</h1>
-
-      {vehicle && (
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold mb-2">
-            {vehicle.year} {vehicle.make} {vehicle.model}
-          </h2>
-
-          <div className="grid grid-cols-2 gap-3">
-            {selectedPhotos.map((p, i) => (
-              <img
-                key={i}
-                src={p}
-                className="w-full h-32 object-cover rounded shadow"
-              />
-            ))}
-          </div>
-        </div>
-      )}
 
       <select
         className="w-full p-3 border rounded mb-3"
-        onChange={(e) => setUrl(e.target.value)}
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
       >
-        <option value="">Select a saved website...</option>
-        {websites.map((site) => (
-          <option key={site.id} value={site.url}>
-            {site.label}
+        <option value="">Select Website</option>
+        {websites.map((w) => (
+          <option key={w.id} value={w.url}>
+            {w.label}
           </option>
         ))}
       </select>
 
-      <input
-        type="text"
-        placeholder="Or enter a URL manually..."
-        className="w-full p-3 border rounded mb-3"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
+      <button
+        onClick={scrape}
+        disabled={loading}
+        className="px-4 py-2 bg-blue-600 text-white rounded mb-6"
+      >
+        {loading ? "Scraping..." : "Load Vehicles"}
+      </button>
 
-      <textarea
-        placeholder="Banner text..."
-        className="w-full p-3 border rounded mb-3 h-24"
+      <input
+        className="w-full p-3 border rounded mb-6"
+        placeholder="Ribbon text (optional)"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
 
-      <button
-        onClick={generateCollage}
-        className="w-full bg-purple-600 text-white p-3 rounded mb-6"
-      >
-        Generate Collage
-      </button>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {vehicles.map((v) => (
+          <div
+            key={v.id}
+            className="p-4 bg-white shadow rounded cursor-pointer"
+            onClick={() => makeCollage(v)}
+          >
+            <div className="font-semibold">
+              {v.year} {v.make} {v.model}
+            </div>
+            {v.photos[0] && (
+              <img
+                src={v.photos[0]}
+                className="w-full h-32 object-cover rounded mt-2"
+              />
+            )}
+          </div>
+        ))}
+      </div>
 
-      {finalImage && (
-        <img
-          src={finalImage}
-          className="w-full rounded shadow"
-          alt="Generated"
-        />
+      {collage && (
+        <div className="mt-6">
+          <h2 className="text-xl font-bold mb-2">Generated Image</h2>
+          <img src={collage} className="w-full rounded shadow" />
+          <a
+            href={collage}
+            download="social-image.png"
+            className="mt-4 block w-full text-center bg-green-600 text-white p-3 rounded"
+          >
+            Download
+          </a>
+        </div>
       )}
     </div>
   );
