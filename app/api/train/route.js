@@ -8,67 +8,39 @@ import {
   doc,
 } from "firebase/firestore";
 
-// GET — list training files
+// GET — list training items
 export async function GET() {
-  try {
-    const snap = await getDocs(collection(db, "training"));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    return NextResponse.json({ files: list });
-  } catch (err) {
-    return NextResponse.json({ files: [] });
-  }
+  const snap = await getDocs(collection(db, "training"));
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return NextResponse.json({ files: list });
 }
 
-// POST — add a new file metadata record (upload happens client-side)
+// POST — save metadata only (no Firebase Storage)
 export async function POST(req) {
-  try {
-    const { name, url } = await req.json();
+  const form = await req.formData();
+  const file = form.get("file");
 
-    if (!name || !url) {
-      return NextResponse.json(
-        { error: "Missing name or URL" },
-        { status: 400 }
-      );
-    }
+  const buffer = await file.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+  const mime = file.type;
 
-    const docRef = await addDoc(collection(db, "training"), {
-      name,
-      url,
-      createdAt: Date.now(),
-    });
+  const url = `data:${mime};base64,${base64}`;
 
-    return NextResponse.json({
-      id: docRef.id,
-      name,
-      url,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: "Insert failed" },
-      { status: 500 }
-    );
-  }
+  const ref = await addDoc(collection(db, "training"), {
+    name: file.name,
+    url,
+  });
+
+  return NextResponse.json({
+    id: ref.id,
+    name: file.name,
+    url,
+  });
 }
 
-// DELETE — delete Firestore entry only
+// DELETE — remove record
 export async function DELETE(req) {
-  try {
-    const { id } = await req.json();
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Missing ID" },
-        { status: 400 }
-      );
-    }
-
-    await deleteDoc(doc(db, "training", id));
-
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json(
-      { error: "Delete failed" },
-      { status: 500 }
-    );
-  }
+  const { id } = await req.json();
+  await deleteDoc(doc(db, "training", id));
+  return NextResponse.json({ success: true });
 }
