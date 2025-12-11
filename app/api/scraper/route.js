@@ -2,9 +2,6 @@ import { NextResponse } from "next/server";
 import axios from "axios";
 import cheerio from "cheerio";
 
-/**
- * Extract vehicles + next-page link from a single page.
- */
 async function scrapePage(url) {
   try {
     const { data } = await axios.get(url, {
@@ -14,7 +11,6 @@ async function scrapePage(url) {
     const $ = cheerio.load(data);
     const vehicles = [];
 
-    // Extract vehicles
     $(".vehicle, .inventory-card, .result-item, .card").each((i, el) => {
       const text = $(el).text().trim();
 
@@ -53,9 +49,7 @@ async function scrapePage(url) {
       }
     });
 
-    // Find next page
-    let nextPage = $("a.next, a[rel='next']")
-      .attr("href");
+    let nextPage = $("a.next, a[rel='next']").attr("href");
 
     if (nextPage && !nextPage.startsWith("http")) {
       try {
@@ -66,27 +60,18 @@ async function scrapePage(url) {
       }
     }
 
-    return {
-      vehicles,
-      nextPage: nextPage || null,
-    };
+    return { vehicles, nextPage: nextPage || null };
   } catch (err) {
     return { vehicles: [], nextPage: null };
   }
 }
 
-/**
- * Main API route
- */
 export async function POST(req) {
   try {
     const { url } = await req.json();
 
     if (!url) {
-      return NextResponse.json(
-        { error: "URL required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "URL required" }, { status: 400 });
     }
 
     let all = [];
@@ -95,7 +80,6 @@ export async function POST(req) {
 
     while (next && limit < 10) {
       const { vehicles, nextPage } = await scrapePage(next);
-
       all.push(...vehicles);
 
       if (!nextPage || nextPage === next) break;
@@ -110,10 +94,6 @@ export async function POST(req) {
       pages: limit + 1,
     });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { error: "scraper failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "scraper failed" }, { status: 500 });
   }
 }
