@@ -2,14 +2,27 @@
 const nextConfig = {
   reactStrictMode: false,
 
-  // Required for server-side image generation using Sharp
   experimental: {
-    serverComponentsExternalPackages: ["sharp"]
+    serverActions: true,
+    serverComponentsExternalPackages: ["sharp"]    // REQUIRED FOR VERCEL
   },
 
-  // Do NOT include custom webpack fallbacks here.
-  // Do NOT include custom "api" config blocks.
-  // Do NOT include path fallbacks.
+  api: {
+    responseLimit: "20mb",
+    bodyParser: {
+      sizeLimit: "15mb"
+    }
+  },
+
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false
+    };
+
+    return config;
+  }
 };
 
 module.exports = nextConfig;
