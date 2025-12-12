@@ -5,80 +5,30 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req) {
   try {
-    const { website, identifier } = await req.json();
+    const { url } = await req.json();
 
-    if (!website || !identifier) {
+    if (!url) {
       return NextResponse.json(
-        { error: "Website and stock/VIN are required." },
+        { error: "Vehicle URL is required." },
         { status: 400 }
       );
     }
 
-    const normalizedSite = website.replace(/\/$/, "");
-
-    const isFullVIN = identifier.length === 17;
-    const isLast8 = identifier.length === 8;
-    const isStock = !isFullVIN && !isLast8;
-
-    // POSSIBLE SEARCH URLS (DealerOn)
-    const searchURLs = [
-      `${normalizedSite}/search?stock=${identifier}`,
-      `${normalizedSite}/search?stocknumber=${identifier}`,
-      `${normalizedSite}/search?keyword=${identifier}`,
-      `${normalizedSite}/search?vin=${identifier}`,
-      `${normalizedSite}/search?last8=${identifier}`,
-    ];
-
-    let vehicleURL = null;
-
-    // TRY ALL SEARCH URLS
-    for (const url of searchURLs) {
-      const res = await fetch(url, { method: "GET" }).catch(() => null);
-      if (!res || !res.ok) continue;
-
-      const html = await res.text();
-      const root = parse(html);
-
-      // DealerOn often embeds links like:
-      // <a href="/used-City-2024-Make-Model-Trim-VIN">
-      const link = root.querySelector("a[href*='-used'], a[href*='-Used'], a[href*='-new'], a[href*='-New']");
-      if (link) {
-        const href = link.getAttribute("href");
-        if (href && href.includes(identifier.slice(-8))) {
-          vehicleURL = normalizedSite + href;
-          break;
-        }
-      }
-    }
-
-    // If no vehicleURL found and user manually typed a direct page, use it
-    if (!vehicleURL && website.includes(identifier.slice(-8))) {
-      vehicleURL = website;
-    }
-
-    if (!vehicleURL) {
-      return NextResponse.json(
-        { error: "Vehicle not found. Try entering full VIN or URL manually." },
-        { status: 404 }
-      );
-    }
-
-    // FETCH THE VEHICLE PAGE
-    const pageRes = await fetch(vehicleURL, { method: "GET" }).catch(() => null);
-    if (!pageRes || !pageRes.ok) {
+    const res = await fetch(url);
+    if (!res.ok) {
       return NextResponse.json(
         { error: "Failed to fetch vehicle page." },
         { status: 500 }
       );
     }
 
-    const pageHtml = await pageRes.text();
-    const root = parse(pageHtml);
+    const html = await res.text();
+    const root = parse(html);
 
-    // EXTRACT IMAGES
+    // Extract images
     let images = [];
 
-    // Try JSON-LD first
+    // JSON-LD first
     const ldTags = root.querySelectorAll('script[type="application/ld+json"]');
     for (const tag of ldTags) {
       try {
@@ -90,7 +40,7 @@ export async function POST(req) {
       } catch {}
     }
 
-    // Try data-src in HTML if needed
+    // Fallback images
     if (images.length === 0) {
       root.querySelectorAll("img").forEach((img) => {
         const src = img.getAttribute("data-src") || img.getAttribute("src");
@@ -100,7 +50,7 @@ export async function POST(req) {
       });
     }
 
-    // EXTRACT TITLE FOR YEAR/MAKE/MODEL
+    // Extract year/make/model from title
     let title = root.querySelector("title")?.innerText || "";
     let year = "";
     let make = "";
@@ -110,14 +60,14 @@ export async function POST(req) {
     if (match) {
       year = match[1];
       make = match[2];
-      model = match[3].split("-")[0].trim(); // remove extra tokens
+      model = match[3].split("-")[0].trim();
     }
 
     return NextResponse.json({
-      vehicle: { year, make, model, url: vehicleURL },
+      vehicle: { year, make, model, url },
       images,
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: "Lookup failed." },
       { status: 500 }
