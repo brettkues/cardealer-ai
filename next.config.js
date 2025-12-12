@@ -4,24 +4,23 @@ const nextConfig = {
 
   experimental: {
     serverActions: true,
-    serverComponentsExternalPackages: ["@napi-rs/canvas"]
-  },
-
-  api: {
-    responseLimit: "20mb",
-    bodyParser: {
-      sizeLimit: "15mb"
-    }
+    serverComponentsExternalPackages: ["@napi-rs/canvas"],
   },
 
   webpack: (config) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "@": require("path").resolve(__dirname),
+    };
+
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
-      path: false
+      path: false,
     };
+
     return config;
-  }
+  },
 };
 
 module.exports = nextConfig;
