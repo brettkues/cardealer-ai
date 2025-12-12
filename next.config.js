@@ -4,13 +4,29 @@ const nextConfig = {
 
   experimental: {
     serverActions: true,
+    serverComponentsExternalPackages: ["sharp"],   // REQUIRED FOR VERCEL
   },
 
-  // Prevent micromatch infinite recursion on Vercel
+  api: {
+    responseLimit: "20mb",
+    bodyParser: {
+      sizeLimit: "15mb",
+    },
+  },
+
   webpack: (config) => {
+    // Fix infinite loop / micromatch recursion on Vercel
     config.watchOptions = {
       ignored: ['**/.git/**', '**/.next/**', '**/node_modules/**']
     };
+
+    // Prevent fs/path errors in client bundles
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false,
+    };
+
     return config;
   },
 };
