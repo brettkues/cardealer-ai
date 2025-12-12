@@ -14,8 +14,10 @@ export default function ImageGenerator() {
   const [tab, setTab] = useState("generate");
 
   const [websites, setWebsites] = useState([]);
+  const [selectedWebsite, setSelectedWebsite] = useState("");
   const [manualURL, setManualURL] = useState("");
 
+  const [identifier, setIdentifier] = useState("");
   const [caption, setCaption] = useState("");
   const [logos, setLogos] = useState([]);
   const [selectedLogos, setSelectedLogos] = useState([]);
@@ -32,20 +34,12 @@ export default function ImageGenerator() {
     loadLogos();
   }, []);
 
-  // --------------------------
-  // LOAD WEBSITES
-  // --------------------------
-
   async function loadWebsites() {
     const snap = await getDocs(collection(db, "websites"));
     const arr = [];
     snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
     setWebsites(arr);
   }
-
-  // --------------------------
-  // LOAD LOGOS
-  // --------------------------
 
   async function loadLogos() {
     const snap = await getDocs(collection(db, "logos"));
@@ -114,28 +108,24 @@ export default function ImageGenerator() {
   }
 
   // --------------------------
-  // GENERATE IMAGE
+  // IMAGE GENERATION
   // --------------------------
 
   async function generateImage() {
     setLoading(true);
     setResultImage(null);
 
-    if (!manualURL.trim()) {
-      alert("Please enter a full vehicle URL.");
-      setLoading(false);
-      return;
-    }
+    const siteToUse = manualURL.trim() || selectedWebsite;
 
-    // STEP 1 — LOOKUP VEHICLE FROM URL
-    const lookupRes = await fetch("/api/lookupVehicle", {
+    const lookup = await fetch("/api/lookupVehicle", {
       method: "POST",
       body: JSON.stringify({
-        url: manualURL.trim(),
+        website: siteToUse,
+        identifier,
       }),
     });
 
-    const vehicleData = await lookupRes.json();
+    const vehicleData = await lookup.json();
 
     if (vehicleData.error) {
       alert(vehicleData.error);
@@ -145,8 +135,7 @@ export default function ImageGenerator() {
 
     const activeLogos = logos.filter((l) => selectedLogos.includes(l.id));
 
-    // STEP 2 — BUILD FINAL IMAGE
-    const buildRes = await fetch("/api/buildImage", {
+    const build = await fetch("/api/buildImage", {
       method: "POST",
       body: JSON.stringify({
         vehicle: vehicleData.vehicle,
@@ -156,14 +145,14 @@ export default function ImageGenerator() {
       }),
     });
 
-    const result = await buildRes.json();
+    const result = await build.json();
     setResultImage(result.output);
 
     setLoading(false);
   }
 
   // --------------------------
-  // UI
+  // PAGE RENDER
   // --------------------------
 
   return (
@@ -189,7 +178,7 @@ export default function ImageGenerator() {
           onClick={() => setTab("logos")}
           className={tab === "logos" ? "border-b-2 border-blue-600 pb-2" : ""}
         >
-          Logo Vault
+          Upload Logo
         </button>
       </div>
 
@@ -197,19 +186,41 @@ export default function ImageGenerator() {
       {tab === "generate" && (
         <div className="space-y-6">
 
-          {/* VEHICLE URL */}
+          {/* WEBSITE SELECT */}
           <div>
-            <label className="font-semibold">Full Vehicle URL</label>
-            <input
-              type="text"
-              placeholder="https://www.pischkenissan.com/used-..."
+            <label className="font-semibold">Website</label>
+            <select
               className="w-full p-3 border rounded mt-1"
+              value={selectedWebsite}
+              onChange={(e) => setSelectedWebsite(e.target.value)}
+            >
+              <option value="">Select website</option>
+              {websites.map((w) => (
+                <option key={w.id} value={w.url}>
+                  {w.name} — {w.url}
+                </option>
+              ))}
+            </select>
+
+            <input
+              className="w-full p-3 border rounded mt-2"
+              placeholder="Or manually enter website URL"
               value={manualURL}
               onChange={(e) => setManualURL(e.target.value)}
             />
-            <p className="text-sm text-gray-600 mt-1">
-              Paste the full listing URL from DealerOn, Dealer Inspire, Dealer.com, etc.
-            </p>
+          </div>
+
+          {/* IDENTIFIER */}
+          <div>
+            <label className="font-semibold">
+              Stock Number or Last 8 of VIN
+            </label>
+            <input
+              className="w-full p-3 border rounded mt-1"
+              placeholder="Example: L2925015 or R8556502"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+            />
           </div>
 
           {/* CAPTION */}
@@ -231,14 +242,14 @@ export default function ImageGenerator() {
                 onClick={() => setTab("logos")}
                 className="text-blue-600 underline text-sm"
               >
-                Manage Logos
+                Upload Logos
               </button>
             </label>
 
             <div className="grid grid-cols-3 gap-3 mt-2">
               {logos.length === 0 && (
                 <div className="col-span-3 text-center text-gray-600 text-sm">
-                  No logos uploaded yet. Click “Manage Logos” to add some.
+                  No logos uploaded yet. Click “Upload Logo” to add some.
                 </div>
               )}
 
@@ -248,7 +259,7 @@ export default function ImageGenerator() {
                   onClick={() => toggleLogo(l.id)}
                   className={`border rounded p-2 cursor-pointer ${
                     selectedLogos.includes(l.id)
-                      ? "border-blue-600 ring-2 ring-blue-400"
+                      ? "border-blue-600"
                       : "border-gray-300"
                   }`}
                 >
@@ -284,7 +295,6 @@ export default function ImageGenerator() {
       {tab === "websites" && (
         <div className="space-y-6">
 
-          {/* ADD WEBSITE */}
           <div>
             <label className="font-semibold">Website Name</label>
             <input
@@ -310,7 +320,6 @@ export default function ImageGenerator() {
             Add Website
           </button>
 
-          {/* LIST WEBSITES */}
           <div className="mt-6 space-y-3">
             {websites.map((w) => (
               <div
@@ -334,11 +343,10 @@ export default function ImageGenerator() {
         </div>
       )}
 
-      {/* ---------------- LOGO VAULT TAB ---------------- */}
+      {/* ---------------- UPLOAD LOGO TAB ---------------- */}
       {tab === "logos" && (
         <div className="space-y-6">
 
-          {/* UPLOAD LOGO */}
           <div>
             <label className="font-semibold">Upload Logo</label>
             <input
@@ -356,7 +364,6 @@ export default function ImageGenerator() {
             </button>
           </div>
 
-          {/* EXISTING LOGOS */}
           <div className="grid grid-cols-3 gap-3 mt-6">
             {logos.map((l) => (
               <div key={l.id} className="border p-2 rounded relative">
