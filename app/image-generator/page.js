@@ -13,89 +13,25 @@ import {
 export default function ImageGenerator() {
   const [tab, setTab] = useState("generate");
 
-  const [websites, setWebsites] = useState([]);
-  const [selectedWebsite, setSelectedWebsite] = useState("");
-  const [manualURL, setManualURL] = useState("");
-
-  const [identifier, setIdentifier] = useState("");
+  const [vehicleURL, setVehicleURL] = useState("");
   const [caption, setCaption] = useState("");
+
   const [logos, setLogos] = useState([]);
   const [selectedLogos, setSelectedLogos] = useState([]);
+  const [uploadFile, setUploadFile] = useState(null);
+
   const [resultImage, setResultImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const [newWebsiteName, setNewWebsiteName] = useState("");
-  const [newWebsiteURL, setNewWebsiteURL] = useState("");
-
-  const [logoUploadFile, setLogoUploadFile] = useState(null);
-
   useEffect(() => {
-    loadWebsites();
     loadLogos();
   }, []);
-
-  async function loadWebsites() {
-    const snap = await getDocs(collection(db, "websites"));
-    const arr = [];
-    snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-    setWebsites(arr);
-  }
 
   async function loadLogos() {
     const snap = await getDocs(collection(db, "logos"));
     const arr = [];
     snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
     setLogos(arr);
-  }
-
-  // --------------------------
-  // WEBSITE MANAGEMENT
-  // --------------------------
-
-  async function addWebsite() {
-    if (!newWebsiteName || !newWebsiteURL) return;
-
-    await addDoc(collection(db, "websites"), {
-      name: newWebsiteName,
-      url: newWebsiteURL,
-    });
-
-    setNewWebsiteName("");
-    setNewWebsiteURL("");
-    loadWebsites();
-  }
-
-  async function removeWebsite(id) {
-    await deleteDoc(doc(db, "websites", id));
-    loadWebsites();
-  }
-
-  // --------------------------
-  // LOGO MANAGEMENT
-  // --------------------------
-
-  async function uploadLogo() {
-    if (!logoUploadFile) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target.result;
-
-      await addDoc(collection(db, "logos"), {
-        url: base64,
-      });
-
-      setLogoUploadFile(null);
-      loadLogos();
-    };
-
-    reader.readAsDataURL(logoUploadFile);
-  }
-
-  async function deleteLogo(id) {
-    await deleteDoc(doc(db, "logos", id));
-    setSelectedLogos(selectedLogos.filter((x) => x !== id));
-    loadLogos();
   }
 
   function toggleLogo(id) {
@@ -107,22 +43,43 @@ export default function ImageGenerator() {
     }
   }
 
-  // --------------------------
-  // IMAGE GENERATION
-  // --------------------------
+  async function uploadLogo() {
+    if (!uploadFile) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result;
+
+      await addDoc(collection(db, "logos"), {
+        url: base64,
+      });
+
+      setUploadFile(null);
+      loadLogos();
+    };
+
+    reader.readAsDataURL(uploadFile);
+  }
+
+  async function deleteLogo(id) {
+    await deleteDoc(doc(db, "logos", id));
+    setSelectedLogos(selectedLogos.filter((x) => x !== id));
+    loadLogos();
+  }
 
   async function generateImage() {
     setLoading(true);
     setResultImage(null);
 
-    const siteToUse = manualURL.trim() || selectedWebsite;
+    if (!vehicleURL.trim()) {
+      alert("Please paste a vehicle URL first.");
+      setLoading(false);
+      return;
+    }
 
     const lookup = await fetch("/api/lookupVehicle", {
       method: "POST",
-      body: JSON.stringify({
-        website: siteToUse,
-        identifier,
-      }),
+      body: JSON.stringify({ url: vehicleURL }),
     });
 
     const vehicleData = await lookup.json();
@@ -151,10 +108,6 @@ export default function ImageGenerator() {
     setLoading(false);
   }
 
-  // --------------------------
-  // PAGE RENDER
-  // --------------------------
-
   return (
     <div className="max-w-2xl mx-auto p-6">
 
@@ -168,17 +121,10 @@ export default function ImageGenerator() {
         </button>
 
         <button
-          onClick={() => setTab("websites")}
-          className={tab === "websites" ? "border-b-2 border-blue-600 pb-2" : ""}
-        >
-          Websites
-        </button>
-
-        <button
           onClick={() => setTab("logos")}
           className={tab === "logos" ? "border-b-2 border-blue-600 pb-2" : ""}
         >
-          Upload Logo
+          Upload Logos
         </button>
       </div>
 
@@ -186,46 +132,22 @@ export default function ImageGenerator() {
       {tab === "generate" && (
         <div className="space-y-6">
 
-          {/* WEBSITE SELECT */}
+          {/* VEHICLE URL */}
           <div>
-            <label className="font-semibold">Website</label>
-            <select
-              className="w-full p-3 border rounded mt-1"
-              value={selectedWebsite}
-              onChange={(e) => setSelectedWebsite(e.target.value)}
-            >
-              <option value="">Select website</option>
-              {websites.map((w) => (
-                <option key={w.id} value={w.url}>
-                  {w.name} — {w.url}
-                </option>
-              ))}
-            </select>
-
-            <input
-              className="w-full p-3 border rounded mt-2"
-              placeholder="Or manually enter website URL"
-              value={manualURL}
-              onChange={(e) => setManualURL(e.target.value)}
-            />
-          </div>
-
-          {/* IDENTIFIER */}
-          <div>
-            <label className="font-semibold">
-              Stock Number or Last 8 of VIN
-            </label>
+            <label className="font-semibold">Paste Vehicle URL</label>
             <input
               className="w-full p-3 border rounded mt-1"
-              placeholder="Example: L2925015 or R8556502"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="https://www.exampledealer.com/used-vehicle-1234"
+              value={vehicleURL}
+              onChange={(e) => setVehicleURL(e.target.value)}
             />
           </div>
 
           {/* CAPTION */}
           <div>
-            <label className="font-semibold">Caption (85 characters max)</label>
+            <label className="font-semibold">
+              Caption (85 characters max)
+            </label>
             <input
               maxLength={85}
               className="w-full p-3 border rounded mt-1"
@@ -234,22 +156,14 @@ export default function ImageGenerator() {
             />
           </div>
 
-          {/* LOGO SELECTION */}
+          {/* LOGO PICKER */}
           <div>
-            <label className="font-semibold flex justify-between">
-              <span>Select up to 3 logos</span>
-              <button
-                onClick={() => setTab("logos")}
-                className="text-blue-600 underline text-sm"
-              >
-                Upload Logos
-              </button>
-            </label>
+            <label className="font-semibold">Select up to 3 logos</label>
 
             <div className="grid grid-cols-3 gap-3 mt-2">
               {logos.length === 0 && (
                 <div className="col-span-3 text-center text-gray-600 text-sm">
-                  No logos uploaded yet. Click “Upload Logo” to add some.
+                  No logos uploaded yet. Add some under “Upload Logos”.
                 </div>
               )}
 
@@ -263,10 +177,7 @@ export default function ImageGenerator() {
                       : "border-gray-300"
                   }`}
                 >
-                  <img
-                    src={l.url}
-                    className="w-full h-20 object-contain"
-                  />
+                  <img src={l.url} className="w-full h-20 object-contain" />
                 </div>
               ))}
             </div>
@@ -291,69 +202,17 @@ export default function ImageGenerator() {
         </div>
       )}
 
-      {/* ---------------- WEBSITES TAB ---------------- */}
-      {tab === "websites" && (
-        <div className="space-y-6">
-
-          <div>
-            <label className="font-semibold">Website Name</label>
-            <input
-              className="w-full p-3 border rounded mt-1"
-              value={newWebsiteName}
-              onChange={(e) => setNewWebsiteName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold">Website URL</label>
-            <input
-              className="w-full p-3 border rounded mt-1"
-              value={newWebsiteURL}
-              onChange={(e) => setNewWebsiteURL(e.target.value)}
-            />
-          </div>
-
-          <button
-            onClick={addWebsite}
-            className="w-full bg-green-600 text-white p-3 rounded"
-          >
-            Add Website
-          </button>
-
-          <div className="mt-6 space-y-3">
-            {websites.map((w) => (
-              <div
-                key={w.id}
-                className="border p-3 rounded flex justify-between"
-              >
-                <div>
-                  <div className="font-semibold">{w.name}</div>
-                  <div className="text-sm text-gray-600">{w.url}</div>
-                </div>
-
-                <button
-                  className="bg-red-600 text-white px-3 py-1 rounded"
-                  onClick={() => removeWebsite(w.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- UPLOAD LOGO TAB ---------------- */}
+      {/* ---------------- UPLOAD LOGOS TAB ---------------- */}
       {tab === "logos" && (
         <div className="space-y-6">
 
           <div>
-            <label className="font-semibold">Upload Logo</label>
+            <label className="font-semibold">Upload Logos</label>
             <input
               type="file"
               accept="image/*"
               className="mt-1"
-              onChange={(e) => setLogoUploadFile(e.target.files[0])}
+              onChange={(e) => setUploadFile(e.target.files[0])}
             />
 
             <button
