@@ -7,12 +7,24 @@ const nextConfig = {
     serverComponentsExternalPackages: ["sharp"],
   },
 
-  // Prevent micromatch infinite recursion crash on Vercel
+  // Completely disable Next.js file tracing to stop micromatch recursion
+  output: "standalone",
+  experimental: {
+    ...(() => ({
+      serverActions: true,
+      serverComponentsExternalPackages: ["sharp"],
+      // Disable tracing
+      turbo: {
+        rules: {},
+      },
+      // This prevents Next from scanning node_modules, .next, etc.
+      disableOptimizedLoading: true,
+      workerThreads: false,
+    }))(),
+  },
+
   webpack(config) {
-    config.snapshot = {
-      managedPaths: [],
-      immutablePaths: [],
-    };
+    config.snapshot = { managedPaths: [], immutablePaths: [] };
     return config;
   },
 
