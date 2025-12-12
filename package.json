@@ -1,22 +1,28 @@
-{
-  "name": "cardealer-ai",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: false,
+
+  experimental: {
+    serverActions: true,
+    serverComponentsExternalPackages: ["sharp"]    // REQUIRED FOR VERCEL
   },
-  "dependencies": {
-    "firebase": "^9.22.0",
-    "node-html-parser": "^6.1.5",
-    "openai": "^4.0.0",
-    "next": "14.0.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "@napi-rs/canvas": "0.1.58",
-    "tailwindcss": "^3.3.3",
-    "postcss": "^8.4.31",
-    "autoprefixer": "^10.4.16"
+
+  api: {
+    responseLimit: "20mb",
+    bodyParser: {
+      sizeLimit: "15mb"
+    }
+  },
+
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false
+    };
+
+    return config;
   }
-}
+};
+
+module.exports = nextConfig;
