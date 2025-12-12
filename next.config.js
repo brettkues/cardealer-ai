@@ -2,28 +2,21 @@
 const nextConfig = {
   reactStrictMode: false,
 
+  // Disable all tracing so Vercel cannot recurse into node_modules
   experimental: {
     serverActions: true,
     serverComponentsExternalPackages: ["sharp"],
+    outputFileTracingRoot: undefined,
+    outputFileTracing: false,
+    turbo: false,
   },
 
-  // Completely disable Next.js file tracing to stop micromatch recursion
+  // Completely stop Next.js from analyzing dependencies
   output: "standalone",
-  experimental: {
-    ...(() => ({
-      serverActions: true,
-      serverComponentsExternalPackages: ["sharp"],
-      // Disable tracing
-      turbo: {
-        rules: {},
-      },
-      // This prevents Next from scanning node_modules, .next, etc.
-      disableOptimizedLoading: true,
-      workerThreads: false,
-    }))(),
-  },
 
+  // Override Webpack to prevent micromatch recursion
   webpack(config) {
+    config.externals = [...config.externals, "micromatch"];
     config.snapshot = { managedPaths: [], immutablePaths: [] };
     return config;
   },
