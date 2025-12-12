@@ -16,12 +16,11 @@ export async function POST(req) {
 
     const cleaned = url.trim();
 
-    // FETCH THE VEHICLE PAGE
+    // Fetch the page
     const res = await fetch(cleaned, { method: "GET" }).catch(() => null);
-
     if (!res || !res.ok) {
       return NextResponse.json(
-        { error: "Failed to fetch vehicle page." },
+        { error: "Vehicle page could not be fetched." },
         { status: 500 }
       );
     }
@@ -30,64 +29,75 @@ export async function POST(req) {
     const root = parse(html);
 
     // ---------------------------------------------------------
-    // 1. IMAGES — DealerOn Type C Extraction
+    // 1. EXTRACT window.digitalData SCRIPT
+    // ---------------------------------------------------------
+    const scriptTags = root.querySelectorAll("script");
+
+    let digitalDataJSON = null;
+
+    for (const tag of scriptTags) {
+      const content = tag.innerText;
+
+      if (content && content.includes("window.digitalData")) {
+        // Extract JSON between the = and the ending semicolon
+        const match = content.match(/window\.digitalData\s*=\s*(\{[\s\S]*?\});/);
+
+        if (match && match[1]) {
+          try {
+            digitalDataJSON = JSON.parse(match[1]);
+          } catch (err) {
+            // Some DealerOn versions put trailing commas
+            const fixed = match[1].replace(/,(\s*[}\]])/g, "$1");
+            try {
+              digitalDataJSON = JSON.parse(fixed);
+            } catch (e) {
+              return NextResponse.json(
+                { error: "Could not parse vehicle data." },
+                { status: 500 }
+              );
+            }
+          }
+        }
+      }
+    }
+
+    if (!digitalDataJSON) {
+      return NextResponse.json(
+        { error: "Vehicle data not found on page." },
+        { status: 404 }
+      );
+    }
+
+    const vehicleNode = digitalDataJSON.vehicle || {};
+
+    // ---------------------------------------------------------
+    // 2. EXTRACT IMAGES
     // ---------------------------------------------------------
     let images = [];
 
-    // Try <img data-src="">
-    root.querySelectorAll("img").forEach((img) => {
-      const ds = img.getAttribute("data-src");
-      if (ds && ds.startsWith("http") && images.length < 4) {
-        images.push(ds);
-      }
-    });
-
-    // Try <img src="">
-    if (images.length < 4) {
-      root.querySelectorAll("img").forEach((img) => {
-        const src = img.getAttribute("src");
-        if (src && src.startsWith("http") && images.length < 4) {
-          images.push(src);
-        }
-      });
+    if (vehicleNode.media && Array.isArray(vehicleNode.media)) {
+      images = vehicleNode.media
+        .filter((m) => m.url && m.url.startsWith("http"))
+        .map((m) => m.url)
+        .slice(0, 4);
     }
-
-    // Deduplicate
-    images = [...new Set(images)].slice(0, 4);
 
     if (images.length === 0) {
       return NextResponse.json(
-        { error: "Could not extract images from the page." },
-        { status: 500 }
+        { error: "Could not extract vehicle images." },
+        { status: 404 }
       );
     }
 
     // ---------------------------------------------------------
-    // 2. YEAR / MAKE / MODEL from <title>
+    // 3. EXTRACT VEHICLE DETAILS
     // ---------------------------------------------------------
-    let title = root.querySelector("title")?.innerText || "";
-    title = title.replace(/\s+/g, " ").trim();
-
-    // DealerOn example title:
-    // "Used 2022 Jeep Grand Cherokee Limited 4x4 | Pischke Motors"
-    const yearMatch = title.match(/(?:New|Used)?\s*(\d{4})/);
-    const year = yearMatch ? yearMatch[1] : "";
-
-    const parts = title.split(" ");
-    const make = parts.find((p) => /^[A-Za-z]{3,}$/.test(p)) || "";
-    const model = parts.slice(parts.indexOf(make) + 1).join(" ").split("|")[0].trim();
-
-    // ---------------------------------------------------------
-    // 3. VIN from URL (DealerOn always ends URL with VIN)
-    // ---------------------------------------------------------
-    const vinMatch = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/i);
-    const vin = vinMatch ? vinMatch[0] : "";
-
     const vehicle = {
-      year,
-      make,
-      model,
-      vin,
+      year: vehicleNode.year || "",
+      make: vehicleNode.make || "",
+      model: vehicleNode.model || "",
+      trim: vehicleNode.trim || "",
+      vin: vehicleNode.vin || "",
       url: cleaned,
     };
 
