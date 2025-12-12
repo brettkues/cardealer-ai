@@ -7,20 +7,17 @@ export async function POST(req) {
   try {
     const { url } = await req.json();
 
-    if (!url || url.trim() === "") {
+    if (!url) {
       return NextResponse.json(
         { error: "Vehicle URL is required." },
         { status: 400 }
       );
     }
 
-    const cleaned = url.trim();
-
-    // Fetch the page
-    const res = await fetch(cleaned, { method: "GET" }).catch(() => null);
+    const res = await fetch(url, { method: "GET" }).catch(() => null);
     if (!res || !res.ok) {
       return NextResponse.json(
-        { error: "Vehicle page could not be fetched." },
+        { error: "Failed to fetch vehicle page." },
         { status: 500 }
       );
     }
@@ -28,84 +25,91 @@ export async function POST(req) {
     const html = await res.text();
     const root = parse(html);
 
-    // ---------------------------------------------------------
-    // 1. EXTRACT window.digitalData SCRIPT
-    // ---------------------------------------------------------
-    const scriptTags = root.querySelectorAll("script");
+    // --------------------------
+    // TRY 1 — DealerOn NEXT_DATA
+    // --------------------------
+    const nextDataTag = root.querySelector("#__NEXT_DATA__");
 
-    let digitalDataJSON = null;
+    let images = [];
 
-    for (const tag of scriptTags) {
-      const content = tag.innerText;
+    if (nextDataTag) {
+      try {
+        const json = JSON.parse(nextDataTag.innerText);
 
-      if (content && content.includes("window.digitalData")) {
-        // Extract JSON between the = and the ending semicolon
-        const match = content.match(/window\.digitalData\s*=\s*(\{[\s\S]*?\});/);
+        // Locate all keys containing media or gallery
+        const walk = (obj) => {
+          if (!obj || typeof obj !== "object") return;
 
-        if (match && match[1]) {
-          try {
-            digitalDataJSON = JSON.parse(match[1]);
-          } catch (err) {
-            // Some DealerOn versions put trailing commas
-            const fixed = match[1].replace(/,(\s*[}\]])/g, "$1");
-            try {
-              digitalDataJSON = JSON.parse(fixed);
-            } catch (e) {
-              return NextResponse.json(
-                { error: "Could not parse vehicle data." },
-                { status: 500 }
-              );
+          for (const key of Object.keys(obj)) {
+            const val = obj[key];
+
+            if (
+              key.toLowerCase().includes("media") ||
+              key.toLowerCase().includes("gallery")
+            ) {
+              if (Array.isArray(val)) {
+                val.forEach((v) => {
+                  if (typeof v === "string" && v.startsWith("http")) {
+                    images.push(v);
+                  }
+                  if (v && v.url && v.url.startsWith("http")) {
+                    images.push(v.url);
+                  }
+                });
+              }
             }
+
+            walk(val);
           }
-        }
+        };
+
+        walk(json);
+
+        images = [...new Set(images)].slice(0, 4); // unique, limit 4
+      } catch (e) {
+        console.log("DealerOn NEXT_DATA parse failed", e);
       }
     }
 
-    if (!digitalDataJSON) {
-      return NextResponse.json(
-        { error: "Vehicle data not found on page." },
-        { status: 404 }
-      );
-    }
+    // --------------------------
+    // FALLBACK — scan <img> tags
+    // --------------------------
+    if (images.length === 0) {
+      root.querySelectorAll("img").forEach((img) => {
+        const src =
+          img.getAttribute("data-src") ||
+          img.getAttribute("src") ||
+          "";
 
-    const vehicleNode = digitalDataJSON.vehicle || {};
-
-    // ---------------------------------------------------------
-    // 2. EXTRACT IMAGES
-    // ---------------------------------------------------------
-    let images = [];
-
-    if (vehicleNode.media && Array.isArray(vehicleNode.media)) {
-      images = vehicleNode.media
-        .filter((m) => m.url && m.url.startsWith("http"))
-        .map((m) => m.url)
-        .slice(0, 4);
+        if (src.startsWith("http") && !src.includes("logo") && images.length < 4) {
+          images.push(src);
+        }
+      });
     }
 
     if (images.length === 0) {
       return NextResponse.json(
-        { error: "Could not extract vehicle images." },
+        { error: "Could not extract vehicle images" },
         { status: 404 }
       );
     }
 
-    // ---------------------------------------------------------
-    // 3. EXTRACT VEHICLE DETAILS
-    // ---------------------------------------------------------
-    const vehicle = {
-      year: vehicleNode.year || "",
-      make: vehicleNode.make || "",
-      model: vehicleNode.model || "",
-      trim: vehicleNode.trim || "",
-      vin: vehicleNode.vin || "",
-      url: cleaned,
-    };
+    // --------------------------
+    // Extract basic vehicle info
+    // --------------------------
+    const title = root.querySelector("title")?.innerText || "";
+
+    const year = title.match(/\b(19|20)\d{2}\b/)?.[0] || "";
+    const make = title.split(" ")[1] || "";
+    const model = title.split(" ").slice(2).join(" ").split("-")[0];
 
     return NextResponse.json({
-      vehicle,
-      images,
+      vehicle: { year, make, model, url },
+      images
     });
+
   } catch (err) {
+    console.log("SCRAPER ERROR:", err);
     return NextResponse.json(
       { error: "Lookup failed." },
       { status: 500 }
