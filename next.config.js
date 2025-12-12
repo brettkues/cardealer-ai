@@ -2,26 +2,20 @@
 const nextConfig = {
   reactStrictMode: false,
 
-  experimental: {
-    serverActions: true,
-    serverComponentsExternalPackages: ["sharp"]    // REQUIRED FOR VERCEL
-  },
-
-  api: {
-    responseLimit: "20mb",
-    bodyParser: {
-      sizeLimit: "15mb"
-    }
-  },
-
-  webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false
-    };
+  webpack(config, { isServer }) {
+    // DEBUG: Print the directories Next.js is scanning
+    console.log("WEBPACK CONTEXT:", config.context);
+    console.log("RESOLVE MODULES:", config.resolve.modules);
 
     return config;
+  },
+
+  experimental: {
+    serverActions: true,
+    // DEBUG: This forces Next.js to spit out patterns before crashing
+    outputFileTracingIncludes: {
+      "/": ["./**/*"]
+    }
   }
 };
 
