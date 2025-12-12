@@ -1,139 +1,163 @@
 import { NextResponse } from "next/server";
-import sharp from "sharp";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 export const dynamic = "force-dynamic";
-
-// Seasonal ribbon color logic
-function getSeasonalRibbonColor() {
-  const month = new Date().getMonth() + 1;
-
-  if (month === 12 || month <= 2) return "#5CA8FF"; // Winter – Icy Blue
-  if (month >= 3 && month <= 5) return "#65C67A";   // Spring – Fresh Green
-  if (month >= 6 && month <= 8) return "#1B4B9B";   // Summer – Deep Blue
-  return "#D46A1E";                                 // Fall – Burnt Orange
-}
 
 export async function POST(req) {
   try {
     const { vehicle, images, caption, logos } = await req.json();
 
-    if (!images || images.length === 0) {
-      return NextResponse.json({ error: "No vehicle images found." }, { status: 400 });
+    if (!images?.length) {
+      return NextResponse.json(
+        { error: "No vehicle images provided." },
+        { status: 400 }
+      );
     }
 
-    // Load only the first image for now (clean layout)
-    const mainImageURL = images[0];
+    // -------------------------------------
+    // CANVAS SETUP
+    // -------------------------------------
+    const size = 850;
+    const canvas = createCanvas(size, size);
+    const ctx = canvas.getContext("2d");
 
-    const mainImageBuffer = await fetch(mainImageURL).then((r) => r.arrayBuffer());
-    const mainJPG = Buffer.from(mainImageBuffer);
+    // Background
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, size, size);
 
-    const canvasSize = 850;
-    const mainWidth = 820;
-    const mainHeight = 600;
+    // -------------------------------------
+    // LOAD VEHICLE IMAGES
+    // -------------------------------------
+    const maxImg = 4;
+    const selectedImgs = images.slice(0, maxImg);
 
-    const ribbonHeight = 150;
-    const ribbonColor = getSeasonalRibbonColor();
+    const loaded = await Promise.all(
+      selectedImgs.map(async (url) => {
+        try {
+          return await loadImage(url);
+        } catch {
+          return null;
+        }
+      })
+    );
 
-    // Resize the main image
-    const resizedMain = await sharp(mainJPG)
-      .resize(mainWidth, mainHeight, { fit: "cover" })
-      .toBuffer();
+    const valid = loaded.filter((img) => img);
 
-    // Base canvas
-    let canvas = sharp({
-      create: {
-        width: canvasSize,
-        height: canvasSize,
-        channels: 4,
-        background: "#ffffff",
-      },
-    }).png();
-
-    // Composite main image
-    canvas = canvas.composite([
-      {
-        input: resizedMain,
-        top: 10,
-        left: 15,
-      },
-    ]);
-
-    // Ribbon bar
-    const ribbon = await sharp({
-      create: {
-        width: canvasSize,
-        height: ribbonHeight,
-        channels: 4,
-        background: ribbonColor,
-      },
-    }).png().toBuffer();
-
-    canvas = canvas.composite([
-      { input: ribbon, top: canvasSize - ribbonHeight, left: 0 }
-    ]);
-
-    // ---------------------------
-    // LOGOS (LEFT SIDE)
-    // ---------------------------
-    const logoStartY = canvasSize - ribbonHeight + 15;
-    let currentY = logoStartY;
-    const logoSize = 70;
-
-    for (const logo of logos.slice(0, 3)) {
-      try {
-        const base64 = logo.url.replace(/^data:image\/\w+;base64,/, "");
-        const buf = Buffer.from(base64, "base64");
-
-        const resizedLogo = await sharp(buf)
-          .resize(logoSize, logoSize, { fit: "contain" })
-          .toBuffer();
-
-        canvas = canvas.composite([
-          { input: resizedLogo, top: currentY, left: 20 }
-        ]);
-
-        currentY += logoSize + 10;
-      } catch {}
+    if (valid.length === 0) {
+      return NextResponse.json(
+        { error: "Could not load vehicle images." },
+        { status: 400 }
+      );
     }
 
-    // ---------------------------
-    // CAPTION (CENTERED IN RIBBON)
-    // ---------------------------
-    const svgCaption = `
-      <svg width="${canvasSize}" height="${ribbonHeight}">
-        <text
-          x="50%"
-          y="50%"
-          font-size="38"
-          fill="white"
-          font-family="Arial, Helvetica, sans-serif"
-          text-anchor="middle"
-          alignment-baseline="central"
-        >
-          ${caption.replace(/&/g, "&amp;")}
-        </text>
-      </svg>
-    `;
+    // -------------------------------------
+    // DRAW 2×2 GRID
+    // -------------------------------------
+    const cell = size / 2;
 
-    const captionBuffer = Buffer.from(svgCaption);
+    valid.forEach((img, i) => {
+      if (!img) return;
 
-    canvas = canvas.composite([
-      {
-        input: captionBuffer,
-        top: canvasSize - ribbonHeight,
-        left: 0,
-      },
-    ]);
+      const row = Math.floor(i / 2);
+      const col = i % 2;
 
-    // Output
-    const finalImage = await canvas.png().toBuffer();
+      // crop to square center
+      const s = Math.min(img.width, img.height);
+      const sx = (img.width - s) / 2;
+      const sy = (img.height - s) / 2;
 
-    return NextResponse.json({
-      output: `data:image/png;base64,${finalImage.toString("base64")}`,
+      const dx = col * cell;
+      const dy = row * cell;
+
+      ctx.drawImage(img, sx, sy, s, s, dx, dy, cell, cell);
     });
 
+    // -------------------------------------
+    // RIBBON (Ribbon Style C)
+    // -------------------------------------
+    const ribbonHeight = Math.floor(size * 0.20);
+
+    const gradient = ctx.createLinearGradient(0, size - ribbonHeight, 0, size);
+    gradient.addColorStop(0, "#111");
+    gradient.addColorStop(1, "#333");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, size - ribbonHeight, size, ribbonHeight);
+
+    // -------------------------------------
+    // DRAW LOGOS (Centered Above Caption)
+    // -------------------------------------
+    const usableLogos = logos?.slice(0, 3) || [];
+    const ribbonTop = size - ribbonHeight;
+
+    if (usableLogos.length > 0) {
+      const loadedLogos = await Promise.all(
+        usableLogos.map(async (l) => {
+          try {
+            return await loadImage(l.url);
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const good = loadedLogos.filter((x) => x);
+
+      if (good.length > 0) {
+        const maxLogoH = Math.floor(ribbonHeight * 0.30);
+        const totalW =
+          good.reduce((acc, logo) => {
+            const scale = maxLogoH / logo.height;
+            acc += logo.width * scale;
+            return acc;
+          }, 0) +
+          (good.length - 1) * 20;
+
+        let x = (size - totalW) / 2;
+        const y = ribbonTop + 10;
+
+        good.forEach((logo) => {
+          const scale = maxLogoH / logo.height;
+          const w = logo.width * scale;
+          const h = maxLogoH;
+          ctx.drawImage(logo, x, y, w, h);
+          x += w + 20;
+        });
+      }
+    }
+
+    // -------------------------------------
+    // DRAW CAPTION (Centered Below Logos)
+    // -------------------------------------
+    if (caption?.trim()) {
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      let fontSize = 32;
+      ctx.font = `${fontSize}px sans-serif`;
+
+      while (ctx.measureText(caption).width > size - 80 && fontSize > 14) {
+        fontSize -= 2;
+        ctx.font = `${fontSize}px sans-serif`;
+      }
+
+      const captionY = size - ribbonHeight + ribbonHeight * 0.68;
+      ctx.fillText(caption, size / 2, captionY);
+    }
+
+    // -------------------------------------
+    // RETURN PNG
+    // -------------------------------------
+    const png = canvas.toBuffer("image/png");
+    const base64 = `data:image/png;base64,${png.toString("base64")}`;
+
+    return NextResponse.json({ output: base64 });
   } catch (err) {
     console.error("BUILD ERROR:", err);
-    return NextResponse.json({ error: "Image build failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to build image." },
+      { status: 500 }
+    );
   }
 }
