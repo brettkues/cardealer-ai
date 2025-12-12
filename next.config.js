@@ -4,7 +4,16 @@ const nextConfig = {
 
   experimental: {
     serverActions: true,
-    serverComponentsExternalPackages: ["sharp"],   // REQUIRED FOR VERCEL
+    serverComponentsExternalPackages: ["sharp"],
+  },
+
+  // Prevent micromatch infinite recursion crash on Vercel
+  webpack(config) {
+    config.snapshot = {
+      managedPaths: [],
+      immutablePaths: [],
+    };
+    return config;
   },
 
   api: {
@@ -12,22 +21,6 @@ const nextConfig = {
     bodyParser: {
       sizeLimit: "15mb",
     },
-  },
-
-  webpack: (config) => {
-    // Fix infinite loop / micromatch recursion on Vercel
-    config.watchOptions = {
-      ignored: ['**/.git/**', '**/.next/**', '**/node_modules/**']
-    };
-
-    // Prevent fs/path errors in client bundles
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false,
-    };
-
-    return config;
   },
 };
 
