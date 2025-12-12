@@ -7,15 +7,19 @@ export async function POST(req) {
   try {
     const { url } = await req.json();
 
-    if (!url) {
+    if (!url || url.trim() === "") {
       return NextResponse.json(
         { error: "Vehicle URL is required." },
         { status: 400 }
       );
     }
 
-    const res = await fetch(url);
-    if (!res.ok) {
+    const cleaned = url.trim();
+
+    // FETCH THE VEHICLE PAGE
+    const res = await fetch(cleaned, { method: "GET" }).catch(() => null);
+
+    if (!res || !res.ok) {
       return NextResponse.json(
         { error: "Failed to fetch vehicle page." },
         { status: 500 }
@@ -25,49 +29,73 @@ export async function POST(req) {
     const html = await res.text();
     const root = parse(html);
 
-    // Extract images
+    // ---------------------------------------------------------
+    // 1. IMAGES — DealerOn Type C Extraction
+    // ---------------------------------------------------------
     let images = [];
 
-    // JSON-LD first
-    const ldTags = root.querySelectorAll('script[type="application/ld+json"]');
-    for (const tag of ldTags) {
-      try {
-        const json = JSON.parse(tag.innerText);
-        if (json.image && Array.isArray(json.image)) {
-          images = json.image.slice(0, 4);
-          break;
-        }
-      } catch {}
-    }
+    // Try <img data-src="">
+    root.querySelectorAll("img").forEach((img) => {
+      const ds = img.getAttribute("data-src");
+      if (ds && ds.startsWith("http") && images.length < 4) {
+        images.push(ds);
+      }
+    });
 
-    // Fallback images
-    if (images.length === 0) {
+    // Try <img src="">
+    if (images.length < 4) {
       root.querySelectorAll("img").forEach((img) => {
-        const src = img.getAttribute("data-src") || img.getAttribute("src");
+        const src = img.getAttribute("src");
         if (src && src.startsWith("http") && images.length < 4) {
           images.push(src);
         }
       });
     }
 
-    // Extract year/make/model from title
-    let title = root.querySelector("title")?.innerText || "";
-    let year = "";
-    let make = "";
-    let model = "";
+    // Deduplicate
+    images = [...new Set(images)].slice(0, 4);
 
-    const match = title.match(/(\d{4})\s+([A-Za-z]+)\s+(.+)/);
-    if (match) {
-      year = match[1];
-      make = match[2];
-      model = match[3].split("-")[0].trim();
+    if (images.length === 0) {
+      return NextResponse.json(
+        { error: "Could not extract images from the page." },
+        { status: 500 }
+      );
     }
 
+    // ---------------------------------------------------------
+    // 2. YEAR / MAKE / MODEL from <title>
+    // ---------------------------------------------------------
+    let title = root.querySelector("title")?.innerText || "";
+    title = title.replace(/\s+/g, " ").trim();
+
+    // DealerOn example title:
+    // "Used 2022 Jeep Grand Cherokee Limited 4x4 | Pischke Motors"
+    const yearMatch = title.match(/(?:New|Used)?\s*(\d{4})/);
+    const year = yearMatch ? yearMatch[1] : "";
+
+    const parts = title.split(" ");
+    const make = parts.find((p) => /^[A-Za-z]{3,}$/.test(p)) || "";
+    const model = parts.slice(parts.indexOf(make) + 1).join(" ").split("|")[0].trim();
+
+    // ---------------------------------------------------------
+    // 3. VIN from URL (DealerOn always ends URL with VIN)
+    // ---------------------------------------------------------
+    const vinMatch = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/i);
+    const vin = vinMatch ? vinMatch[0] : "";
+
+    const vehicle = {
+      year,
+      make,
+      model,
+      vin,
+      url: cleaned,
+    };
+
     return NextResponse.json({
-      vehicle: { year, make, model, url },
+      vehicle,
       images,
     });
-  } catch {
+  } catch (err) {
     return NextResponse.json(
       { error: "Lookup failed." },
       { status: 500 }
