@@ -8,14 +8,17 @@ const IMG_W = 425;
 const IMG_H = 319;
 const BANNER_H = 212;
 
+/**
+ * Load image from URL or base64
+ */
 async function loadImageBuffer(src) {
-  // BASE64 IMAGE
+  // Base64 image
   if (src.startsWith("data:image")) {
     const base64 = src.replace(/^data:image\/\w+;base64,/, "");
     return Buffer.from(base64, "base64");
   }
 
-  // URL IMAGE
+  // Remote image
   const res = await fetch(src, {
     headers: {
       "User-Agent": "Mozilla/5.0",
@@ -23,7 +26,10 @@ async function loadImageBuffer(src) {
     },
   });
 
-  if (!res.ok) throw new Error("Image fetch failed");
+  if (!res.ok) {
+    throw new Error("Failed to fetch image");
+  }
+
   return Buffer.from(await res.arrayBuffer());
 }
 
@@ -38,16 +44,16 @@ export async function POST(req) {
       );
     }
 
-    // -----------------------------------
-    // LOAD & RESIZE UP TO 4 IMAGES
-    // -----------------------------------
-    const resized = [];
+    // -----------------------------
+    // LOAD & RESIZE IMAGES
+    // -----------------------------
+    const resizedImages = [];
 
     for (const src of images.slice(0, 4)) {
       try {
-        const buf = await loadImageBuffer(src);
+        const buffer = await loadImageBuffer(src);
 
-        const img = await sharp(buf)
+        const resized = await sharp(buffer)
           .resize(IMG_W, IMG_H, {
             fit: "cover",
             position: "center",
@@ -55,22 +61,22 @@ export async function POST(req) {
           .png()
           .toBuffer();
 
-        resized.push(img);
-      } catch (e) {
-        console.warn("Skipping bad image");
+        resizedImages.push(resized);
+      } catch {
+        // Skip invalid images
       }
     }
 
-    if (resized.length === 0) {
+    if (resizedImages.length === 0) {
       return NextResponse.json(
-        { error: "No valid images could be processed." },
+        { error: "No valid images processed." },
         { status: 500 }
       );
     }
 
-    // -----------------------------------
+    // -----------------------------
     // BASE CANVAS
-    // -----------------------------------
+    // -----------------------------
     let canvas = sharp({
       create: {
         width: CANVAS,
@@ -80,23 +86,38 @@ export async function POST(req) {
       },
     }).png();
 
-    const comps = [];
+    const composites = [];
 
-    // TOP ROW
-    if (resized[0]) comps.push({ input: resized[0], left: 0, top: 0 });
-    if (resized[1]) comps.push({ input: resized[1], left: IMG_W, top: 0 });
+    // Top row
+    if (resizedImages[0])
+      composites.push({ input: resizedImages[0], left: 0, top: 0 });
+    if (resizedImages[1])
+      composites.push({ input: resizedImages[1], left: IMG_W, top: 0 });
 
-    // BOTTOM ROW
+    // Bottom row
     const bottomY = IMG_H + BANNER_H;
-    if (resized[2]) comps.push({ input: resized[2], left: 0, top: bottomY });
-    if (resized[3]) comps.push({ input: resized[3], left: IMG_W, top: bottomY });
+    if (resizedImages[2])
+      composites.push({ input: resizedImages[2], left: 0, top: bottomY });
+    if (resizedImages[3])
+      composites.push({ input: resizedImages[3], left: IMG_W, top: bottomY });
 
-    canvas = canvas.composite(comps);
+    canvas = canvas.composite(composites);
 
-    // -----------------------------------
+    // -----------------------------
     // OUTPUT
-    // -----------------------------------
+    // -----------------------------
     const finalImage = await canvas.png().toBuffer();
 
     return NextResponse.json({
-      images: [`data:image/png;base64,${finalImage.toString(]()
+      images: [
+        `data:image/png;base64,${finalImage.toString("base64")}`,
+      ],
+    });
+  } catch (err) {
+    console.error("BUILD IMAGE ERROR:", err);
+    return NextResponse.json(
+      { error: "Image build failed." },
+      { status: 500 }
+    );
+  }
+}
