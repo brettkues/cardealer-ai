@@ -7,51 +7,64 @@ export async function POST(req) {
   try {
     const { images } = await req.json();
 
-    if (!images || images.length === 0) {
+    if (!images || images.length < 2) {
       return NextResponse.json(
-        { error: "No images provided." },
+        { error: "At least 2 images are required." },
         { status: 400 }
       );
     }
 
     // --------------------------------------------------
-    // DOWNLOAD UP TO 4 IMAGES (OWN THE BYTES)
+    // FETCH IMAGES
     // --------------------------------------------------
-    const imageBuffers = [];
+    const buffers = [];
 
     for (const imgUrl of images.slice(0, 4)) {
       try {
         const res = await fetch(imgUrl, {
           headers: {
             "User-Agent": "Mozilla/5.0",
-            "Accept": "image/*",
+            Accept: "image/*",
           },
         });
 
         if (!res.ok) continue;
-
-        const buffer = Buffer.from(await res.arrayBuffer());
-
-        const resized = await sharp(buffer)
-          .resize(425, 425, { fit: "cover", position: "center" })
-          .png()
-          .toBuffer();
-
-        imageBuffers.push(resized);
+        buffers.push(Buffer.from(await res.arrayBuffer()));
       } catch {
-        // skip failed images
+        // skip failures
       }
     }
 
-    if (imageBuffers.length === 0) {
+    if (buffers.length === 0) {
       return NextResponse.json(
-        { error: "Unable to process vehicle images." },
+        { error: "Unable to load images." },
         { status: 500 }
       );
     }
 
     // --------------------------------------------------
-    // BASE 850x850 CANVAS
+    // IMAGE SIZES
+    // --------------------------------------------------
+    const IMG_W = 425;
+    const IMG_H = 319;
+    const BANNER_H = 212;
+
+    const resized = [];
+
+    for (const buf of buffers) {
+      resized.push(
+        await sharp(buf)
+          .resize(IMG_W, IMG_H, {
+            fit: "cover",
+            position: "center",
+          })
+          .png()
+          .toBuffer()
+      );
+    }
+
+    // --------------------------------------------------
+    // BASE CANVAS
     // --------------------------------------------------
     let canvas = sharp({
       create: {
@@ -62,23 +75,21 @@ export async function POST(req) {
       },
     }).png();
 
-    const positions = [
-      { left: 0, top: 0 },       // top-left
-      { left: 425, top: 0 },     // top-right
-      { left: 0, top: 425 },     // bottom-left
-      { left: 425, top: 425 },   // bottom-right
-    ];
+    const composites = [];
 
-    const composites = imageBuffers.map((img, i) => ({
-      input: img,
-      left: positions[i].left,
-      top: positions[i].top,
-    }));
+    // TOP ROW
+    if (resized[0]) composites.push({ input: resized[0], left: 0, top: 0 });
+    if (resized[1]) composites.push({ input: resized[1], left: 425, top: 0 });
+
+    // BOTTOM ROW
+    const bottomY = IMG_H + BANNER_H;
+    if (resized[2]) composites.push({ input: resized[2], left: 0, top: bottomY });
+    if (resized[3]) composites.push({ input: resized[3], left: 425, top: bottomY });
 
     canvas = canvas.composite(composites);
 
     // --------------------------------------------------
-    // FINAL OUTPUT
+    // OUTPUT
     // --------------------------------------------------
     const finalImage = await canvas.png().toBuffer();
 
