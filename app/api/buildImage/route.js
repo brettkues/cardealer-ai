@@ -8,10 +8,10 @@ export const dynamic = "force-dynamic";
 // --------------------------------------------------
 function getSeasonalRibbonColor() {
   const month = new Date().getMonth() + 1;
-  if (month === 12 || month <= 2) return "#5CA8FF"; // Winter
-  if (month >= 3 && month <= 5) return "#65C67A";  // Spring
-  if (month >= 6 && month <= 8) return "#1B4B9B";  // Summer
-  return "#D46A1E";                                // Fall
+  if (month === 12 || month <= 2) return "#5CA8FF";
+  if (month >= 3 && month <= 5) return "#65C67A";
+  if (month >= 6 && month <= 8) return "#1B4B9B";
+  return "#D46A1E";
 }
 
 export async function POST(req) {
@@ -26,20 +26,17 @@ export async function POST(req) {
     }
 
     // --------------------------------------------------
-    // CANVAS + LAYOUT CONSTANTS
+    // CONSTANTS
     // --------------------------------------------------
     const CANVAS_SIZE = 850;
-
     const IMAGE_WIDTH = 425;
     const IMAGE_HEIGHT = 319;
-
     const BANNER_HEIGHT = 212;
     const BANNER_TOP = IMAGE_HEIGHT;
-
     const BOTTOM_ROW_TOP = IMAGE_HEIGHT + BANNER_HEIGHT;
 
     // --------------------------------------------------
-    // CREATE BASE CANVAS
+    // BASE CANVAS
     // --------------------------------------------------
     let canvas = sharp({
       create: {
@@ -51,16 +48,36 @@ export async function POST(req) {
     });
 
     // --------------------------------------------------
-    // LOAD + RESIZE 4 VEHICLE IMAGES
+    // FETCH + RESIZE IMAGES (WITH HEADERS)
     // --------------------------------------------------
     const resizedImages = [];
 
     for (let i = 0; i < 4; i++) {
-      const buffer = await fetch(images[i]).then((r) => r.arrayBuffer());
-      const img = await sharp(Buffer.from(buffer))
-        .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: "cover" })
-        .toBuffer();
-      resizedImages.push(img);
+      try {
+        const res = await fetch(images[i], {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+            Accept: "image/*",
+          },
+        });
+
+        if (!res.ok) throw new Error("Image fetch failed");
+
+        const buffer = await res.arrayBuffer();
+
+        const img = await sharp(Buffer.from(buffer))
+          .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: "cover" })
+          .toBuffer();
+
+        resizedImages.push(img);
+      } catch (err) {
+        console.error("IMAGE LOAD FAILED:", images[i]);
+        return NextResponse.json(
+          { error: "Failed to load vehicle image." },
+          { status: 500 }
+        );
+      }
     }
 
     // --------------------------------------------------
@@ -76,25 +93,21 @@ export async function POST(req) {
     // --------------------------------------------------
     // BANNER
     // --------------------------------------------------
-    const bannerColor = getSeasonalRibbonColor();
-
     const banner = await sharp({
       create: {
         width: CANVAS_SIZE,
         height: BANNER_HEIGHT,
         channels: 4,
-        background: bannerColor,
+        background: getSeasonalRibbonColor(),
       },
     })
       .png()
       .toBuffer();
 
-    canvas = canvas.composite([
-      { input: banner, top: BANNER_TOP, left: 0 },
-    ]);
+    canvas = canvas.composite([{ input: banner, top: BANNER_TOP, left: 0 }]);
 
     // --------------------------------------------------
-    // CAPTION (CENTERED IN BANNER)
+    // CAPTION
     // --------------------------------------------------
     if (caption) {
       const safeCaption = caption.replace(/&/g, "&amp;");
@@ -116,16 +129,12 @@ export async function POST(req) {
       `;
 
       canvas = canvas.composite([
-        {
-          input: Buffer.from(captionSVG),
-          top: BANNER_TOP,
-          left: 0,
-        },
+        { input: Buffer.from(captionSVG), top: BANNER_TOP, left: 0 },
       ]);
     }
 
     // --------------------------------------------------
-    // LOGOS (LEFT STACK IN BANNER)
+    // LOGOS
     // --------------------------------------------------
     let logoY = BANNER_TOP + 15;
     const LOGO_SIZE = 70;
@@ -144,9 +153,7 @@ export async function POST(req) {
         ]);
 
         logoY += LOGO_SIZE + 10;
-      } catch {
-        // ignore bad logos
-      }
+      } catch {}
     }
 
     // --------------------------------------------------
