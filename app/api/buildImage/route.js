@@ -25,24 +25,14 @@ export async function POST(req) {
     }
 
     // --------------------------------------------------
-    // FETCH VEHICLE IMAGE (WITH HEADERS – CRITICAL FIX)
+    // USE BASE64 IMAGE (NO EXTERNAL FETCH — CRITICAL)
     // --------------------------------------------------
-    const mainImageURL = images[0];
+    const base64Image = images[0].replace(
+      /^data:image\/\w+;base64,/,
+      ""
+    );
 
-    const imageRes = await fetch(mainImageURL, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "image/*",
-        "Referer": mainImageURL,
-      },
-    });
-
-    if (!imageRes.ok) {
-      throw new Error(`Failed to fetch image: ${imageRes.status}`);
-    }
-
-    const mainImageBuffer = await imageRes.arrayBuffer();
-    const mainJPG = Buffer.from(mainImageBuffer);
+    const mainJPG = Buffer.from(base64Image, "base64");
 
     // --------------------------------------------------
     // CANVAS SETUP
@@ -53,12 +43,10 @@ export async function POST(req) {
     const ribbonHeight = 150;
     const ribbonColor = getSeasonalRibbonColor();
 
-    // Resize main image
     const resizedMain = await sharp(mainJPG)
       .resize(mainWidth, mainHeight, { fit: "cover" })
       .toBuffer();
 
-    // Base canvas
     let canvas = sharp({
       create: {
         width: canvasSize,
@@ -68,7 +56,6 @@ export async function POST(req) {
       },
     }).png();
 
-    // Composite main image
     canvas = canvas.composite([
       {
         input: resizedMain,
@@ -96,7 +83,7 @@ export async function POST(req) {
     ]);
 
     // --------------------------------------------------
-    // LOGOS (LEFT SIDE, UP TO 3)
+    // LOGOS (LEFT SIDE)
     // --------------------------------------------------
     const logoStartY = canvasSize - ribbonHeight + 15;
     let currentY = logoStartY;
@@ -104,10 +91,13 @@ export async function POST(req) {
 
     for (const logo of (logos || []).slice(0, 3)) {
       try {
-        const base64 = logo.url.replace(/^data:image\/\w+;base64,/, "");
-        const buf = Buffer.from(base64, "base64");
+        const logoBase64 = logo.url.replace(
+          /^data:image\/\w+;base64,/,
+          ""
+        );
+        const logoBuf = Buffer.from(logoBase64, "base64");
 
-        const resizedLogo = await sharp(buf)
+        const resizedLogo = await sharp(logoBuf)
           .resize(logoSize, logoSize, { fit: "contain" })
           .toBuffer();
 
@@ -125,7 +115,10 @@ export async function POST(req) {
     // CAPTION (CENTERED)
     // --------------------------------------------------
     const safeCaption = caption
-      ? caption.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      ? caption
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
       : "";
 
     const svgCaption = `
@@ -144,18 +137,16 @@ export async function POST(req) {
       </svg>
     `;
 
-    const captionBuffer = Buffer.from(svgCaption);
-
     canvas = canvas.composite([
       {
-        input: captionBuffer,
+        input: Buffer.from(svgCaption),
         top: canvasSize - ribbonHeight,
         left: 0,
       },
     ]);
 
     // --------------------------------------------------
-    // FINAL IMAGE
+    // FINAL OUTPUT
     // --------------------------------------------------
     const finalImage = await canvas.png().toBuffer();
 
