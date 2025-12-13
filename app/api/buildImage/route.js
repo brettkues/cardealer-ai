@@ -18,23 +18,24 @@ export async function POST(req) {
     const { images, caption, logos } = await req.json();
 
     if (!images || images.length === 0) {
-      return NextResponse.json({ error: "No vehicle images found." }, { status: 400 });
+      return NextResponse.json(
+        { error: "No vehicle images found." },
+        { status: 400 }
+      );
     }
 
-    // Load only the first image
+    // Use the first vehicle image
     const mainImageURL = images[0];
-
     const mainImageBuffer = await fetch(mainImageURL).then((r) => r.arrayBuffer());
     const mainJPG = Buffer.from(mainImageBuffer);
 
     const canvasSize = 850;
     const mainWidth = 820;
     const mainHeight = 600;
-
     const ribbonHeight = 150;
     const ribbonColor = getSeasonalRibbonColor();
 
-    // Resize the main image
+    // Resize main image
     const resizedMain = await sharp(mainJPG)
       .resize(mainWidth, mainHeight, { fit: "cover" })
       .toBuffer();
@@ -81,7 +82,7 @@ export async function POST(req) {
     let currentY = logoStartY;
     const logoSize = 70;
 
-    for (const logo of logos.slice(0, 3)) {
+    for (const logo of (logos || []).slice(0, 3)) {
       try {
         const base64 = logo.url.replace(/^data:image\/\w+;base64,/, "");
         const buf = Buffer.from(base64, "base64");
@@ -95,12 +96,16 @@ export async function POST(req) {
         ]);
 
         currentY += logoSize + 10;
-      } catch {}
+      } catch {
+        // ignore bad logos
+      }
     }
 
     // ---------------------------
-    // CAPTION (CENTERED IN RIBBON)
+    // CAPTION (CENTERED)
     // ---------------------------
+    const safeCaption = caption ? caption.replace(/&/g, "&amp;") : "";
+
     const svgCaption = `
       <svg width="${canvasSize}" height="${ribbonHeight}">
         <text
@@ -112,7 +117,7 @@ export async function POST(req) {
           text-anchor="middle"
           alignment-baseline="central"
         >
-          ${caption.replace(/&/g, "&amp;")}
+          ${safeCaption}
         </text>
       </svg>
     `;
@@ -127,14 +132,19 @@ export async function POST(req) {
       },
     ]);
 
-    // Output
+    // Final image
     const finalImage = await canvas.png().toBuffer();
+    const base64Image = `data:image/png;base64,${finalImage.toString("base64")}`;
 
+    // 🔑 CRITICAL FIX: return an ARRAY
     return NextResponse.json({
-      output: `data:image/png;base64,${finalImage.toString("base64")}`,
+      images: [base64Image],
     });
   } catch (err) {
     console.error("BUILD ERROR:", err);
-    return NextResponse.json({ error: "Image build failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Image build failed." },
+      { status: 500 }
+    );
   }
 }
