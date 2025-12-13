@@ -13,25 +13,95 @@ import {
 export default function ImageGenerator() {
   const [tab, setTab] = useState("generate");
 
-  const [vehicleURL, setVehicleURL] = useState("");
-  const [caption, setCaption] = useState("");
+  const [websites, setWebsites] = useState([]);
+  const [manualURL, setManualURL] = useState("");
 
+  const [caption, setCaption] = useState("");
   const [logos, setLogos] = useState([]);
   const [selectedLogos, setSelectedLogos] = useState([]);
-  const [uploadFile, setUploadFile] = useState(null);
-
   const [resultImage, setResultImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [newWebsiteName, setNewWebsiteName] = useState("");
+  const [newWebsiteURL, setNewWebsiteURL] = useState("");
+
+  const [logoUploadFile, setLogoUploadFile] = useState(null);
+
   useEffect(() => {
+    loadWebsites();
     loadLogos();
   }, []);
+
+  // --------------------------
+  // LOAD WEBSITES
+  // --------------------------
+
+  async function loadWebsites() {
+    const snap = await getDocs(collection(db, "websites"));
+    const arr = [];
+    snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+    setWebsites(arr);
+  }
+
+  // --------------------------
+  // LOAD LOGOS
+  // --------------------------
 
   async function loadLogos() {
     const snap = await getDocs(collection(db, "logos"));
     const arr = [];
     snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
     setLogos(arr);
+  }
+
+  // --------------------------
+  // WEBSITE MANAGEMENT
+  // --------------------------
+
+  async function addWebsite() {
+    if (!newWebsiteName || !newWebsiteURL) return;
+
+    await addDoc(collection(db, "websites"), {
+      name: newWebsiteName,
+      url: newWebsiteURL,
+    });
+
+    setNewWebsiteName("");
+    setNewWebsiteURL("");
+    loadWebsites();
+  }
+
+  async function removeWebsite(id) {
+    await deleteDoc(doc(db, "websites", id));
+    loadWebsites();
+  }
+
+  // --------------------------
+  // LOGO MANAGEMENT
+  // --------------------------
+
+  async function uploadLogo() {
+    if (!logoUploadFile) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result;
+
+      await addDoc(collection(db, "logos"), {
+        url: base64,
+      });
+
+      setLogoUploadFile(null);
+      loadLogos();
+    };
+
+    reader.readAsDataURL(logoUploadFile);
+  }
+
+  async function deleteLogo(id) {
+    await deleteDoc(doc(db, "logos", id));
+    setSelectedLogos(selectedLogos.filter((x) => x !== id));
+    loadLogos();
   }
 
   function toggleLogo(id) {
@@ -43,46 +113,29 @@ export default function ImageGenerator() {
     }
   }
 
-  async function uploadLogo() {
-    if (!uploadFile) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target.result;
-
-      await addDoc(collection(db, "logos"), {
-        url: base64,
-      });
-
-      setUploadFile(null);
-      loadLogos();
-    };
-
-    reader.readAsDataURL(uploadFile);
-  }
-
-  async function deleteLogo(id) {
-    await deleteDoc(doc(db, "logos", id));
-    setSelectedLogos(selectedLogos.filter((x) => x !== id));
-    loadLogos();
-  }
+  // --------------------------
+  // GENERATE IMAGE
+  // --------------------------
 
   async function generateImage() {
     setLoading(true);
     setResultImage(null);
 
-    if (!vehicleURL.trim()) {
-      alert("Please paste a vehicle URL first.");
+    if (!manualURL.trim()) {
+      alert("Please enter a full vehicle URL.");
       setLoading(false);
       return;
     }
 
-    const lookup = await fetch("/api/lookupVehicle", {
+    // STEP 1 — LOOKUP VEHICLE FROM URL
+    const lookupRes = await fetch("/api/lookupVehicle", {
       method: "POST",
-      body: JSON.stringify({ url: vehicleURL }),
+      body: JSON.stringify({
+        url: manualURL.trim(),
+      }),
     });
 
-    const vehicleData = await lookup.json();
+    const vehicleData = await lookupRes.json();
 
     if (vehicleData.error) {
       alert(vehicleData.error);
@@ -92,7 +145,8 @@ export default function ImageGenerator() {
 
     const activeLogos = logos.filter((l) => selectedLogos.includes(l.id));
 
-    const build = await fetch("/api/buildImage", {
+    // STEP 2 — BUILD FINAL IMAGE
+    const buildRes = await fetch("/api/buildImage", {
       method: "POST",
       body: JSON.stringify({
         vehicle: vehicleData.vehicle,
@@ -102,11 +156,15 @@ export default function ImageGenerator() {
       }),
     });
 
-    const result = await build.json();
+    const result = await buildRes.json();
     setResultImage(result.output);
 
     setLoading(false);
   }
+
+  // --------------------------
+  // UI
+  // --------------------------
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -121,10 +179,17 @@ export default function ImageGenerator() {
         </button>
 
         <button
+          onClick={() => setTab("websites")}
+          className={tab === "websites" ? "border-b-2 border-blue-600 pb-2" : ""}
+        >
+          Websites
+        </button>
+
+        <button
           onClick={() => setTab("logos")}
           className={tab === "logos" ? "border-b-2 border-blue-600 pb-2" : ""}
         >
-          Upload Logos
+          Logo Vault
         </button>
       </div>
 
@@ -134,20 +199,22 @@ export default function ImageGenerator() {
 
           {/* VEHICLE URL */}
           <div>
-            <label className="font-semibold">Paste Vehicle URL</label>
+            <label className="font-semibold">Full Vehicle URL</label>
             <input
+              type="text"
+              placeholder="https://www.pischkenissan.com/used-..."
               className="w-full p-3 border rounded mt-1"
-              placeholder="https://www.exampledealer.com/used-vehicle-1234"
-              value={vehicleURL}
-              onChange={(e) => setVehicleURL(e.target.value)}
+              value={manualURL}
+              onChange={(e) => setManualURL(e.target.value)}
             />
+            <p className="text-sm text-gray-600 mt-1">
+              Paste the full listing URL from DealerOn, Dealer Inspire, Dealer.com, etc.
+            </p>
           </div>
 
           {/* CAPTION */}
           <div>
-            <label className="font-semibold">
-              Caption (85 characters max)
-            </label>
+            <label className="font-semibold">Caption (85 characters max)</label>
             <input
               maxLength={85}
               className="w-full p-3 border rounded mt-1"
@@ -156,14 +223,22 @@ export default function ImageGenerator() {
             />
           </div>
 
-          {/* LOGO PICKER */}
+          {/* LOGO SELECTION */}
           <div>
-            <label className="font-semibold">Select up to 3 logos</label>
+            <label className="font-semibold flex justify-between">
+              <span>Select up to 3 logos</span>
+              <button
+                onClick={() => setTab("logos")}
+                className="text-blue-600 underline text-sm"
+              >
+                Manage Logos
+              </button>
+            </label>
 
             <div className="grid grid-cols-3 gap-3 mt-2">
               {logos.length === 0 && (
                 <div className="col-span-3 text-center text-gray-600 text-sm">
-                  No logos uploaded yet. Add some under “Upload Logos”.
+                  No logos uploaded yet. Click “Manage Logos” to add some.
                 </div>
               )}
 
@@ -173,11 +248,14 @@ export default function ImageGenerator() {
                   onClick={() => toggleLogo(l.id)}
                   className={`border rounded p-2 cursor-pointer ${
                     selectedLogos.includes(l.id)
-                      ? "border-blue-600"
+                      ? "border-blue-600 ring-2 ring-blue-400"
                       : "border-gray-300"
                   }`}
                 >
-                  <img src={l.url} className="w-full h-20 object-contain" />
+                  <img
+                    src={l.url}
+                    className="w-full h-20 object-contain"
+                  />
                 </div>
               ))}
             </div>
@@ -202,17 +280,72 @@ export default function ImageGenerator() {
         </div>
       )}
 
-      {/* ---------------- UPLOAD LOGOS TAB ---------------- */}
+      {/* ---------------- WEBSITES TAB ---------------- */}
+      {tab === "websites" && (
+        <div className="space-y-6">
+
+          {/* ADD WEBSITE */}
+          <div>
+            <label className="font-semibold">Website Name</label>
+            <input
+              className="w-full p-3 border rounded mt-1"
+              value={newWebsiteName}
+              onChange={(e) => setNewWebsiteName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="font-semibold">Website URL</label>
+            <input
+              className="w-full p-3 border rounded mt-1"
+              value={newWebsiteURL}
+              onChange={(e) => setNewWebsiteURL(e.target.value)}
+            />
+          </div>
+
+          <button
+            onClick={addWebsite}
+            className="w-full bg-green-600 text-white p-3 rounded"
+          >
+            Add Website
+          </button>
+
+          {/* LIST WEBSITES */}
+          <div className="mt-6 space-y-3">
+            {websites.map((w) => (
+              <div
+                key={w.id}
+                className="border p-3 rounded flex justify-between"
+              >
+                <div>
+                  <div className="font-semibold">{w.name}</div>
+                  <div className="text-sm text-gray-600">{w.url}</div>
+                </div>
+
+                <button
+                  className="bg-red-600 text-white px-3 py-1 rounded"
+                  onClick={() => removeWebsite(w.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- LOGO VAULT TAB ---------------- */}
       {tab === "logos" && (
         <div className="space-y-6">
 
+          {/* UPLOAD LOGO */}
           <div>
-            <label className="font-semibold">Upload Logos</label>
+            <label className="font-semibold">Upload Logo</label>
             <input
               type="file"
               accept="image/*"
               className="mt-1"
-              onChange={(e) => setUploadFile(e.target.files[0])}
+              onChange={(e) => setLogoUploadFile(e.target.files[0])}
             />
 
             <button
@@ -223,6 +356,7 @@ export default function ImageGenerator() {
             </button>
           </div>
 
+          {/* EXISTING LOGOS */}
           <div className="grid grid-cols-3 gap-3 mt-6">
             {logos.map((l) => (
               <div key={l.id} className="border p-2 rounded relative">
