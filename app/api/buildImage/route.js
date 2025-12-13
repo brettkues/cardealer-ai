@@ -3,14 +3,14 @@ import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
-// --------------------------------------------------
-// Seasonal ribbon color
-// --------------------------------------------------
+// ----------------------------------------
+// Seasonal banner color
+// ----------------------------------------
 function getSeasonalRibbonColor() {
-  const month = new Date().getMonth() + 1;
-  if (month === 12 || month <= 2) return "#5CA8FF";
-  if (month >= 3 && month <= 5) return "#65C67A";
-  if (month >= 6 && month <= 8) return "#1B4B9B";
+  const m = new Date().getMonth() + 1;
+  if (m === 12 || m <= 2) return "#5CA8FF";
+  if (m >= 3 && m <= 5) return "#65C67A";
+  if (m >= 6 && m <= 8) return "#1B4B9B";
   return "#D46A1E";
 }
 
@@ -18,85 +18,68 @@ export async function POST(req) {
   try {
     const { images, caption = "", logos = [] } = await req.json();
 
-    if (!images || images.length < 4) {
+    if (!images || images.length !== 4) {
       return NextResponse.json(
-        { error: "Four vehicle images are required." },
+        { error: "Exactly 4 images are required." },
         { status: 400 }
       );
     }
 
-    // --------------------------------------------------
-    // CONSTANTS
-    // --------------------------------------------------
-    const CANVAS_SIZE = 850;
-    const IMAGE_WIDTH = 425;
-    const IMAGE_HEIGHT = 319;
-    const BANNER_HEIGHT = 212;
-    const BANNER_TOP = IMAGE_HEIGHT;
-    const BOTTOM_ROW_TOP = IMAGE_HEIGHT + BANNER_HEIGHT;
+    // ----------------------------------------
+    // Layout constants
+    // ----------------------------------------
+    const CANVAS = 850;
+    const IMG_W = 425;
+    const IMG_H = 319;
+    const BANNER_H = 212;
+    const BANNER_TOP = IMG_H;
+    const BOTTOM_TOP = IMG_H + BANNER_H;
 
-    // --------------------------------------------------
-    // BASE CANVAS
-    // --------------------------------------------------
+    // ----------------------------------------
+    // Base canvas
+    // ----------------------------------------
     let canvas = sharp({
       create: {
-        width: CANVAS_SIZE,
-        height: CANVAS_SIZE,
+        width: CANVAS,
+        height: CANVAS,
         channels: 4,
         background: "#ffffff",
       },
     });
 
-    // --------------------------------------------------
-    // FETCH + RESIZE IMAGES (WITH HEADERS)
-    // --------------------------------------------------
-    const resizedImages = [];
+    // ----------------------------------------
+    // Decode + resize images (BASE64 ONLY)
+    // ----------------------------------------
+    const resized = [];
 
-    for (let i = 0; i < 4; i++) {
-      try {
-        const res = await fetch(images[i], {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            Accept: "image/*",
-          },
-        });
+    for (const img64 of images) {
+      const base64 = img64.replace(/^data:image\/\w+;base64,/, "");
+      const buf = Buffer.from(base64, "base64");
 
-        if (!res.ok) throw new Error("Image fetch failed");
+      const out = await sharp(buf)
+        .resize(IMG_W, IMG_H, { fit: "cover" })
+        .toBuffer();
 
-        const buffer = await res.arrayBuffer();
-
-        const img = await sharp(Buffer.from(buffer))
-          .resize(IMAGE_WIDTH, IMAGE_HEIGHT, { fit: "cover" })
-          .toBuffer();
-
-        resizedImages.push(img);
-      } catch (err) {
-        console.error("IMAGE LOAD FAILED:", images[i]);
-        return NextResponse.json(
-          { error: "Failed to load vehicle image." },
-          { status: 500 }
-        );
-      }
+      resized.push(out);
     }
 
-    // --------------------------------------------------
-    // COMPOSITE VEHICLE IMAGES
-    // --------------------------------------------------
+    // ----------------------------------------
+    // Composite vehicle images
+    // ----------------------------------------
     canvas = canvas.composite([
-      { input: resizedImages[0], top: 0, left: 0 },
-      { input: resizedImages[1], top: 0, left: IMAGE_WIDTH },
-      { input: resizedImages[2], top: BOTTOM_ROW_TOP, left: 0 },
-      { input: resizedImages[3], top: BOTTOM_ROW_TOP, left: IMAGE_WIDTH },
+      { input: resized[0], top: 0, left: 0 },
+      { input: resized[1], top: 0, left: IMG_W },
+      { input: resized[2], top: BOTTOM_TOP, left: 0 },
+      { input: resized[3], top: BOTTOM_TOP, left: IMG_W },
     ]);
 
-    // --------------------------------------------------
-    // BANNER
-    // --------------------------------------------------
+    // ----------------------------------------
+    // Banner
+    // ----------------------------------------
     const banner = await sharp({
       create: {
-        width: CANVAS_SIZE,
-        height: BANNER_HEIGHT,
+        width: CANVAS,
+        height: BANNER_H,
         channels: 4,
         background: getSeasonalRibbonColor(),
       },
@@ -106,14 +89,14 @@ export async function POST(req) {
 
     canvas = canvas.composite([{ input: banner, top: BANNER_TOP, left: 0 }]);
 
-    // --------------------------------------------------
-    // CAPTION
-    // --------------------------------------------------
+    // ----------------------------------------
+    // Caption
+    // ----------------------------------------
     if (caption) {
-      const safeCaption = caption.replace(/&/g, "&amp;");
+      const safe = caption.replace(/&/g, "&amp;");
 
-      const captionSVG = `
-        <svg width="${CANVAS_SIZE}" height="${BANNER_HEIGHT}">
+      const svg = `
+        <svg width="${CANVAS}" height="${BANNER_H}">
           <text
             x="50%"
             y="50%"
@@ -123,46 +106,43 @@ export async function POST(req) {
             text-anchor="middle"
             alignment-baseline="central"
           >
-            ${safeCaption}
+            ${safe}
           </text>
         </svg>
       `;
 
       canvas = canvas.composite([
-        { input: Buffer.from(captionSVG), top: BANNER_TOP, left: 0 },
+        { input: Buffer.from(svg), top: BANNER_TOP, left: 0 },
       ]);
     }
 
-    // --------------------------------------------------
-    // LOGOS
-    // --------------------------------------------------
-    let logoY = BANNER_TOP + 15;
-    const LOGO_SIZE = 70;
+    // ----------------------------------------
+    // Logos (left stack)
+    // ----------------------------------------
+    let y = BANNER_TOP + 15;
+    const LOGO = 70;
 
-    for (const logo of logos.slice(0, 3)) {
+    for (const l of logos.slice(0, 3)) {
       try {
-        const base64 = logo.url.replace(/^data:image\/\w+;base64,/, "");
-        const buf = Buffer.from(base64, "base64");
+        const b64 = l.url.replace(/^data:image\/\w+;base64,/, "");
+        const buf = Buffer.from(b64, "base64");
 
-        const resizedLogo = await sharp(buf)
-          .resize(LOGO_SIZE, LOGO_SIZE, { fit: "contain" })
+        const out = await sharp(buf)
+          .resize(LOGO, LOGO, { fit: "contain" })
           .toBuffer();
 
-        canvas = canvas.composite([
-          { input: resizedLogo, top: logoY, left: 20 },
-        ]);
-
-        logoY += LOGO_SIZE + 10;
+        canvas = canvas.composite([{ input: out, top: y, left: 20 }]);
+        y += LOGO + 10;
       } catch {}
     }
 
-    // --------------------------------------------------
-    // OUTPUT
-    // --------------------------------------------------
-    const finalImage = await canvas.png().toBuffer();
+    // ----------------------------------------
+    // Output
+    // ----------------------------------------
+    const final = await canvas.png().toBuffer();
 
     return NextResponse.json({
-      output: `data:image/png;base64,${finalImage.toString("base64")}`,
+      output: `data:image/png;base64,${final.toString("base64")}`,
     });
   } catch (err) {
     console.error("BUILD ERROR:", err);
