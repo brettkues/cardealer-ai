@@ -3,80 +3,109 @@ import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
+function getRibbonColor() {
+  const m = new Date().getMonth() + 1;
+  if (m <= 2 || m === 12) return "#5CA8FF"; // Winter
+  if (m <= 5) return "#65C67A";             // Spring
+  if (m <= 8) return "#1B4B9B";             // Summer
+  return "#D46A1E";                         // Fall
+}
+
 export async function POST(req) {
   try {
-    const { images } = await req.json();
+    const { images, caption } = await req.json();
 
-    if (!Array.isArray(images) || images.length < 4) {
+    if (!images || images.length < 4) {
       return NextResponse.json(
-        { error: "Exactly 4 vehicle images are required." },
+        { error: "Exactly 4 images required." },
         { status: 400 }
       );
     }
 
-    // -----------------------------------
-    // CONSTANTS
-    // -----------------------------------
-    const CANVAS_SIZE = 850;
-    const TILE_WIDTH = 425;
-    const TILE_HEIGHT = 319;
-    const RIBBON_HEIGHT = 212;
+    // CANVAS
+    const canvasSize = 850;
+    const imageWidth = 425;
+    const imageHeight = 319;
+    const ribbonHeight = 212;
 
-    // -----------------------------------
-    // FETCH & RESIZE 4 IMAGES
-    // -----------------------------------
-    const processedImages = await Promise.all(
-      images.slice(0, 4).map(async (url) => {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Image fetch failed");
-
-        const buffer = Buffer.from(await res.arrayBuffer());
-
-        return sharp(buffer)
-          .resize(TILE_WIDTH, TILE_HEIGHT, { fit: "cover" })
-          .toBuffer();
-      })
-    );
-
-    // -----------------------------------
-    // BASE CANVAS
-    // -----------------------------------
-    let canvas = sharp({
+    const canvas = sharp({
       create: {
-        width: CANVAS_SIZE,
-        height: CANVAS_SIZE,
+        width: canvasSize,
+        height: canvasSize,
         channels: 4,
         background: "#ffffff",
       },
     });
 
-    // -----------------------------------
-    // COMPOSITE LAYOUT
-    // -----------------------------------
-    canvas = canvas.composite([
-      // Top row
-      { input: processedImages[0], left: 0, top: 0 },
-      { input: processedImages[1], left: TILE_WIDTH, top: 0 },
+    // LOAD + RESIZE IMAGES
+    const buffers = await Promise.all(
+      images.slice(0, 4).map(async (url) => {
+        const res = await fetch(url);
+        const arr = await res.arrayBuffer();
+        return sharp(Buffer.from(arr))
+          .resize(imageWidth, imageHeight, { fit: "cover" })
+          .toBuffer();
+      })
+    );
 
-      // Bottom row
-      { input: processedImages[2], left: 0, top: TILE_HEIGHT + RIBBON_HEIGHT },
-      {
-        input: processedImages[3],
-        left: TILE_WIDTH,
-        top: TILE_HEIGHT + RIBBON_HEIGHT,
+    // POSITIONS
+    const composites = [
+      { input: buffers[0], left: 0, top: 0 },
+      { input: buffers[1], left: imageWidth, top: 0 },
+      { input: buffers[2], left: 0, top: canvasSize - imageHeight },
+      { input: buffers[3], left: imageWidth, top: canvasSize - imageHeight },
+    ];
+
+    // RIBBON
+    const ribbon = await sharp({
+      create: {
+        width: canvasSize,
+        height: ribbonHeight,
+        channels: 4,
+        background: getRibbonColor(),
       },
-    ]);
+    })
+      .png()
+      .toBuffer();
 
-    // -----------------------------------
-    // OUTPUT
-    // -----------------------------------
-    const finalImage = await canvas.png().toBuffer();
+    composites.push({
+      input: ribbon,
+      left: 0,
+      top: imageHeight,
+    });
+
+    // CAPTION
+    if (caption) {
+      const svg = `
+        <svg width="${canvasSize}" height="${ribbonHeight}">
+          <text
+            x="50%"
+            y="50%"
+            text-anchor="middle"
+            alignment-baseline="central"
+            font-size="38"
+            fill="white"
+            font-family="Arial, Helvetica, sans-serif"
+          >
+            ${caption.replace(/&/g, "&amp;")}
+          </text>
+        </svg>
+      `;
+
+      composites.push({
+        input: Buffer.from(svg),
+        left: 0,
+        top: imageHeight,
+      });
+    }
+
+    const final = await canvas.composite(composites).png().toBuffer();
 
     return NextResponse.json({
-      images: [`data:image/png;base64,${finalImage.toString("base64")}`],
+      output: `data:image/png;base64,${final.toString("base64")}`,
     });
   } catch (err) {
-    console.error("IMAGE BUILD ERROR:", err);
+    console.error("BUILD ERROR:", err);
     return NextResponse.json(
       { error: "Image build failed." },
       { status: 500 }
