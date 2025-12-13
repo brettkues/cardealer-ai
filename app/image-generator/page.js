@@ -2,175 +2,90 @@
 
 import { useState } from "react";
 
-export default function ImageGeneratorPage() {
-  const [candidateImages, setCandidateImages] = useState([]);
-  const [selectedImages, setSelectedImages] = useState([]);
+export default function ImageGenerator() {
+  const [vehicleURL, setVehicleURL] = useState("");
   const [caption, setCaption] = useState("");
-  const [resultImage, setResultImage] = useState(null);
+  const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // --------------------------------------------------
-  // Pull images already loaded on the vehicle page
-  // --------------------------------------------------
-  function loadImagesFromPage() {
-    const imgs = [...document.images]
-      .map(i => i.currentSrc)
-      .filter(src =>
-        src &&
-        src.includes("cdn.dlron.us") &&
-        !src.includes("placeholder") &&
-        !src.includes("missing")
-      )
-      .slice(0, 12);
-
-    if (imgs.length === 0) {
-      alert("No vehicle images found on this page.");
-      return;
-    }
-
-    setCandidateImages(imgs);
-    setSelectedImages([]);
-    setResultImage(null);
-  }
-
-  // --------------------------------------------------
-  // Generate image
-  // --------------------------------------------------
   async function generateImage() {
-    if (selectedImages.length !== 4) {
-      alert("Select exactly 4 images.");
+    setLoading(true);
+    setResult(null);
+
+    if (!vehicleURL.trim()) {
+      alert("Enter a vehicle URL");
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setResultImage(null);
+    // 1️⃣ LOOKUP VEHICLE + IMAGES
+    const lookupRes = await fetch("/api/lookupVehicle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: vehicleURL.trim() }),
+    });
 
-    try {
-      // Convert selected images to base64
-      const base64Images = await Promise.all(
-        selectedImages.map(src =>
-          fetch(src)
-            .then(r => r.blob())
-            .then(
-              b =>
-                new Promise(res => {
-                  const fr = new FileReader();
-                  fr.onload = () => res(fr.result);
-                  fr.readAsDataURL(b);
-                })
-            )
-        )
-      );
-
-      const res = await fetch("/api/buildImage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          images: base64Images,
-          caption,
-          logos: [],
-        }),
-      });
-
-      const json = await res.json();
-
-      if (json.error) {
-        alert(json.error);
-      } else {
-        setResultImage(json.output);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Image build failed.");
+    const lookupData = await lookupRes.json();
+    if (lookupData.error) {
+      alert(lookupData.error);
+      setLoading(false);
+      return;
     }
 
+    // FORCE EXACTLY 4 IMAGES
+    const images = lookupData.images.slice(0, 4);
+
+    // 2️⃣ BUILD IMAGE
+    const buildRes = await fetch("/api/buildImage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        images,
+        caption,
+      }),
+    });
+
+    const buildData = await buildRes.json();
+    if (buildData.error) {
+      alert(buildData.error);
+      setLoading(false);
+      return;
+    }
+
+    setResult(buildData.output);
     setLoading(false);
   }
 
-  // --------------------------------------------------
-  // UI
-  // --------------------------------------------------
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Vehicle Image Generator</h1>
+    <div className="max-w-xl mx-auto p-6 space-y-6">
+      <h1 className="text-2xl font-bold">Vehicle Image Generator</h1>
 
-      <button
-        onClick={loadImagesFromPage}
-        className="bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        Load Images From Vehicle Page
-      </button>
+      <input
+        className="w-full p-3 border rounded"
+        placeholder="Paste full vehicle URL"
+        value={vehicleURL}
+        onChange={(e) => setVehicleURL(e.target.value)}
+      />
 
-      {candidateImages.length > 0 && (
-        <>
-          <p className="text-sm text-gray-600">
-            Select exactly 4 images (top-left → top-right → bottom-left → bottom-right)
-          </p>
-
-          <div className="grid grid-cols-4 gap-3">
-            {candidateImages.map((src, idx) => {
-              const checked = selectedImages.includes(src);
-              const disabled =
-                !checked && selectedImages.length >= 4;
-
-              return (
-                <label
-                  key={idx}
-                  className={`border p-2 cursor-pointer ${
-                    checked ? "ring-2 ring-blue-500" : ""
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="mr-2"
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={() => {
-                      if (checked) {
-                        setSelectedImages(
-                          selectedImages.filter(i => i !== src)
-                        );
-                      } else if (selectedImages.length < 4) {
-                        setSelectedImages([...selectedImages, src]);
-                      }
-                    }}
-                  />
-                  <img
-                    src={src}
-                    className="h-24 w-full object-cover"
-                  />
-                </label>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      <div>
-        <label className="font-semibold">Caption</label>
-        <input
-          className="w-full border p-2 rounded mt-1"
-          maxLength={85}
-          value={caption}
-          onChange={e => setCaption(e.target.value)}
-        />
-      </div>
+      <input
+        className="w-full p-3 border rounded"
+        placeholder="Caption (optional)"
+        maxLength={85}
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
+      />
 
       <button
         onClick={generateImage}
         disabled={loading}
-        className="bg-green-600 text-white px-6 py-3 rounded text-lg"
+        className="w-full bg-blue-600 text-white p-4 rounded"
       >
-        {loading ? "Generating…" : "Generate Image"}
+        {loading ? "Building..." : "Generate Image"}
       </button>
 
-      {resultImage && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold mb-2">Result</h2>
-          <img
-            src={resultImage}
-            className="w-full rounded shadow"
-          />
+      {result && (
+        <div>
+          <img src={result} className="w-full rounded shadow" />
         </div>
       )}
     </div>
