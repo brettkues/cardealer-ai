@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
@@ -13,26 +14,41 @@ export async function POST(req) {
       );
     }
 
-    const firstImage = images[0];
+    const imageUrl = images[0];
 
-    // If it's already base64, return it
-    if (firstImage.startsWith("data:image")) {
-      return NextResponse.json({
-        images: [firstImage],
-      });
+    // --------------------------------------------------
+    // FETCH IMAGE ONCE (OWN THE BYTES)
+    // --------------------------------------------------
+    const imageRes = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "image/*",
+      },
+    });
+
+    if (!imageRes.ok) {
+      return NextResponse.json(
+        { error: "Failed to download image." },
+        { status: 500 }
+      );
     }
 
-    // If it's a URL, just return the URL directly
-    if (firstImage.startsWith("http")) {
-      return NextResponse.json({
-        images: [firstImage],
-      });
-    }
+    const buffer = Buffer.from(await imageRes.arrayBuffer());
 
-    return NextResponse.json(
-      { error: "Unsupported image format." },
-      { status: 400 }
-    );
+    // --------------------------------------------------
+    // CREATE 850x850 CANVAS
+    // --------------------------------------------------
+    const finalImage = await sharp(buffer)
+      .resize(850, 850, {
+        fit: "cover",
+        position: "center",
+      })
+      .png()
+      .toBuffer();
+
+    return NextResponse.json({
+      images: [`data:image/png;base64,${finalImage.toString("base64")}`],
+    });
   } catch (err) {
     console.error("BUILD IMAGE ERROR:", err);
     return NextResponse.json(
