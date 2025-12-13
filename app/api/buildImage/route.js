@@ -7,10 +7,10 @@ export const dynamic = "force-dynamic";
 function getSeasonalRibbonColor() {
   const month = new Date().getMonth() + 1;
 
-  if (month === 12 || month <= 2) return "#5CA8FF"; // Winter – Icy Blue
-  if (month >= 3 && month <= 5) return "#65C67A";   // Spring – Fresh Green
-  if (month >= 6 && month <= 8) return "#1B4B9B";   // Summer – Deep Blue
-  return "#D46A1E";                                 // Fall – Burnt Orange
+  if (month === 12 || month <= 2) return "#5CA8FF"; // Winter
+  if (month >= 3 && month <= 5) return "#65C67A";  // Spring
+  if (month >= 6 && month <= 8) return "#1B4B9B";  // Summer
+  return "#D46A1E";                                // Fall
 }
 
 export async function POST(req) {
@@ -24,11 +24,29 @@ export async function POST(req) {
       );
     }
 
-    // Use the first vehicle image
+    // --------------------------------------------------
+    // FETCH VEHICLE IMAGE (WITH HEADERS – CRITICAL FIX)
+    // --------------------------------------------------
     const mainImageURL = images[0];
-    const mainImageBuffer = await fetch(mainImageURL).then((r) => r.arrayBuffer());
+
+    const imageRes = await fetch(mainImageURL, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "image/*",
+        "Referer": mainImageURL,
+      },
+    });
+
+    if (!imageRes.ok) {
+      throw new Error(`Failed to fetch image: ${imageRes.status}`);
+    }
+
+    const mainImageBuffer = await imageRes.arrayBuffer();
     const mainJPG = Buffer.from(mainImageBuffer);
 
+    // --------------------------------------------------
+    // CANVAS SETUP
+    // --------------------------------------------------
     const canvasSize = 850;
     const mainWidth = 820;
     const mainHeight = 600;
@@ -59,7 +77,9 @@ export async function POST(req) {
       },
     ]);
 
-    // Ribbon bar
+    // --------------------------------------------------
+    // RIBBON
+    // --------------------------------------------------
     const ribbon = await sharp({
       create: {
         width: canvasSize,
@@ -75,9 +95,9 @@ export async function POST(req) {
       { input: ribbon, top: canvasSize - ribbonHeight, left: 0 },
     ]);
 
-    // ---------------------------
-    // LOGOS (LEFT SIDE)
-    // ---------------------------
+    // --------------------------------------------------
+    // LOGOS (LEFT SIDE, UP TO 3)
+    // --------------------------------------------------
     const logoStartY = canvasSize - ribbonHeight + 15;
     let currentY = logoStartY;
     const logoSize = 70;
@@ -101,10 +121,12 @@ export async function POST(req) {
       }
     }
 
-    // ---------------------------
+    // --------------------------------------------------
     // CAPTION (CENTERED)
-    // ---------------------------
-    const safeCaption = caption ? caption.replace(/&/g, "&amp;") : "";
+    // --------------------------------------------------
+    const safeCaption = caption
+      ? caption.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      : "";
 
     const svgCaption = `
       <svg width="${canvasSize}" height="${ribbonHeight}">
@@ -132,16 +154,16 @@ export async function POST(req) {
       },
     ]);
 
-    // Final image
+    // --------------------------------------------------
+    // FINAL IMAGE
+    // --------------------------------------------------
     const finalImage = await canvas.png().toBuffer();
-    const base64Image = `data:image/png;base64,${finalImage.toString("base64")}`;
 
-    // 🔑 CRITICAL FIX: return an ARRAY
     return NextResponse.json({
-      images: [base64Image],
+      images: [`data:image/png;base64,${finalImage.toString("base64")}`],
     });
   } catch (err) {
-    console.error("BUILD ERROR:", err);
+    console.error("BUILD IMAGE ERROR:", err);
     return NextResponse.json(
       { error: "Image build failed." },
       { status: 500 }
