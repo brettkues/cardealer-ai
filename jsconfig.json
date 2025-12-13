@@ -2,9 +2,12 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/app/*": ["app/*"],
-      "@/components/*": ["components/*"],
-      "@/lib/*": ["lib/*"]
+      "@/*": ["./app/*"]
     }
-  }
+  },
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".vercel"
+  ]
 }
