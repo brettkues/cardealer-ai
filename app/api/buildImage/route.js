@@ -13,22 +13,28 @@ function getRibbonColor() {
 
 export async function POST(req) {
   try {
-    const { images, caption } = await req.json();
+    let { images, caption } = await req.json();
 
-    if (!images || images.length < 4) {
+    if (!images || images.length === 0) {
       return NextResponse.json(
-        { error: "Exactly 4 images required." },
+        { error: "No images provided." },
         { status: 400 }
       );
     }
 
-    // CANVAS
-    const canvasSize = 850;
-    const imageWidth = 425;
-    const imageHeight = 319;
-    const ribbonHeight = 212;
+    // ✅ GUARANTEE 4 IMAGES
+    while (images.length < 4) {
+      images.push(images[0]);
+    }
+    images = images.slice(0, 4);
 
-    const canvas = sharp({
+    // CANVAS SETUP
+    const canvasSize = 850;
+    const imgW = 425;
+    const imgH = 319;
+    const ribbonH = 212;
+
+    const base = sharp({
       create: {
         width: canvasSize,
         height: canvasSize,
@@ -37,47 +43,45 @@ export async function POST(req) {
       },
     });
 
-    // LOAD + RESIZE IMAGES
+    // LOAD + RESIZE
     const buffers = await Promise.all(
-      images.slice(0, 4).map(async (url) => {
+      images.map(async (url) => {
         const res = await fetch(url);
         const arr = await res.arrayBuffer();
         return sharp(Buffer.from(arr))
-          .resize(imageWidth, imageHeight, { fit: "cover" })
+          .resize(imgW, imgH, { fit: "cover" })
           .toBuffer();
       })
     );
 
-    // POSITIONS
-    const composites = [
-      { input: buffers[0], left: 0, top: 0 },
-      { input: buffers[1], left: imageWidth, top: 0 },
-      { input: buffers[2], left: 0, top: canvasSize - imageHeight },
-      { input: buffers[3], left: imageWidth, top: canvasSize - imageHeight },
+    const layers = [
+      { input: buffers[0], left: 0,      top: 0 },
+      { input: buffers[1], left: imgW,   top: 0 },
+      { input: buffers[2], left: 0,      top: canvasSize - imgH },
+      { input: buffers[3], left: imgW,   top: canvasSize - imgH },
     ];
 
     // RIBBON
     const ribbon = await sharp({
       create: {
         width: canvasSize,
-        height: ribbonHeight,
+        height: ribbonH,
         channels: 4,
         background: getRibbonColor(),
       },
-    })
-      .png()
-      .toBuffer();
+    }).png().toBuffer();
 
-    composites.push({
+    layers.push({
       input: ribbon,
       left: 0,
-      top: imageHeight,
+      top: imgH,
     });
 
     // CAPTION
     if (caption) {
+      const safe = caption.replace(/&/g, "&amp;");
       const svg = `
-        <svg width="${canvasSize}" height="${ribbonHeight}">
+        <svg width="${canvasSize}" height="${ribbonH}">
           <text
             x="50%"
             y="50%"
@@ -87,19 +91,19 @@ export async function POST(req) {
             fill="white"
             font-family="Arial, Helvetica, sans-serif"
           >
-            ${caption.replace(/&/g, "&amp;")}
+            ${safe}
           </text>
         </svg>
       `;
 
-      composites.push({
+      layers.push({
         input: Buffer.from(svg),
         left: 0,
-        top: imageHeight,
+        top: imgH,
       });
     }
 
-    const final = await canvas.composite(composites).png().toBuffer();
+    const final = await base.composite(layers).png().toBuffer();
 
     return NextResponse.json({
       output: `data:image/png;base64,${final.toString("base64")}`,
