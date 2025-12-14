@@ -1,22 +1,19 @@
 import { NextResponse } from "next/server";
-import { initializeApp, getApps } from "firebase/app";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import admin from "firebase-admin";
 
-// 🔒 Firebase config — assumes you already have env vars set
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID
-};
-
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
+// 🔒 Initialize Admin once
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    }),
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  });
 }
 
-const storage = getStorage();
+const bucket = admin.storage().bucket();
 
 export async function POST(req) {
   try {
@@ -29,20 +26,27 @@ export async function POST(req) {
       );
     }
 
-    // Decode base64
+    // Decode base64 → Buffer
     const base64 = image.split(",")[1];
     const buffer = Buffer.from(base64, "base64");
 
-    const id = Date.now().toString();
-    const fileRef = ref(storage, `generated/${id}.png`);
+    const filename = `generated/${Date.now()}.png`;
+    const file = bucket.file(filename);
 
-    await uploadBytes(fileRef, buffer, {
-      contentType: "image/png"
+    await file.save(buffer, {
+      metadata: {
+        contentType: "image/png",
+        cacheControl: "public, max-age=31536000",
+      },
+      public: true,
+      validation: false,
     });
 
-    const url = await getDownloadURL(fileRef);
+    // Public URL (no tokens, Facebook-safe)
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
 
-    return NextResponse.json({ url });
+    return NextResponse.json({ url: publicUrl });
+
   } catch (err) {
     console.error("SAVE IMAGE ERROR:", err);
     return NextResponse.json(
