@@ -2,91 +2,176 @@
 
 import { useState } from "react";
 
-export default function ImageGenerator() {
-  const [vehicleURL, setVehicleURL] = useState("");
+export default function ImageGeneratorPage() {
+  const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
-  const [result, setResult] = useState(null);
+  const [images, setImages] = useState([]);
+  const [selectedImages, setSelectedImages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function generateImage() {
+  async function handleLookup() {
+    setError("");
+    setImages([]);
+    setSelectedImages([]);
+
+    if (!vehicleUrl) {
+      setError("Vehicle URL is required.");
+      return;
+    }
+
     setLoading(true);
-    setResult(null);
 
-    if (!vehicleURL.trim()) {
-      alert("Enter a vehicle URL");
+    try {
+      const res = await fetch("/api/lookupVehicle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: vehicleUrl })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Vehicle lookup failed");
+      }
+
+      if (!Array.isArray(data.images) || data.images.length === 0) {
+        throw new Error("No images returned");
+      }
+
+      setImages(data.images);
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
+    }
+  }
+
+  function toggleImage(src) {
+    setSelectedImages((prev) => {
+      if (prev.includes(src)) {
+        return prev.filter((i) => i !== src);
+      }
+
+      if (prev.length >= 4) {
+        return prev;
+      }
+
+      return [...prev, src];
+    });
+  }
+
+  function handleFinishBuild() {
+    if (selectedImages.length !== 4) {
+      setError("You must select exactly 4 images.");
       return;
     }
 
-    // 1️⃣ LOOKUP VEHICLE + IMAGES
-    const lookupRes = await fetch("/api/lookupVehicle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: vehicleURL.trim() }),
+    // TEMP: confirm payload before wiring build API
+    console.log("FINAL BUILD PAYLOAD", {
+      vehicleUrl,
+      caption,
+      selectedImages
     });
 
-    const lookupData = await lookupRes.json();
-    if (lookupData.error) {
-      alert(lookupData.error);
-      setLoading(false);
-      return;
-    }
-
-    // FORCE EXACTLY 4 IMAGES
-    const images = lookupData.images.slice(0, 4);
-
-    // 2️⃣ BUILD IMAGE
-    const buildRes = await fetch("/api/buildImage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        images,
-        caption,
-      }),
-    });
-
-    const buildData = await buildRes.json();
-    if (buildData.error) {
-      alert(buildData.error);
-      setLoading(false);
-      return;
-    }
-
-    setResult(buildData.output);
-    setLoading(false);
+    alert("Image selection complete. Ready for final image build.");
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Vehicle Image Generator</h1>
+    <div className="p-6 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-semibold mb-6">
+        Image Generator
+      </h1>
 
-      <input
-        className="w-full p-3 border rounded"
-        placeholder="Paste full vehicle URL"
-        value={vehicleURL}
-        onChange={(e) => setVehicleURL(e.target.value)}
-      />
+      {error && (
+        <div className="mb-4 text-red-600">
+          {error}
+        </div>
+      )}
 
-      <input
-        className="w-full p-3 border rounded"
-        placeholder="Caption (optional)"
-        maxLength={85}
-        value={caption}
-        onChange={(e) => setCaption(e.target.value)}
-      />
+      <div className="mb-4">
+        <label className="block font-medium mb-1">
+          Vehicle URL
+        </label>
+        <input
+          type="text"
+          value={vehicleUrl}
+          onChange={(e) => setVehicleUrl(e.target.value)}
+          className="w-full border p-3 rounded"
+          placeholder="Paste vehicle URL here"
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="block font-medium mb-1">
+          Caption
+        </label>
+        <input
+          type="text"
+          value={caption}
+          onChange={(e) => setCaption(e.target.value)}
+          className="w-full border p-3 rounded"
+          placeholder="Optional caption"
+        />
+      </div>
 
       <button
-        onClick={generateImage}
+        onClick={handleLookup}
         disabled={loading}
-        className="w-full bg-blue-600 text-white p-4 rounded"
+        className="mb-6 px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
       >
-        {loading ? "Building..." : "Generate Image"}
+        {loading ? "Loading Images…" : "Build Image"}
       </button>
 
-      {result && (
-        <div>
-          <img src={result} className="w-full rounded shadow" />
-        </div>
+      {images.length > 0 && (
+        <>
+          <h2 className="text-xl font-semibold mb-3">
+            Select 4 Images
+          </h2>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {images.map((src) => {
+              const index = selectedImages.indexOf(src);
+              const isSelected = index !== -1;
+
+              return (
+                <div
+                  key={src}
+                  onClick={() => toggleImage(src)}
+                  className={`relative cursor-pointer border rounded overflow-hidden ${
+                    isSelected
+                      ? "border-blue-600 ring-4 ring-blue-300"
+                      : "border-gray-300"
+                  }`}
+                >
+                  {isSelected && (
+                    <div className="absolute top-2 left-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold z-10">
+                      {index + 1}
+                    </div>
+                  )}
+
+                  <img
+                    src={src}
+                    alt="Vehicle"
+                    className="w-full h-40 object-cover"
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={handleFinishBuild}
+            disabled={selectedImages.length !== 4}
+            className={`px-6 py-3 rounded text-white ${
+              selectedImages.length === 4
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+          >
+            Finish Build
+          </button>
+        </>
       )}
     </div>
   );
