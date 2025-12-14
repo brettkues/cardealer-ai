@@ -14,7 +14,6 @@ export default function ImageSelectPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Fetch images from lookupVehicleImages
   useEffect(() => {
     if (!vin) {
       setError("Missing VIN");
@@ -24,11 +23,23 @@ export default function ImageSelectPage() {
 
     async function fetchImages() {
       try {
-        const res = await fetch(`/api/lookup-vehicle-images?vin=${vin}`);
+        const res = await fetch(`/api/lookupVehicle?vin=${vin}`);
+
+        // Defensive: ensure JSON
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("lookupVehicle did not return JSON");
+        }
+
         const data = await res.json();
 
-        if (!res.ok || !Array.isArray(data.images)) {
-          throw new Error("Failed to load images");
+        if (!res.ok) {
+          throw new Error(data.error || "lookupVehicle failed");
+        }
+
+        // EXPECTATION: lookupVehicle returns images array
+        if (!Array.isArray(data.images)) {
+          throw new Error("No images returned from lookupVehicle");
         }
 
         setAvailableImages(data.images);
@@ -46,17 +57,14 @@ export default function ImageSelectPage() {
     setError("");
 
     setSelectedImages((prev) => {
-      // Unselect
       if (prev.includes(src)) {
         return prev.filter((img) => img !== src);
       }
 
-      // Prevent selecting more than 4
       if (prev.length >= 4) {
         return prev;
       }
 
-      // Select (order matters)
       return [...prev, src];
     });
   }
@@ -67,9 +75,7 @@ export default function ImageSelectPage() {
       return;
     }
 
-    router.push(
-      `/build-image?vin=${vin}`
-    );
+    router.push(`/build-image?vin=${vin}`);
   }
 
   if (loading) {
