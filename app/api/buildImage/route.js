@@ -1,76 +1,61 @@
 import { NextResponse } from "next/server";
-import { createCanvas, loadImage } from "canvas";
+import sharp from "sharp";
+
+export const dynamic = "force-dynamic";
+
+function getRibbonColor() {
+  const m = new Date().getMonth() + 1;
+  if (m <= 2 || m === 12) return "#5CA8FF"; // Winter
+  if (m <= 5) return "#65C67A";             // Spring
+  if (m <= 8) return "#1B4B9B";             // Summer
+  return "#D46A1E";                         // Fall
+}
 
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { selectedImages, caption } = body;
+    let { images, caption } = await req.json();
 
-    // ---- Validation ----
-    if (!Array.isArray(selectedImages)) {
+    if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
-        { error: "selectedImages must be an array" },
+        { error: "No images provided." },
         { status: 400 }
       );
     }
 
-    if (selectedImages.length !== 4) {
-      return NextResponse.json(
-        { error: "Exactly 4 images are required" },
-        { status: 400 }
-      );
+    // ✅ GUARANTEE EXACTLY 4 IMAGES
+    while (images.length < 4) {
+      images.push(images[0]);
     }
+    images = images.slice(0, 4);
 
-    // ---- Canvas setup ----
-    const WIDTH = 1200;
-    const HEIGHT = 1200;
-    const HALF = WIDTH / 2;
+    // ---- CANVAS SIZES ----
+    const canvasSize = 850;
+    const imgW = 425;
+    const imgH = 319;
+    const ribbonH = 212;
 
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx = canvas.getContext("2d");
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-    // ---- Load images ----
-    const images = await Promise.all(
-      selectedImages.map((src) => loadImage(src))
-    );
-
-    // ---- Draw images (order matters) ----
-    ctx.drawImage(images[0], 0, 0, HALF, HALF);
-    ctx.drawImage(images[1], HALF, 0, HALF, HALF);
-    ctx.drawImage(images[2], 0, HALF, HALF, HALF);
-    ctx.drawImage(images[3], HALF, HALF, HALF, HALF);
-
-    // ---- Caption overlay ----
-    if (caption) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(0, HEIGHT - 90, WIDTH, 90);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 36px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      ctx.fillText(caption, WIDTH / 2, HEIGHT - 45, WIDTH - 40);
-    }
-
-    // ---- Return image ----
-    const buffer = canvas.toBuffer("image/png");
-
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "no-store"
+    const base = sharp({
+      create: {
+        width: canvasSize,
+        height: canvasSize,
+        channels: 4,
+        background: "#ffffff"
       }
     });
-  } catch (err) {
-    console.error("buildImage error:", err);
-    return NextResponse.json(
-      { error: "Image build failed" },
-      { status: 500 }
+
+    // ---- LOAD + RESIZE IMAGES ----
+    const buffers = await Promise.all(
+      images.map(async (url) => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to fetch image: ${url}`);
+        const arr = await res.arrayBuffer();
+        return sharp(Buffer.from(arr))
+          .resize(imgW, imgH, { fit: "cover" })
+          .toBuffer();
+      })
     );
-  }
-}
+
+    const layers = [
+      { input: buffers[0], left: 0,    top: 0 },
+      { input: buffers[1], left: imgW, top: 0 },
+      { input: buffers[2], le
