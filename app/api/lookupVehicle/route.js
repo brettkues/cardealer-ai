@@ -14,9 +14,9 @@ export async function POST(req) {
       );
     }
 
-    // -----------------------------------
+    // --------------------------------------------------
     // FETCH PAGE
-    // -----------------------------------
+    // --------------------------------------------------
     const response = await fetch(url, {
       headers: {
         "User-Agent":
@@ -34,75 +34,81 @@ export async function POST(req) {
     const html = await response.text();
     const root = parse(html);
 
-    // -----------------------------------
-    // VEHICLE META (best-effort, optional)
-    // -----------------------------------
+    // --------------------------------------------------
+    // VEHICLE META (BEST EFFORT — NOT CRITICAL)
+    // --------------------------------------------------
     let year = "";
     let make = "";
     let model = "";
     let trim = "";
+    let vin = "";
 
-    const title = root.querySelector("title")?.innerText || "";
-    const titleMatch = title.match(/(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
+    const dlScript = root
+      .querySelectorAll("script")
+      .find((s) => s.innerText.includes("vehicleYear"));
 
-    if (titleMatch) {
-      year = titleMatch[1];
-      make = titleMatch[2];
-      model = titleMatch[3];
+    if (dlScript) {
+      try {
+        year =
+          dlScript.innerText.match(/vehicleYear":"(\d{4})"/)?.[1] || "";
+        make =
+          dlScript.innerText.match(/vehicleMake":"([^"]+)"/)?.[1] || "";
+        model =
+          dlScript.innerText.match(/vehicleModel":"([^"]+)"/)?.[1] || "";
+        trim =
+          dlScript.innerText.match(/vehicleTrim":"([^"]+)"/)?.[1] || "";
+        vin =
+          dlScript.innerText.match(/vehicleVin":"([^"]+)"/)?.[1] || "";
+      } catch {}
     }
 
-    // -----------------------------------
-    // IMAGE EXTRACTION — SIMPLE & CORRECT
-    // -----------------------------------
-    const images = [];
-
-    root.querySelectorAll("img").forEach((img) => {
-      const src =
+    // --------------------------------------------------
+    // INVENTORY IMAGES — THIS IS THE IMPORTANT PART
+    // --------------------------------------------------
+    const allImgs = root
+      .querySelectorAll("img")
+      .map((img) =>
         img.getAttribute("data-src") ||
         img.getAttribute("data-lazy") ||
-        img.getAttribute("src");
+        img.getAttribute("src")
+      )
+      .filter(Boolean);
 
-      if (!src) return;
-      if (!src.startsWith("http")) return;
+    // ONLY inventory photos — NEVER stock
+    let images = allImgs.filter((src) =>
+      src.includes("cdn.dlron.us/inventoryphotos")
+    );
 
-      // Filter out junk
-      const lower = src.toLowerCase();
-      if (lower.includes("logo")) return;
-      if (lower.includes("icon")) return;
-      if (lower.includes("badge")) return;
-      if (lower.includes("placeholder")) return;
-      if (lower.includes("missing")) return;
+    // De-dupe while preserving order
+    images = [...new Set(images)];
 
-      // Prefer real inventory photos
-      if (
-        lower.includes("cdn.dlron.us") ||
-        lower.includes("inventoryphotos")
-      ) {
-        images.push(src);
-      }
-    });
-
-    const finalImages = images.slice(0, 4);
-
-    if (finalImages.length !== 4) {
+    if (images.length === 0) {
       return NextResponse.json(
-        { error: "Could not extract 4 vehicle images." },
+        { error: "No inventory photos found." },
         { status: 404 }
       );
     }
 
-    // -----------------------------------
-    // RETURN
-    // -----------------------------------
+    // Ensure exactly 4 images by recycling if needed
+    while (images.length < 4) {
+      images.push(images[images.length - 1]);
+    }
+
+    images = images.slice(0, 4);
+
+    // --------------------------------------------------
+    // FINAL RESPONSE
+    // --------------------------------------------------
     return NextResponse.json({
       vehicle: {
         year,
         make,
         model,
         trim,
+        vin,
         url,
       },
-      images: finalImages,
+      images,
     });
   } catch (err) {
     console.error("LOOKUP ERROR:", err);
