@@ -17,6 +17,17 @@ export async function POST(req) {
     const pageUrl = new URL(url);
     const pageOrigin = pageUrl.origin;
 
+    // 🔑 Extract VIN from URL or page (17 chars, no I/O/Q)
+    const vinMatch = url.match(/[A-HJ-NPR-Z0-9]{17}/i);
+    const vin = vinMatch ? vinMatch[0].toLowerCase() : null;
+
+    if (!vin) {
+      return NextResponse.json(
+        { error: "VIN not found in vehicle URL." },
+        { status: 400 }
+      );
+    }
+
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" }
     });
@@ -50,13 +61,22 @@ export async function POST(req) {
       })
       .filter(Boolean)
 
-      // ✅ ONLY first-party inventory photos
+      // ✅ First-party inventory photos only
       .filter(
         (src) =>
-          src.startsWith(pageOrigin + "/inventoryphotos/")
+          src.startsWith(pageOrigin + "/inventoryphotos/") &&
+          src.toLowerCase().includes(vin)
       )
 
-      // normalize & dedupe
+      // ❌ Exclusions
+      .filter(
+        (src) =>
+          !src.toLowerCase().includes("/thumbs/") &&
+          !src.toLowerCase().includes("autocheck") &&
+          !src.toLowerCase().includes("carfax")
+      )
+
+      // Normalize & dedupe
       .map((src) => src.split("?")[0])
       .filter((src, i, arr) => arr.indexOf(src) === i);
 
