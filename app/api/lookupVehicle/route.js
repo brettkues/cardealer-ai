@@ -31,27 +31,23 @@ export async function POST(req) {
     const html = await response.text();
     const root = parse(html);
 
-    // --------------------------------------------------
-    // VEHICLE INFO (best-effort only)
-    // --------------------------------------------------
-    let year = "";
-    let make = "";
-    let model = "";
-
-    const title = root.querySelector("title")?.innerText || "";
-    const match = title.match(/(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
-
-    if (match) {
-      year = match[1];
-      make = match[2];
-      model = match[3];
+    // ---------------------------------------------
+    // EXTRACT VIN (URL is the most reliable source)
+    // ---------------------------------------------
+    const vinMatch = url.match(/([A-HJ-NPR-Z0-9]{17})/i);
+    if (!vinMatch) {
+      return NextResponse.json(
+        { error: "VIN not found in vehicle URL." },
+        { status: 404 }
+      );
     }
 
-    // --------------------------------------------------
-    // IMAGE EXTRACTION — INVENTORY PHOTOS ONLY
-    // --------------------------------------------------
-    const images = [];
+    const vin = vinMatch[1].toLowerCase();
 
+    // ---------------------------------------------
+    // IMAGE EXTRACTION — VIN SCOPED
+    // ---------------------------------------------
+    const images = [];
     const imgTags = root.querySelectorAll("img");
 
     for (const img of imgTags) {
@@ -61,36 +57,29 @@ export async function POST(req) {
         img.getAttribute("src");
 
       if (!src) continue;
-      if (!src.startsWith("http")) continue;
-
-      // 🔒 HARD RULES
-      if (!src.includes("cdn.dlron.us/inventoryphotos")) continue;
-      if (src.includes("placeholder")) continue;
-      if (src.includes("missing")) continue;
+      if (!src.includes("/inventoryphotos/")) continue;
+      if (!src.toLowerCase().includes(vin)) continue;
+      if (src.includes("placeholder") || src.includes("missing")) continue;
 
       images.push(src);
+
       if (images.length >= 4) break;
     }
 
     if (images.length === 0) {
       return NextResponse.json(
-        { error: "No valid inventory images found." },
+        { error: "No VIN-matched inventory images found." },
         { status: 404 }
       );
     }
 
-    // --------------------------------------------------
-    // ENSURE EXACTLY 4 IMAGES (RECYCLE LAST)
-    // --------------------------------------------------
+    // Ensure exactly 4 images
     while (images.length < 4) {
       images.push(images[images.length - 1]);
     }
 
-    // --------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------
     return NextResponse.json({
-      vehicle: { year, make, model, url },
+      vin,
       images,
     });
   } catch (err) {
