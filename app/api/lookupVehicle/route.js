@@ -1,47 +1,96 @@
-export async function lookupVehicleImages(vehicleUrl) {
-  // 1. Fetch vehicle page HTML
-  const html = await fetch(vehicleUrl).then(r => r.text());
+import { NextResponse } from "next/server";
+import { parse } from "node-html-parser";
 
-  // 2. Extract VIN (DealerOn always exposes it in the URL or page text)
-  const vinMatch = html.match(/[A-HJ-NPR-Z0-9]{17}/i);
-  if (!vinMatch) {
-    throw new Error("VIN not found on vehicle page");
-  }
-  const vin = vinMatch[0].toLowerCase();
+export const dynamic = "force-dynamic";
 
-  // 3. Extract store ID (DealerOn inventoryphotos path)
-  // Example: /inventoryphotos/8693/{VIN}/ip/1.jpg
-  const storeMatch = html.match(/inventoryphotos\/(\d+)\//);
-  if (!storeMatch) {
-    throw new Error("DealerOn store ID not found");
-  }
-  const storeId = storeMatch[1];
+export async function POST(req) {
+  try {
+    const { url } = await req.json();
 
-  // 4. Build image candidates in order
-  const base = `https://www.pischkemotorsoflacrosse.com/inventoryphotos/${storeId}/${vin}/ip`;
-  const foundImages = [];
-
-  for (let i = 1; i <= 10; i++) {
-    const url = `${base}/${i}.jpg`;
-    try {
-      const res = await fetch(url, { method: "HEAD" });
-      if (res.ok) {
-        foundImages.push(url);
-        if (foundImages.length === 4) break;
-      }
-    } catch (_) {
-      // ignore fetch failures
+    if (!url || !url.startsWith("http")) {
+      return NextResponse.json(
+        { error: "Invalid or missing vehicle URL." },
+        { status: 400 }
+      );
     }
-  }
 
-  if (foundImages.length === 0) {
-    throw new Error("No valid inventory photos found for VIN");
-  }
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
 
-  // 5. Enforce exactly 4 images (reuse first if needed)
-  while (foundImages.length < 4) {
-    foundImages.push(foundImages[0]);
-  }
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: "Failed to fetch vehicle page." },
+        { status: 500 }
+      );
+    }
 
-  return foundImages.slice(0, 4);
+    const html = await res.text();
+    const root = parse(html);
+
+    // -------------------------------
+    // FIND VIN (REQUIRED)
+    // -------------------------------
+    let vin = "";
+
+    const vinMatch = html.match(/[A-HJ-NPR-Z0-9]{17}/);
+    if (vinMatch) vin = vinMatch[0];
+
+    if (!vin) {
+      return NextResponse.json(
+        { error: "VIN not found on page." },
+        { status: 404 }
+      );
+    }
+
+    // -------------------------------
+    // FIND INVENTORY PHOTOS BY VIN
+    // -------------------------------
+    const images = [];
+
+    root.querySelectorAll("img").forEach((img) => {
+      const src =
+        img.getAttribute("data-src") ||
+        img.getAttribute("data-lazy") ||
+        img.getAttribute("src") ||
+        "";
+
+      if (
+        src.includes("/inventoryphotos/") &&
+        src.toLowerCase().includes(vin.toLowerCase())
+      ) {
+        if (!images.includes(src)) images.push(src);
+      }
+    });
+
+    if (images.length === 0) {
+      return NextResponse.json(
+        {
+          error: "No VIN-matched inventory photos found.",
+          vin,
+        },
+        { status: 404 }
+      );
+    }
+
+    // HARD RULE: EXACTLY 4 IMAGES
+    const finalImages = images.slice(0, 4);
+    while (finalImages.length < 4) {
+      finalImages.push(finalImages[0]);
+    }
+
+    return NextResponse.json({
+      vin,
+      images: finalImages,
+    });
+  } catch (err) {
+    console.error("LOOKUP ERROR:", err);
+    return NextResponse.json(
+      { error: "Vehicle lookup failed." },
+      { status: 500 }
+    );
+  }
 }
