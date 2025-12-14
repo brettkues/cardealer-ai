@@ -7,6 +7,7 @@ export default function ImageGeneratorPage() {
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
+  const [finalImage, setFinalImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -14,6 +15,7 @@ export default function ImageGeneratorPage() {
     setError("");
     setImages([]);
     setSelectedImages([]);
+    setFinalImage(null);
 
     if (!vehicleUrl) {
       setError("Vehicle URL is required.");
@@ -39,7 +41,12 @@ export default function ImageGeneratorPage() {
         throw new Error("No images returned");
       }
 
-      setImages(data.images);
+      // ✅ NORMALIZE IMAGE URLS (fixes ghost images)
+      const normalizedImages = data.images.map((img) =>
+        typeof img === "string" ? img : img.url
+      );
+
+      setImages(normalizedImages);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -61,20 +68,34 @@ export default function ImageGeneratorPage() {
     });
   }
 
-  function handleFinishBuild() {
+  async function handleFinishBuild() {
+    setError("");
+
     if (selectedImages.length !== 4) {
       setError("You must select exactly 4 images.");
       return;
     }
 
-    // TEMP: confirm payload before wiring build API
-    console.log("FINAL BUILD PAYLOAD", {
-      vehicleUrl,
-      caption,
-      selectedImages
-    });
+    try {
+      const res = await fetch("/api/buildImage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          images: selectedImages,
+          caption
+        })
+      });
 
-    alert("Image selection complete. Ready for final image build.");
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Image build failed");
+      }
+
+      setFinalImage(data.output);
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   return (
@@ -172,6 +193,19 @@ export default function ImageGeneratorPage() {
             Finish Build
           </button>
         </>
+      )}
+
+      {finalImage && (
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold mb-3">
+            Final Image
+          </h2>
+          <img
+            src={finalImage}
+            alt="Generated"
+            className="border rounded max-w-full"
+          />
+        </div>
       )}
     </div>
   );
