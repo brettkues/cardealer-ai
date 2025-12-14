@@ -54,16 +54,16 @@ export default function ImageGeneratorPage() {
 
   async function handleFinishBuild() {
     setError("");
-    setLoading(true);
 
     if (selectedImages.length !== 4) {
-      setLoading(false);
       setError("Select exactly 4 images.");
       return;
     }
 
+    setLoading(true);
+
     try {
-      // 1️⃣ Build image
+      // 1️⃣ Build final image
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,18 +76,32 @@ export default function ImageGeneratorPage() {
       const built = await buildRes.json();
       if (!buildRes.ok) throw new Error(built.error);
 
-      // 2️⃣ Save image (Firebase)
-      const saveRes = await fetch("/api/saveImage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: built.output })
+      // Convert base64 → Blob
+      const blob = await (await fetch(built.output)).blob();
+
+      // 2️⃣ Get signed upload URL
+      const urlRes = await fetch("/api/getUploadUrl", {
+        method: "POST"
       });
 
-      const saved = await saveRes.json();
-      if (!saveRes.ok) throw new Error(saved.error);
+      const urlData = await urlRes.json();
+      if (!urlRes.ok) throw new Error(urlData.error);
 
-      // 3️⃣ Show public URL
-      setFinalImage(saved.url);
+      // 3️⃣ Upload directly to storage
+      const uploadRes = await fetch(urlData.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "image/png"
+        },
+        body: blob
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Image upload failed.");
+      }
+
+      // 4️⃣ Done — show final image
+      setFinalImage(urlData.publicUrl);
 
     } catch (err) {
       setError(err.message || "Image build failed.");
@@ -151,6 +165,15 @@ export default function ImageGeneratorPage() {
 
           {images.length > 0 && (
             <>
+              {/* 🔼 TOP FINISH BUILD */}
+              <button
+                onClick={handleFinishBuild}
+                disabled={loading || selectedImages.length !== 4}
+                className="mb-4 px-6 py-3 bg-green-600 text-white rounded"
+              >
+                {loading ? "Building…" : "Finish Build"}
+              </button>
+
               <h2 className="text-xl font-semibold mb-3">
                 Select 4 Images
               </h2>
@@ -186,6 +209,7 @@ export default function ImageGeneratorPage() {
                 })}
               </div>
 
+              {/* 🔽 BOTTOM FINISH BUILD */}
               <button
                 onClick={handleFinishBuild}
                 disabled={loading || selectedImages.length !== 4}
@@ -210,15 +234,27 @@ export default function ImageGeneratorPage() {
             className="border rounded max-w-full mb-6"
           />
 
-          <button
-            onClick={resetAll}
-            className="px-6 py-3 bg-gray-600 text-white rounded"
+          <a
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+              finalImage
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mb-4 px-6 py-3 bg-blue-700 text-white rounded"
           >
-            Start Over
-          </button>
+            Share on Facebook
+          </a>
+
+          <div>
+            <button
+              onClick={resetAll}
+              className="px-6 py-3 bg-gray-600 text-white rounded"
+            >
+              Start Over
+            </button>
+          </div>
         </div>
       )}
     </div>
   );
 }
-
