@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { Storage } from "@google-cloud/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Uses Application Default Credentials (ADC)
-// Works on Vercel with GCP service account attached
-const storage = new Storage({
-  projectId: process.env.GCP_PROJECT_ID,
-});
-
-const bucket = storage.bucket(process.env.GCP_STORAGE_BUCKET);
-
 export async function POST() {
   try {
+    // 🔒 Lazy import so Next.js does NOT execute at build time
+    const { Storage } = await import("@google-cloud/storage");
+
+    const storage = new Storage({
+      projectId: process.env.GCP_PROJECT_ID,
+    });
+
+    const bucket = storage.bucket(process.env.GCP_STORAGE_BUCKET);
+
     const filename = `generated/${Date.now()}.png`;
     const file = bucket.file(filename);
 
-    // 1-day signed URL for upload (PUT)
+    // 1-day signed upload URL
     const [uploadUrl] = await file.getSignedUrl({
       version: "v4",
       action: "write",
@@ -25,7 +25,7 @@ export async function POST() {
       contentType: "image/png",
     });
 
-    // 1-day signed URL for read (Facebook-safe)
+    // 1-day signed read URL (Facebook-safe)
     const [publicUrl] = await file.getSignedUrl({
       version: "v4",
       action: "read",
@@ -40,7 +40,7 @@ export async function POST() {
   } catch (err) {
     console.error("SIGNED URL ERROR:", err);
     return NextResponse.json(
-      { error: "Failed to create upload URL" },
+      { error: err.message || "Failed to create upload URL" },
       { status: 500 }
     );
   }
