@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,26 +32,31 @@ export async function POST(req) {
       );
     }
 
+    // Decode base64
     const base64 = image.split(",")[1];
     const buffer = Buffer.from(base64, "base64");
 
-    const filename = `generated/${Date.now()}.png`;
-    const file = bucket.file(filename);
+    // Write to temp file
+    const filename = `generated-${Date.now()}.png`;
+    const tempPath = path.join(os.tmpdir(), filename);
 
-    // ✅ Use explicit write stream (serverless-safe)
-    await new Promise((resolve, reject) => {
-      const stream = file.createWriteStream({
-        contentType: "image/png",
-        resumable: false,
-        validation: false,
-      });
+    await fs.writeFile(tempPath, buffer);
 
-      stream.on("error", reject);
-      stream.on("finish", resolve);
-      stream.end(buffer);
+    // Upload from file (NO STREAMS)
+    const destination = `generated/${filename}`;
+
+    await bucket.upload(tempPath, {
+      destination,
+      contentType: "image/png",
+      resumable: false,
+      validation: false,
     });
 
-    // ✅ Signed URL (no public ACLs needed)
+    // Clean up temp file
+    await fs.unlink(tempPath);
+
+    // Signed URL (Facebook-safe)
+    const file = bucket.file(destination);
     const [url] = await file.getSignedUrl({
       action: "read",
       expires: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
