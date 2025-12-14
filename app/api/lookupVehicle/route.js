@@ -32,95 +32,59 @@ export async function POST(req) {
     const root = parse(html);
 
     // --------------------------------------------------
-    // VEHICLE INFO (best-effort, non-blocking)
+    // VEHICLE INFO (best-effort only)
     // --------------------------------------------------
     let year = "";
     let make = "";
     let model = "";
 
     const title = root.querySelector("title")?.innerText || "";
-    const titleMatch = title.match(/(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
+    const match = title.match(/(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
 
-    if (titleMatch) {
-      year = titleMatch[1];
-      make = titleMatch[2];
-      model = titleMatch[3];
+    if (match) {
+      year = match[1];
+      make = match[2];
+      model = match[3];
     }
 
     // --------------------------------------------------
-    // IMAGE EXTRACTION — VEHICLE GALLERY ONLY
+    // IMAGE EXTRACTION — INVENTORY PHOTOS ONLY
     // --------------------------------------------------
-    let images = [];
+    const images = [];
 
-    // DealerOn / Dealer Inspire gallery containers
-    const gallerySelectors = [
-      '[class*="vehicle-gallery"]',
-      '[class*="vdp-gallery"]',
-      '[class*="media-gallery"]',
-      '[id*="vehicle-gallery"]',
-    ];
+    const imgTags = root.querySelectorAll("img");
 
-    let galleryRoot = null;
+    for (const img of imgTags) {
+      const src =
+        img.getAttribute("data-src") ||
+        img.getAttribute("data-lazy") ||
+        img.getAttribute("src");
 
-    for (const sel of gallerySelectors) {
-      galleryRoot = root.querySelector(sel);
-      if (galleryRoot) break;
+      if (!src) continue;
+      if (!src.startsWith("http")) continue;
+
+      // 🔒 HARD RULES
+      if (!src.includes("cdn.dlron.us/inventoryphotos")) continue;
+      if (src.includes("placeholder")) continue;
+      if (src.includes("missing")) continue;
+
+      images.push(src);
+      if (images.length >= 4) break;
     }
-
-    // If gallery container found, pull ONLY images inside it
-    if (galleryRoot) {
-      const imgs = galleryRoot.querySelectorAll("img");
-
-      for (const img of imgs) {
-        const src =
-          img.getAttribute("data-src") ||
-          img.getAttribute("data-lazy") ||
-          img.getAttribute("src");
-
-        if (!src) continue;
-        if (!src.startsWith("http")) continue;
-
-        // STRICT FILTER — NO STOCK
-        if (src.includes("/assets/stock/")) continue;
-        if (src.includes("placeholder")) continue;
-        if (src.includes("missing")) continue;
-        if (src.includes("logo")) continue;
-        if (src.includes("icon")) continue;
-
-        // Prefer real inventory photos
-        if (
-          src.includes("inventoryphoto") ||
-          src.includes("inventoryphotos")
-        ) {
-          images.push(src);
-        }
-
-        if (images.length >= 4) break;
-      }
-    }
-
-    // --------------------------------------------------
-    // FINAL SAFETY NET — NEVER RETURN STOCK
-    // --------------------------------------------------
-    images = images.filter(
-      (src) =>
-        src.includes("inventoryphoto") ||
-        src.includes("inventoryphotos")
-    );
 
     if (images.length === 0) {
       return NextResponse.json(
-        { error: "No valid vehicle images found." },
+        { error: "No valid inventory images found." },
         { status: 404 }
       );
     }
 
-    // Ensure exactly 4 images (recycle if needed)
+    // --------------------------------------------------
+    // ENSURE EXACTLY 4 IMAGES (RECYCLE LAST)
+    // --------------------------------------------------
     while (images.length < 4) {
       images.push(images[images.length - 1]);
     }
-
-    images = images.slice(0, 4);
 
     // --------------------------------------------------
     // RESPONSE
