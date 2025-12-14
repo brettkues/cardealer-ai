@@ -176,7 +176,7 @@ export default function ImageGeneratorPage() {
             disabled={loading}
             className="mb-6 px-6 py-3 bg-blue-600 text-white rounded"
           >
-            {loading ? "Loading Images…" : "Build Image"}
+            {loading ? "Loading Images…" : "Select 4 Images"}
           </button>
 
           {images.length > 0 && (
