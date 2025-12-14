@@ -15,20 +15,19 @@ export async function POST(req) {
   try {
     let { images, caption } = await req.json();
 
-    if (!images || !Array.isArray(images) || images.length === 0) {
+    if (!Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
         { error: "No images provided." },
         { status: 400 }
       );
     }
 
-    // ✅ GUARANTEE EXACTLY 4 IMAGES
+    // Ensure exactly 4 images
     while (images.length < 4) {
       images.push(images[0]);
     }
     images = images.slice(0, 4);
 
-    // ---- CANVAS SIZES ----
     const canvasSize = 850;
     const imgW = 425;
     const imgH = 319;
@@ -43,11 +42,10 @@ export async function POST(req) {
       }
     });
 
-    // ---- LOAD + RESIZE IMAGES ----
     const buffers = await Promise.all(
       images.map(async (url) => {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`Failed to fetch image: ${url}`);
+        if (!res.ok) throw new Error("Image fetch failed");
         const arr = await res.arrayBuffer();
         return sharp(Buffer.from(arr))
           .resize(imgW, imgH, { fit: "cover" })
@@ -58,4 +56,68 @@ export async function POST(req) {
     const layers = [
       { input: buffers[0], left: 0,    top: 0 },
       { input: buffers[1], left: imgW, top: 0 },
-      { input: buffers[2], le
+      { input: buffers[2], left: 0,    top: canvasSize - imgH },
+      { input: buffers[3], left: imgW, top: canvasSize - imgH }
+    ];
+
+    const ribbon = await sharp({
+      create: {
+        width: canvasSize,
+        height: ribbonH,
+        channels: 4,
+        background: getRibbonColor()
+      }
+    }).png().toBuffer();
+
+    layers.push({
+      input: ribbon,
+      left: 0,
+      top: imgH
+    });
+
+    if (caption) {
+      const safe = caption
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      const svg = `
+        <svg width="${canvasSize}" height="${ribbonH}">
+          <text
+            x="50%"
+            y="50%"
+            text-anchor="middle"
+            alignment-baseline="central"
+            font-size="38"
+            fill="white"
+            font-family="Arial, Helvetica, sans-serif"
+          >
+            ${safe}
+          </text>
+        </svg>
+      `;
+
+      layers.push({
+        input: Buffer.from(svg),
+        left: 0,
+        top: imgH
+      });
+    }
+
+    const final = await base
+      .composite(layers)
+      .png()
+      .toBuffer();
+
+    return NextResponse.json({
+      output: `data:image/png;base64,${final.toString("base64")}`
+    });
+
+  } catch (err) {
+    console.error("BUILD ERROR:", err);
+    return NextResponse.json(
+      { error: "Image build failed." },
+      { status: 500 }
+    );
+  }
+}
