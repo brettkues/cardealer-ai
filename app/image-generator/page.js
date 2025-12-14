@@ -7,7 +7,7 @@ export default function ImageGeneratorPage() {
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
-  const [finalImage, setFinalImage] = useState(null);
+  const [finalImage, setFinalImage] = useState(null); // PUBLIC URL
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -64,7 +64,8 @@ export default function ImageGeneratorPage() {
     }
 
     try {
-      const res = await fetch("/api/buildImage", {
+      // 1️⃣ Build image
+      const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -73,13 +74,27 @@ export default function ImageGeneratorPage() {
         })
       });
 
-      const data = await res.json();
+      const built = await buildRes.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Image build failed");
+      if (!buildRes.ok) {
+        throw new Error(built.error || "Image build failed");
       }
 
-      setFinalImage(data.output);
+      // 2️⃣ Save image to Firebase
+      const saveRes = await fetch("/api/saveImage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: built.output })
+      });
+
+      const saved = await saveRes.json();
+
+      if (!saveRes.ok) {
+        throw new Error(saved.error || "Image save failed");
+      }
+
+      // PUBLIC URL
+      setFinalImage(saved.url);
     } catch (err) {
       setError(err.message);
     }
@@ -99,13 +114,10 @@ export default function ImageGeneratorPage() {
     }
 
     try {
-      const blob = await (await fetch(finalImage)).blob();
-      const file = new File([blob], "vehicle.png", { type: blob.type });
-
       await navigator.share({
         title: "Vehicle Image",
         text: caption || "Check out this vehicle",
-        files: [file]
+        url: finalImage
       });
     } catch (err) {
       console.error("Share failed:", err);
