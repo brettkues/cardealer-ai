@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 
 export const runtime = "nodejs";
 
+// Initialize Admin once
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -18,37 +19,41 @@ const bucket = admin.storage().bucket();
 
 export async function POST(req) {
   try {
-    console.log("DEBUG bucket:", bucket?.name);
-    console.log("DEBUG project:", process.env.FIREBASE_PROJECT_ID);
-
     const { image } = await req.json();
 
-    if (!image) {
-      return NextResponse.json({ error: "No image received" }, { status: 400 });
+    if (!image || !image.startsWith("data:image")) {
+      return NextResponse.json(
+        { error: "Invalid image data" },
+        { status: 400 }
+      );
     }
 
+    // Decode base64 → Buffer
     const base64 = image.split(",")[1];
     const buffer = Buffer.from(base64, "base64");
 
     const filename = `generated/${Date.now()}.png`;
     const file = bucket.file(filename);
 
+    // ✅ PRIVATE upload (required with Public Access Prevention)
     await file.save(buffer, {
       contentType: "image/png",
-      public: true,
+      resumable: false,
+      validation: false,
     });
 
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+    // ✅ Generate signed URL (Facebook-safe)
+    const [signedUrl] = await file.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
+    });
 
-    return NextResponse.json({ url: publicUrl });
+    return NextResponse.json({ url: signedUrl });
 
   } catch (err) {
-    console.error("🔥 FIREBASE SAVE ERROR 🔥", err);
+    console.error("SAVE IMAGE ERROR:", err);
     return NextResponse.json(
-      {
-        error: "Failed to save image",
-        details: err?.message || String(err),
-      },
+      { error: "Failed to save image" },
       { status: 500 }
     );
   }
