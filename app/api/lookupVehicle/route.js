@@ -14,9 +14,6 @@ export async function POST(req) {
       );
     }
 
-    // --------------------------------------------------
-    // FETCH PAGE
-    // --------------------------------------------------
     const response = await fetch(url, {
       headers: {
         "User-Agent":
@@ -35,61 +32,90 @@ export async function POST(req) {
     const root = parse(html);
 
     // --------------------------------------------------
-    // VEHICLE META (BEST EFFORT — NOT CRITICAL)
+    // VEHICLE INFO (best-effort, non-blocking)
     // --------------------------------------------------
     let year = "";
     let make = "";
     let model = "";
-    let trim = "";
-    let vin = "";
 
-    const dlScript = root
-      .querySelectorAll("script")
-      .find((s) => s.innerText.includes("vehicleYear"));
+    const title = root.querySelector("title")?.innerText || "";
+    const titleMatch = title.match(/(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
 
-    if (dlScript) {
-      try {
-        year =
-          dlScript.innerText.match(/vehicleYear":"(\d{4})"/)?.[1] || "";
-        make =
-          dlScript.innerText.match(/vehicleMake":"([^"]+)"/)?.[1] || "";
-        model =
-          dlScript.innerText.match(/vehicleModel":"([^"]+)"/)?.[1] || "";
-        trim =
-          dlScript.innerText.match(/vehicleTrim":"([^"]+)"/)?.[1] || "";
-        vin =
-          dlScript.innerText.match(/vehicleVin":"([^"]+)"/)?.[1] || "";
-      } catch {}
+    if (titleMatch) {
+      year = titleMatch[1];
+      make = titleMatch[2];
+      model = titleMatch[3];
     }
 
     // --------------------------------------------------
-    // INVENTORY IMAGES — THIS IS THE IMPORTANT PART
+    // IMAGE EXTRACTION — VEHICLE GALLERY ONLY
     // --------------------------------------------------
-    const allImgs = root
-      .querySelectorAll("img")
-      .map((img) =>
-        img.getAttribute("data-src") ||
-        img.getAttribute("data-lazy") ||
-        img.getAttribute("src")
-      )
-      .filter(Boolean);
+    let images = [];
 
-    // ONLY inventory photos — NEVER stock
-    let images = allImgs.filter((src) =>
-      src.includes("cdn.dlron.us/inventoryphotos")
+    // DealerOn / Dealer Inspire gallery containers
+    const gallerySelectors = [
+      '[class*="vehicle-gallery"]',
+      '[class*="vdp-gallery"]',
+      '[class*="media-gallery"]',
+      '[id*="vehicle-gallery"]',
+    ];
+
+    let galleryRoot = null;
+
+    for (const sel of gallerySelectors) {
+      galleryRoot = root.querySelector(sel);
+      if (galleryRoot) break;
+    }
+
+    // If gallery container found, pull ONLY images inside it
+    if (galleryRoot) {
+      const imgs = galleryRoot.querySelectorAll("img");
+
+      for (const img of imgs) {
+        const src =
+          img.getAttribute("data-src") ||
+          img.getAttribute("data-lazy") ||
+          img.getAttribute("src");
+
+        if (!src) continue;
+        if (!src.startsWith("http")) continue;
+
+        // STRICT FILTER — NO STOCK
+        if (src.includes("/assets/stock/")) continue;
+        if (src.includes("placeholder")) continue;
+        if (src.includes("missing")) continue;
+        if (src.includes("logo")) continue;
+        if (src.includes("icon")) continue;
+
+        // Prefer real inventory photos
+        if (
+          src.includes("inventoryphoto") ||
+          src.includes("inventoryphotos")
+        ) {
+          images.push(src);
+        }
+
+        if (images.length >= 4) break;
+      }
+    }
+
+    // --------------------------------------------------
+    // FINAL SAFETY NET — NEVER RETURN STOCK
+    // --------------------------------------------------
+    images = images.filter(
+      (src) =>
+        src.includes("inventoryphoto") ||
+        src.includes("inventoryphotos")
     );
-
-    // De-dupe while preserving order
-    images = [...new Set(images)];
 
     if (images.length === 0) {
       return NextResponse.json(
-        { error: "No inventory photos found." },
+        { error: "No valid vehicle images found." },
         { status: 404 }
       );
     }
 
-    // Ensure exactly 4 images by recycling if needed
+    // Ensure exactly 4 images (recycle if needed)
     while (images.length < 4) {
       images.push(images[images.length - 1]);
     }
@@ -97,17 +123,10 @@ export async function POST(req) {
     images = images.slice(0, 4);
 
     // --------------------------------------------------
-    // FINAL RESPONSE
+    // RESPONSE
     // --------------------------------------------------
     return NextResponse.json({
-      vehicle: {
-        year,
-        make,
-        model,
-        trim,
-        vin,
-        url,
-      },
+      vehicle: { year, make, model, url },
       images,
     });
   } catch (err) {
