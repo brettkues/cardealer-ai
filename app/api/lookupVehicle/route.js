@@ -3,6 +3,25 @@ import { parse } from "node-html-parser";
 
 export const dynamic = "force-dynamic";
 
+const VALID_PATH_HINTS = [
+  "inventory",
+  "inventoryphotos",
+  "vehicle",
+  "vehicles",
+  "photos",
+  "media"
+];
+
+const JUNK_HINTS = [
+  "logo",
+  "icon",
+  "sprite",
+  "placeholder",
+  "blank",
+  "loading",
+  "pixel"
+];
+
 export async function POST(req) {
   try {
     const { url } = await req.json();
@@ -30,23 +49,17 @@ export async function POST(req) {
     const html = await res.text();
     const root = parse(html);
 
-    // ---- FIND IMAGE ELEMENTS (KEEP THIS FLEXIBLE) ----
     const imgNodes = root.querySelectorAll("img");
 
-    const images = imgNodes
-      .map((img) => {
-        // try common attributes in order of reliability
-        return (
-          img.getAttribute("src") ||
-          img.getAttribute("data-src") ||
-          img.getAttribute("data-lazy") ||
-          img.getAttribute("data-original") ||
-          img.getAttribute("data-image")
-        );
-      })
+    let images = imgNodes
+      .map((img) =>
+        img.getAttribute("src") ||
+        img.getAttribute("data-src") ||
+        img.getAttribute("data-lazy") ||
+        img.getAttribute("data-original")
+      )
       .filter(Boolean)
       .map((src) => {
-        // normalize to absolute URL
         try {
           return new URL(src, url).href;
         } catch {
@@ -54,10 +67,29 @@ export async function POST(req) {
         }
       })
       .filter(Boolean)
-      // remove tiny icons / junk
-      .filter((src) => !src.includes("sprite"))
+
+      // must look like a vehicle image path
+      .filter((src) =>
+        VALID_PATH_HINTS.some((hint) =>
+          src.toLowerCase().includes(hint)
+        )
+      )
+
+      // remove junk assets
+      .filter((src) =>
+        !JUNK_HINTS.some((junk) =>
+          src.toLowerCase().includes(junk)
+        )
+      )
+
+      // normalize (strip querystrings for dedupe)
+      .map((src) => src.split("?")[0])
+
       // dedupe
       .filter((src, i, arr) => arr.indexOf(src) === i);
+
+    // hard cap to keep UI sane
+    images = images.slice(0, 40);
 
     if (images.length === 0) {
       return NextResponse.json(
@@ -66,9 +98,7 @@ export async function POST(req) {
       );
     }
 
-    return NextResponse.json({
-      images
-    });
+    return NextResponse.json({ images });
 
   } catch (err) {
     console.error("LOOKUP ERROR:", err);
