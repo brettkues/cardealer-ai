@@ -7,13 +7,15 @@ import os from "os";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Init Firebase Admin once
+// 🔐 Initialize Firebase Admin ONCE
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      privateKey: Buffer
+        .from(process.env.FIREBASE_ADMIN_PRIVATE_KEY_BASE64, "base64")
+        .toString("utf8"),
     }),
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
   });
@@ -32,17 +34,17 @@ export async function POST(req) {
       );
     }
 
-    // Decode base64
+    // Decode base64 image
     const base64 = image.split(",")[1];
     const buffer = Buffer.from(base64, "base64");
 
-    // Write to temp file
+    // Write to temp file (serverless-safe)
     const filename = `generated-${Date.now()}.png`;
     const tempPath = path.join(os.tmpdir(), filename);
 
     await fs.writeFile(tempPath, buffer);
 
-    // Upload from file (NO STREAMS)
+    // Upload to Firebase Storage (NO STREAMS)
     const destination = `generated/${filename}`;
 
     await bucket.upload(tempPath, {
@@ -52,10 +54,10 @@ export async function POST(req) {
       validation: false,
     });
 
-    // Clean up temp file
+    // Cleanup temp file
     await fs.unlink(tempPath);
 
-    // Signed URL (Facebook-safe)
+    // Generate signed URL (Facebook-safe)
     const file = bucket.file(destination);
     const [url] = await file.getSignedUrl({
       action: "read",
