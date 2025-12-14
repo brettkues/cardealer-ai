@@ -7,7 +7,7 @@ export default function ImageGeneratorPage() {
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
-  const [finalImage, setFinalImage] = useState(null); // PUBLIC URL
+  const [finalImage, setFinalImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,14 +32,11 @@ export default function ImageGeneratorPage() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Vehicle lookup failed");
-      }
+      if (!res.ok) throw new Error(data.error);
 
       setImages(data.images);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Vehicle lookup failed.");
     } finally {
       setLoading(false);
     }
@@ -57,9 +54,11 @@ export default function ImageGeneratorPage() {
 
   async function handleFinishBuild() {
     setError("");
+    setLoading(true);
 
     if (selectedImages.length !== 4) {
-      setError("You must select exactly 4 images.");
+      setLoading(false);
+      setError("Select exactly 4 images.");
       return;
     }
 
@@ -75,12 +74,9 @@ export default function ImageGeneratorPage() {
       });
 
       const built = await buildRes.json();
+      if (!buildRes.ok) throw new Error(built.error);
 
-      if (!buildRes.ok) {
-        throw new Error(built.error || "Image build failed");
-      }
-
-      // 2️⃣ Save image to Firebase
+      // 2️⃣ Save image (Firebase)
       const saveRes = await fetch("/api/saveImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,39 +84,15 @@ export default function ImageGeneratorPage() {
       });
 
       const saved = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saved.error);
 
-      if (!saveRes.ok) {
-        throw new Error(saved.error || "Image save failed");
-      }
-
-      // PUBLIC URL
+      // 3️⃣ Show public URL
       setFinalImage(saved.url);
+
     } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  function downloadImage() {
-    const link = document.createElement("a");
-    link.href = finalImage;
-    link.download = "vehicle-image.png";
-    link.click();
-  }
-
-  async function shareImage() {
-    if (!navigator.share) {
-      alert("Sharing not supported on this device.");
-      return;
-    }
-
-    try {
-      await navigator.share({
-        title: "Vehicle Image",
-        text: caption || "Check out this vehicle",
-        url: finalImage
-      });
-    } catch (err) {
-      console.error("Share failed:", err);
+      setError(err.message || "Image build failed.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -140,7 +112,7 @@ export default function ImageGeneratorPage() {
       </h1>
 
       {error && (
-        <div className="mb-4 text-red-600">
+        <div className="mb-4 text-red-600 font-medium">
           {error}
         </div>
       )}
@@ -152,10 +124,9 @@ export default function ImageGeneratorPage() {
               Vehicle URL
             </label>
             <input
-              type="text"
+              className="w-full border p-3 rounded"
               value={vehicleUrl}
               onChange={(e) => setVehicleUrl(e.target.value)}
-              className="w-full border p-3 rounded"
             />
           </div>
 
@@ -164,10 +135,9 @@ export default function ImageGeneratorPage() {
               Caption
             </label>
             <input
-              type="text"
+              className="w-full border p-3 rounded"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              className="w-full border p-3 rounded"
             />
           </div>
 
@@ -176,7 +146,7 @@ export default function ImageGeneratorPage() {
             disabled={loading}
             className="mb-6 px-6 py-3 bg-blue-600 text-white rounded"
           >
-            {loading ? "Loading Images…" : "Select 4 Images"}
+            {loading ? "Loading…" : "Select Images"}
           </button>
 
           {images.length > 0 && (
@@ -188,19 +158,19 @@ export default function ImageGeneratorPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 {images.map((src) => {
                   const index = selectedImages.indexOf(src);
-                  const isSelected = index !== -1;
+                  const selected = index !== -1;
 
                   return (
                     <div
                       key={src}
                       onClick={() => toggleImage(src)}
                       className={`relative cursor-pointer border rounded overflow-hidden ${
-                        isSelected
+                        selected
                           ? "border-blue-600 ring-4 ring-blue-300"
                           : "border-gray-300"
                       }`}
                     >
-                      {isSelected && (
+                      {selected && (
                         <div className="absolute top-2 left-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold">
                           {index + 1}
                         </div>
@@ -218,10 +188,10 @@ export default function ImageGeneratorPage() {
 
               <button
                 onClick={handleFinishBuild}
-                disabled={selectedImages.length !== 4}
+                disabled={loading || selectedImages.length !== 4}
                 className="px-6 py-3 bg-green-600 text-white rounded"
               >
-                Finish Build
+                {loading ? "Building…" : "Finish Build"}
               </button>
             </>
           )}
@@ -236,32 +206,16 @@ export default function ImageGeneratorPage() {
 
           <img
             src={finalImage}
-            alt="Generated"
+            alt="Final"
             className="border rounded max-w-full mb-6"
           />
 
-          <div className="flex gap-4 flex-wrap">
-            <button
-              onClick={downloadImage}
-              className="px-5 py-3 bg-blue-600 text-white rounded"
-            >
-              Download
-            </button>
-
-            <button
-              onClick={shareImage}
-              className="px-5 py-3 bg-purple-600 text-white rounded"
-            >
-              Share (Text)
-            </button>
-
-            <button
-              onClick={resetAll}
-              className="px-5 py-3 bg-gray-500 text-white rounded"
-            >
-              Start Over
-            </button>
-          </div>
+          <button
+            onClick={resetAll}
+            className="px-6 py-3 bg-gray-600 text-white rounded"
+          >
+            Start Over
+          </button>
         </div>
       )}
     </div>
