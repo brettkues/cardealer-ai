@@ -23,21 +23,27 @@ export default function ImageSelectPage() {
 
     async function fetchImages() {
       try {
-        const res = await fetch(`/api/lookupVehicle?vin=${vin}`);
+        const res = await fetch("/api/lookupVehicle", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ vin })
+        });
 
-        // Defensive: ensure JSON
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new Error("lookupVehicle did not return JSON");
+        const text = await res.text();
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error("lookupVehicle returned non-JSON response");
         }
-
-        const data = await res.json();
 
         if (!res.ok) {
           throw new Error(data.error || "lookupVehicle failed");
         }
 
-        // EXPECTATION: lookupVehicle returns images array
         if (!Array.isArray(data.images)) {
           throw new Error("No images returned from lookupVehicle");
         }
