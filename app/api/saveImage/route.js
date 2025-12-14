@@ -3,7 +3,6 @@ import admin from "firebase-admin";
 
 export const runtime = "nodejs";
 
-// Initialize Firebase Admin once
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -19,13 +18,13 @@ const bucket = admin.storage().bucket();
 
 export async function POST(req) {
   try {
+    console.log("DEBUG bucket:", bucket?.name);
+    console.log("DEBUG project:", process.env.FIREBASE_PROJECT_ID);
+
     const { image } = await req.json();
 
-    if (!image || !image.startsWith("data:image")) {
-      return NextResponse.json(
-        { error: "Invalid image data" },
-        { status: 400 }
-      );
+    if (!image) {
+      return NextResponse.json({ error: "No image received" }, { status: 400 });
     }
 
     const base64 = image.split(",")[1];
@@ -35,13 +34,8 @@ export async function POST(req) {
     const file = bucket.file(filename);
 
     await file.save(buffer, {
-      metadata: {
-        contentType: "image/png",
-        cacheControl: "public, max-age=31536000",
-      },
+      contentType: "image/png",
       public: true,
-      resumable: false,
-      validation: false,
     });
 
     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
@@ -49,9 +43,12 @@ export async function POST(req) {
     return NextResponse.json({ url: publicUrl });
 
   } catch (err) {
-    console.error("SAVE IMAGE ERROR:", err);
+    console.error("🔥 FIREBASE SAVE ERROR 🔥", err);
     return NextResponse.json(
-      { error: "Failed to save image" },
+      {
+        error: "Failed to save image",
+        details: err?.message || String(err),
+      },
       { status: 500 }
     );
   }
