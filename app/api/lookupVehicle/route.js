@@ -3,25 +3,6 @@ import { parse } from "node-html-parser";
 
 export const dynamic = "force-dynamic";
 
-const VALID_PATH_HINTS = [
-  "inventory",
-  "inventoryphotos",
-  "vehicle",
-  "vehicles",
-  "photos",
-  "media"
-];
-
-const JUNK_HINTS = [
-  "logo",
-  "icon",
-  "sprite",
-  "placeholder",
-  "blank",
-  "loading",
-  "pixel"
-];
-
 export async function POST(req) {
   try {
     const { url } = await req.json();
@@ -33,10 +14,11 @@ export async function POST(req) {
       );
     }
 
+    const pageUrl = new URL(url);
+    const pageOrigin = pageUrl.origin;
+
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0"
-      }
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
 
     if (!res.ok) {
@@ -51,7 +33,7 @@ export async function POST(req) {
 
     const imgNodes = root.querySelectorAll("img");
 
-    let images = imgNodes
+    const images = imgNodes
       .map((img) =>
         img.getAttribute("src") ||
         img.getAttribute("data-src") ||
@@ -61,35 +43,22 @@ export async function POST(req) {
       .filter(Boolean)
       .map((src) => {
         try {
-          return new URL(src, url).href;
+          return new URL(src, pageOrigin).href;
         } catch {
           return null;
         }
       })
       .filter(Boolean)
 
-      // must look like a vehicle image path
-      .filter((src) =>
-        VALID_PATH_HINTS.some((hint) =>
-          src.toLowerCase().includes(hint)
-        )
+      // ✅ ONLY first-party inventory photos
+      .filter(
+        (src) =>
+          src.startsWith(pageOrigin + "/inventoryphotos/")
       )
 
-      // remove junk assets
-      .filter((src) =>
-        !JUNK_HINTS.some((junk) =>
-          src.toLowerCase().includes(junk)
-        )
-      )
-
-      // normalize (strip querystrings for dedupe)
+      // normalize & dedupe
       .map((src) => src.split("?")[0])
-
-      // dedupe
       .filter((src, i, arr) => arr.indexOf(src) === i);
-
-    // hard cap to keep UI sane
-    images = images.slice(0, 40);
 
     if (images.length === 0) {
       return NextResponse.json(
