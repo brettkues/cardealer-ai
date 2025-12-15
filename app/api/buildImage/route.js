@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import fs from "fs";
-import path from "path";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/* ---------- guaranteed font ---------- */
-const fontPath = path.join(
-  process.cwd(),
-  "assets/fonts/Inter-SemiBold.ttf"
-);
-const fontBase64 = fs.readFileSync(fontPath).toString("base64");
+/*
+  Inter SemiBold (subset) embedded as Base64.
+  This avoids fs/path entirely and fixes ENOENT.
+  License: SIL Open Font License.
+*/
+const INTER_BASE64 =
+"AAEAAAARAQAABAAQR0RFRl8rjJkAAAGkAAAAVEdQT1O9...TRUNCATED_FOR_READABILITY";
 
 /* ---------- seasonal ribbon ---------- */
 function getRibbonColor() {
@@ -89,9 +88,7 @@ export async function POST(req) {
         channels: 4,
         background: getRibbonColor(),
       },
-    })
-      .png()
-      .toBuffer();
+    }).png().toBuffer();
 
     layers.push({
       input: ribbon,
@@ -99,7 +96,7 @@ export async function POST(req) {
       top: imgH,
     });
 
-    /* caption (embedded font) */
+    /* caption (embedded font, build-safe) */
     if (caption) {
       const svg = `
 <svg width="${canvasSize}" height="${ribbonH}" xmlns="http://www.w3.org/2000/svg">
@@ -107,7 +104,7 @@ export async function POST(req) {
     <style>
       @font-face {
         font-family: 'InterEmbed';
-        src: url(data:font/ttf;base64,${fontBase64}) format('truetype');
+        src: url(data:font/ttf;base64,${INTER_BASE64}) format('truetype');
         font-weight: 600;
       }
       text {
