@@ -15,7 +15,8 @@ function getRibbonColor() {
 /* ---------- handler ---------- */
 export async function POST(req) {
   try {
-    let { images /* caption intentionally ignored */ } = await req.json();
+    // NOTE: logoUrl is NEW (string | null)
+    let { images, logoUrl } = await req.json();
 
     if (!Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -42,6 +43,7 @@ export async function POST(req) {
       },
     });
 
+    // Fetch + resize photos
     const buffers = await Promise.all(
       images.map(async (url) => {
         const res = await fetch(url);
@@ -60,7 +62,7 @@ export async function POST(req) {
       { input: buffers[3], left: imgW, top: canvasSize - imgH },
     ];
 
-    // Ribbon only (no text)
+    // Ribbon (no text)
     const ribbon = await sharp({
       create: {
         width: canvasSize,
@@ -68,15 +70,27 @@ export async function POST(req) {
         channels: 4,
         background: getRibbonColor(),
       },
-    })
-      .png()
-      .toBuffer();
+    }).png().toBuffer();
 
-    layers.push({
-      input: ribbon,
-      left: 0,
-      top: imgH,
-    });
+    layers.push({ input: ribbon, left: 0, top: imgH });
+
+    // Logo overlay (top-right, padded)
+    if (logoUrl) {
+      const res = await fetch(logoUrl);
+      if (res.ok) {
+        const arr = await res.arrayBuffer();
+        const logoBuf = await sharp(Buffer.from(arr))
+          .resize({ width: 140, height: 140, fit: "inside" })
+          .png()
+          .toBuffer();
+
+        layers.push({
+          input: logoBuf,
+          left: canvasSize - 140 - 20, // right padding
+          top: 20,                     // top padding
+        });
+      }
+    }
 
     const final = await base
       .composite(layers)
