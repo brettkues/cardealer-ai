@@ -5,6 +5,7 @@ import { useState } from "react";
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
@@ -28,7 +29,7 @@ export default function ImageGeneratorPage() {
       const res = await fetch("/api/lookupVehicle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: vehicleUrl })
+        body: JSON.stringify({ url: vehicleUrl }),
       });
 
       const data = await res.json();
@@ -44,9 +45,7 @@ export default function ImageGeneratorPage() {
 
   function toggleImage(src) {
     setSelectedImages((prev) => {
-      if (prev.includes(src)) {
-        return prev.filter((i) => i !== src);
-      }
+      if (prev.includes(src)) return prev.filter((i) => i !== src);
       if (prev.length >= 4) return prev;
       return [...prev, src];
     });
@@ -63,14 +62,15 @@ export default function ImageGeneratorPage() {
     setLoading(true);
 
     try {
-      // 1️⃣ Build final image
+      // 1️⃣ Build image
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           images: selectedImages,
-          caption
-        })
+          caption,
+          logo: logoUrl || null,
+        }),
       });
 
       const built = await buildRes.json();
@@ -80,29 +80,20 @@ export default function ImageGeneratorPage() {
       const blob = await (await fetch(built.output)).blob();
 
       // 2️⃣ Get signed upload URL
-      const urlRes = await fetch("/api/getUploadUrl", {
-        method: "POST"
-      });
-
+      const urlRes = await fetch("/api/getUploadUrl", { method: "POST" });
       const urlData = await urlRes.json();
       if (!urlRes.ok) throw new Error(urlData.error);
 
-      // 3️⃣ Upload directly to storage
+      // 3️⃣ Upload to GCS
       const uploadRes = await fetch(urlData.uploadUrl, {
         method: "PUT",
-        headers: {
-          "Content-Type": "image/png"
-        },
-        body: blob
+        headers: { "Content-Type": "image/png" },
+        body: blob,
       });
 
-      if (!uploadRes.ok) {
-        throw new Error("Image upload failed.");
-      }
+      if (!uploadRes.ok) throw new Error("Image upload failed.");
 
-      // 4️⃣ Done — show final image
       setFinalImage(urlData.publicUrl);
-
     } catch (err) {
       setError(err.message || "Image build failed.");
     } finally {
@@ -113,6 +104,7 @@ export default function ImageGeneratorPage() {
   function resetAll() {
     setVehicleUrl("");
     setCaption("");
+    setLogoUrl("");
     setImages([]);
     setSelectedImages([]);
     setFinalImage(null);
@@ -121,22 +113,15 @@ export default function ImageGeneratorPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-6">
-        Image Generator
-      </h1>
+      <h1 className="text-2xl font-semibold mb-6">Image Generator</h1>
 
-      {error && (
-        <div className="mb-4 text-red-600 font-medium">
-          {error}
-        </div>
-      )}
+      {error && <div className="mb-4 text-red-600 font-medium">{error}</div>}
 
       {!finalImage && (
         <>
+          {/* VEHICLE URL */}
           <div className="mb-4">
-            <label className="block font-medium mb-1">
-              Vehicle URL
-            </label>
+            <label className="block font-medium mb-1">Vehicle URL</label>
             <input
               className="w-full border p-3 rounded"
               value={vehicleUrl}
@@ -144,15 +129,29 @@ export default function ImageGeneratorPage() {
             />
           </div>
 
+          {/* CAPTION */}
           <div className="mb-4">
-            <label className="block font-medium mb-1">
-              Caption
-            </label>
+            <label className="block font-medium mb-1">Caption</label>
             <input
               className="w-full border p-3 rounded"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
+              placeholder="Example: One-owner • Clean Carfax • Just Arrived"
             />
+          </div>
+
+          {/* LOGO PICKER */}
+          <div className="mb-4">
+            <label className="block font-medium mb-1">Logo (optional)</label>
+            <input
+              className="w-full border p-3 rounded"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="Paste logo image URL (PNG with transparency recommended)"
+            />
+            <p className="text-sm text-gray-600 mt-1">
+              Leave blank for no logo. You can paste a Firebase or website image URL.
+            </p>
           </div>
 
           <button
@@ -165,7 +164,7 @@ export default function ImageGeneratorPage() {
 
           {images.length > 0 && (
             <>
-              {/* 🔼 TOP FINISH BUILD */}
+              {/* TOP FINISH */}
               <button
                 onClick={handleFinishBuild}
                 disabled={loading || selectedImages.length !== 4}
@@ -174,9 +173,7 @@ export default function ImageGeneratorPage() {
                 {loading ? "Building…" : "Finish Build"}
               </button>
 
-              <h2 className="text-xl font-semibold mb-3">
-                Select 4 Images
-              </h2>
+              <h2 className="text-xl font-semibold mb-3">Select 4 Images</h2>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 {images.map((src) => {
@@ -198,18 +195,13 @@ export default function ImageGeneratorPage() {
                           {index + 1}
                         </div>
                       )}
-
-                      <img
-                        src={src}
-                        alt="Vehicle"
-                        className="w-full h-40 object-cover"
-                      />
+                      <img src={src} alt="Vehicle" className="w-full h-40 object-cover" />
                     </div>
                   );
                 })}
               </div>
 
-              {/* 🔽 BOTTOM FINISH BUILD */}
+              {/* BOTTOM FINISH */}
               <button
                 onClick={handleFinishBuild}
                 disabled={loading || selectedImages.length !== 4}
@@ -224,15 +216,17 @@ export default function ImageGeneratorPage() {
 
       {finalImage && (
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-3">
-            Final Image
-          </h2>
+          <h2 className="text-xl font-semibold mb-3">Final Image</h2>
 
-          <img
-            src={finalImage}
-            alt="Final"
-            className="border rounded max-w-full mb-6"
-          />
+          <img src={finalImage} alt="Final" className="border rounded max-w-full mb-6" />
+
+          <a
+            href={finalImage}
+            download
+            className="inline-block mb-4 mr-4 px-6 py-3 bg-gray-700 text-white rounded"
+          >
+            Download Image
+          </a>
 
           <a
             href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
@@ -245,7 +239,7 @@ export default function ImageGeneratorPage() {
             Share on Facebook
           </a>
 
-          <div>
+          <div className="mt-4">
             <button
               onClick={resetAll}
               className="px-6 py-3 bg-gray-600 text-white rounded"
