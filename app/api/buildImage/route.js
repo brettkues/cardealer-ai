@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /* ---------- guaranteed font ---------- */
 const fontPath = path.join(
@@ -98,7 +99,7 @@ export async function POST(req) {
       top: imgH,
     });
 
-    /* caption (fixed font) */
+    /* caption (embedded font) */
     if (caption) {
       const svg = `
 <svg width="${canvasSize}" height="${ribbonH}" xmlns="http://www.w3.org/2000/svg">
