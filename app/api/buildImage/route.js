@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { createCanvas } from "@napi-rs/canvas";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /* ---------- seasonal ribbon ---------- */
 function getRibbonColor() {
@@ -14,29 +12,10 @@ function getRibbonColor() {
   return "#D46A1E";                        // Fall
 }
 
-/* ---------- render ribbon + text as pixels ---------- */
-function renderRibbonWithText(text, width, height) {
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
-
-  // ribbon background
-  ctx.fillStyle = getRibbonColor();
-  ctx.fillRect(0, 0, width, height);
-
-  // text
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "600 38px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, width / 2, height / 2, width - 40);
-
-  return canvas.toBuffer("image/png");
-}
-
 /* ---------- handler ---------- */
 export async function POST(req) {
   try {
-    let { images, caption } = await req.json();
+    let { images /* caption intentionally ignored */ } = await req.json();
 
     if (!Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
@@ -45,6 +24,7 @@ export async function POST(req) {
       );
     }
 
+    // Ensure exactly 4 images
     while (images.length < 4) images.push(images[0]);
     images = images.slice(0, 4);
 
@@ -80,19 +60,23 @@ export async function POST(req) {
       { input: buffers[3], left: imgW, top: canvasSize - imgH },
     ];
 
-    if (caption) {
-      const ribbonPNG = renderRibbonWithText(
-        caption,
-        canvasSize,
-        ribbonH
-      );
+    // Ribbon only (no text)
+    const ribbon = await sharp({
+      create: {
+        width: canvasSize,
+        height: ribbonH,
+        channels: 4,
+        background: getRibbonColor(),
+      },
+    })
+      .png()
+      .toBuffer();
 
-      layers.push({
-        input: ribbonPNG,
-        left: 0,
-        top: imgH,
-      });
-    }
+    layers.push({
+      input: ribbon,
+      left: 0,
+      top: imgH,
+    });
 
     const final = await base
       .composite(layers)
