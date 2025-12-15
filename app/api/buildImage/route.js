@@ -4,14 +4,6 @@ import sharp from "sharp";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/*
-  Inter SemiBold (subset) embedded as Base64.
-  This avoids fs/path entirely and fixes ENOENT.
-  License: SIL Open Font License.
-*/
-const INTER_BASE64 =
-"AAEAAAARAQAABAAQR0RFRl8rjJkAAAGkAAAAVEdQT1O9...TRUNCATED_FOR_READABILITY";
-
 /* ---------- seasonal ribbon ---------- */
 function getRibbonColor() {
   const m = new Date().getMonth() + 1;
@@ -21,14 +13,38 @@ function getRibbonColor() {
   return "#D46A1E";                        // Fall
 }
 
-/* ---------- helpers ---------- */
-function escapeXml(str = "") {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+/* ---------- text as pixels (NO SVG FONTS) ---------- */
+async function renderCaptionPNG(text, width, height) {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: "rgba(0,0,0,0)",
+    },
+  })
+    .composite([
+      {
+        input: Buffer.from(
+          `
+          <svg width="${width}" height="${height}">
+            <rect width="100%" height="100%" fill="none"/>
+            <text
+              x="50%"
+              y="50%"
+              text-anchor="middle"
+              dominant-baseline="middle"
+              font-size="38"
+              fill="white"
+              font-family="sans-serif"
+            >${text}</text>
+          </svg>
+          `
+        ),
+      },
+    ])
+    .png()
+    .toBuffer();
 }
 
 /* ---------- handler ---------- */
@@ -43,7 +59,6 @@ export async function POST(req) {
       );
     }
 
-    /* ensure exactly 4 images */
     while (images.length < 4) images.push(images[0]);
     images = images.slice(0, 4);
 
@@ -61,7 +76,6 @@ export async function POST(req) {
       },
     });
 
-    /* fetch + resize images */
     const buffers = await Promise.all(
       images.map(async (url) => {
         const res = await fetch(url);
@@ -80,7 +94,6 @@ export async function POST(req) {
       { input: buffers[3], left: imgW, top: canvasSize - imgH },
     ];
 
-    /* ribbon */
     const ribbon = await sharp({
       create: {
         width: canvasSize,
@@ -90,52 +103,23 @@ export async function POST(req) {
       },
     }).png().toBuffer();
 
-    layers.push({
-      input: ribbon,
-      left: 0,
-      top: imgH,
-    });
+    layers.push({ input: ribbon, left: 0, top: imgH });
 
-    /* caption (embedded font, build-safe) */
     if (caption) {
-      const svg = `
-<svg width="${canvasSize}" height="${ribbonH}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      @font-face {
-        font-family: 'InterEmbed';
-        src: url(data:font/ttf;base64,${INTER_BASE64}) format('truetype');
-        font-weight: 600;
-      }
-      text {
-        font-family: 'InterEmbed', sans-serif;
-        fill: white;
-      }
-    </style>
-  </defs>
-
-  <text
-    x="50%"
-    y="50%"
-    text-anchor="middle"
-    dominant-baseline="middle"
-    font-size="38"
-  >
-    ${escapeXml(caption)}
-  </text>
-</svg>`;
+      const captionPNG = await renderCaptionPNG(
+        caption,
+        canvasSize,
+        ribbonH
+      );
 
       layers.push({
-        input: Buffer.from(svg),
+        input: captionPNG,
         left: 0,
         top: imgH,
       });
     }
 
-    const final = await base
-      .composite(layers)
-      .png()
-      .toBuffer();
+    const final = await base.composite(layers).png().toBuffer();
 
     return NextResponse.json({
       output: `data:image/png;base64,${final.toString("base64")}`,
