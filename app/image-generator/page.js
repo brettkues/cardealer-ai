@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import LogoPicker from "./LogoPicker";
 
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
-  const [logo, setLogo] = useState(null); // vault logo
+  const [logo, setLogo] = useState(null);
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
@@ -162,12 +163,21 @@ export default function ImageGeneratorPage() {
           <div className="mb-4">
             <label className="block font-medium mb-1">Logo (optional)</label>
 
-            <button
-              onClick={() => setOpenLogos(true)}
-              className="px-4 py-2 bg-gray-700 text-white rounded"
-            >
-              {logo ? "Change Logo" : "Select Logo"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setOpenLogos(true)}
+                className="px-4 py-2 bg-gray-700 text-white rounded"
+              >
+                {logo ? "Change Logo" : "Select Logo"}
+              </button>
+
+              <Link
+                href="/image-generator/logos"
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded border"
+              >
+                Manage Logos
+              </Link>
+            </div>
 
             {logo && (
               <div className="mt-2 border rounded p-2 inline-block">
