@@ -15,19 +15,17 @@ function getRibbonColor() {
 /* ---------- handler ---------- */
 export async function POST(req) {
   try {
-    // NOTE: logoUrl is NEW (string | null)
-    let { images, logoUrl } = await req.json();
+    const { images, logoBase64 } = await req.json();
 
     if (!Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
-        { error: "No images provided." },
+        { error: "No images provided" },
         { status: 400 }
       );
     }
 
-    // Ensure exactly 4 images
     while (images.length < 4) images.push(images[0]);
-    images = images.slice(0, 4);
+    images.splice(4);
 
     const canvasSize = 850;
     const imgW = 425;
@@ -43,7 +41,6 @@ export async function POST(req) {
       },
     });
 
-    // Fetch + resize photos
     const buffers = await Promise.all(
       images.map(async (url) => {
         const res = await fetch(url);
@@ -56,13 +53,12 @@ export async function POST(req) {
     );
 
     const layers = [
-      { input: buffers[0], left: 0,    top: 0 },
+      { input: buffers[0], left: 0, top: 0 },
       { input: buffers[1], left: imgW, top: 0 },
-      { input: buffers[2], left: 0,    top: canvasSize - imgH },
+      { input: buffers[2], left: 0, top: canvasSize - imgH },
       { input: buffers[3], left: imgW, top: canvasSize - imgH },
     ];
 
-    // Ribbon (no text)
     const ribbon = await sharp({
       create: {
         width: canvasSize,
@@ -70,32 +66,32 @@ export async function POST(req) {
         channels: 4,
         background: getRibbonColor(),
       },
-    }).png().toBuffer();
+    })
+      .png()
+      .toBuffer();
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    // Logo overlay (top-right, padded)
-    if (logoUrl) {
-      const res = await fetch(logoUrl);
-      if (res.ok) {
-        const arr = await res.arrayBuffer();
-        const logoBuf = await sharp(Buffer.from(arr))
-          .resize({ width: 140, height: 140, fit: "inside" })
-          .png()
-          .toBuffer();
+    // Logo overlay (PNG/JPG only, Base64 input)
+    if (logoBase64) {
+      const logoBuffer = Buffer.from(
+        logoBase64.replace(/^data:image\/\w+;base64,/, ""),
+        "base64"
+      );
 
-        layers.push({
-          input: logoBuf,
-          left: canvasSize - 140 - 20, // right padding
-          top: 20,                     // top padding
-        });
-      }
+      const logo = await sharp(logoBuffer)
+        .resize({ width: 140, height: 140, fit: "inside" })
+        .png()
+        .toBuffer();
+
+      layers.push({
+        input: logo,
+        left: canvasSize - 160,
+        top: 20,
+      });
     }
 
-    const final = await base
-      .composite(layers)
-      .png()
-      .toBuffer();
+    const final = await base.composite(layers).png().toBuffer();
 
     return NextResponse.json({
       output: `data:image/png;base64,${final.toString("base64")}`,
@@ -103,7 +99,7 @@ export async function POST(req) {
   } catch (err) {
     console.error("BUILD ERROR:", err);
     return NextResponse.json(
-      { error: "Image build failed." },
+      { error: "Image build failed" },
       { status: 500 }
     );
   }
