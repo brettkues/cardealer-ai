@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
+import { createCanvas } from "@napi-rs/canvas";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,38 +14,23 @@ function getRibbonColor() {
   return "#D46A1E";                        // Fall
 }
 
-/* ---------- text as pixels (NO SVG FONTS) ---------- */
-async function renderCaptionPNG(text, width, height) {
-  return sharp({
-    create: {
-      width,
-      height,
-      channels: 4,
-      background: "rgba(0,0,0,0)",
-    },
-  })
-    .composite([
-      {
-        input: Buffer.from(
-          `
-          <svg width="${width}" height="${height}">
-            <rect width="100%" height="100%" fill="none"/>
-            <text
-              x="50%"
-              y="50%"
-              text-anchor="middle"
-              dominant-baseline="middle"
-              font-size="38"
-              fill="white"
-              font-family="sans-serif"
-            >${text}</text>
-          </svg>
-          `
-        ),
-      },
-    ])
-    .png()
-    .toBuffer();
+/* ---------- render ribbon + text as pixels ---------- */
+function renderRibbonWithText(text, width, height) {
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  // ribbon background
+  ctx.fillStyle = getRibbonColor();
+  ctx.fillRect(0, 0, width, height);
+
+  // text
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "600 38px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, width / 2, height / 2, width - 40);
+
+  return canvas.toBuffer("image/png");
 }
 
 /* ---------- handler ---------- */
@@ -94,32 +80,24 @@ export async function POST(req) {
       { input: buffers[3], left: imgW, top: canvasSize - imgH },
     ];
 
-    const ribbon = await sharp({
-      create: {
-        width: canvasSize,
-        height: ribbonH,
-        channels: 4,
-        background: getRibbonColor(),
-      },
-    }).png().toBuffer();
-
-    layers.push({ input: ribbon, left: 0, top: imgH });
-
     if (caption) {
-      const captionPNG = await renderCaptionPNG(
+      const ribbonPNG = renderRibbonWithText(
         caption,
         canvasSize,
         ribbonH
       );
 
       layers.push({
-        input: captionPNG,
+        input: ribbonPNG,
         left: 0,
         top: imgH,
       });
     }
 
-    const final = await base.composite(layers).png().toBuffer();
+    const final = await base
+      .composite(layers)
+      .png()
+      .toBuffer();
 
     return NextResponse.json({
       output: `data:image/png;base64,${final.toString("base64")}`,
