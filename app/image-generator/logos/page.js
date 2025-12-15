@@ -4,15 +4,13 @@ import { useEffect, useState } from "react";
 import { storage, db, auth } from "@/lib/firebaseClient";
 import {
   ref,
-  uploadBytes,
+  uploadBytesResumable,
   getDownloadURL,
   listAll,
 } from "firebase/storage";
 import {
-  collection,
   setDoc,
   doc,
-  getDocs,
 } from "firebase/firestore";
 
 export default function LogosPage() {
@@ -20,6 +18,7 @@ export default function LogosPage() {
   const [saved, setSaved] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState(null);
 
   useEffect(() => {
     loadSaved();
@@ -44,8 +43,53 @@ export default function LogosPage() {
     }
   }
 
+  function uploadSingleFile(file, index) {
+    return new Promise((resolve, reject) => {
+      if (!["image/png", "image/jpeg"].includes(file.type)) {
+        reject(new Error("Only PNG or JPG images are allowed."));
+        return;
+      }
+
+      const fileId = `logo_${Date.now()}_${index}`;
+      const fileRef = ref(storage, `logos/${fileId}`);
+
+      const task = uploadBytesResumable(fileRef, file, {
+        contentType: file.type,
+      });
+
+      task.on(
+        "state_changed",
+        (snapshot) => {
+          const pct = Math.round(
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          );
+          setProgress(pct);
+        },
+        (err) => {
+          reject(err);
+        },
+        async () => {
+          try {
+            const url = await getDownloadURL(task.snapshot.ref);
+
+            await setDoc(doc(db, "logos", fileId), {
+              url,
+              uploadedAt: new Date(),
+              uploadedBy: auth.currentUser.uid,
+            });
+
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+  }
+
   async function handleUpload() {
     setError("");
+    setProgress(null);
 
     if (!files.length) {
       setError("Please select at least one file.");
@@ -62,31 +106,11 @@ export default function LogosPage() {
 
     try {
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-
-        // Only allow PNG/JPG
-        if (!["image/png", "image/jpeg"].includes(file.type)) {
-          throw new Error("Only PNG or JPG images are allowed.");
-        }
-
-        const fileId = `logo_${Date.now()}_${i}`;
-        const fileRef = ref(storage, `logos/${fileId}`);
-
-        // 1️⃣ Upload to Firebase Storage
-        await uploadBytes(fileRef, file);
-
-        // 2️⃣ Get public URL
-        const url = await getDownloadURL(fileRef);
-
-        // 3️⃣ Save metadata to Firestore
-        await setDoc(doc(db, "logos", fileId), {
-          url,
-          uploadedAt: new Date(),
-          uploadedBy: user.uid,
-        });
+        await uploadSingleFile(files[i], i);
       }
 
       setFiles([]);
+      setProgress(null);
       await loadSaved();
     } catch (err) {
       console.error("UPLOAD ERROR:", err);
@@ -106,7 +130,6 @@ export default function LogosPage() {
         </div>
       )}
 
-      {/* Upload Section */}
       <div className="space-y-4 mb-8 border p-4 rounded">
         <h2 className="text-xl font-semibold">Upload Logos</h2>
 
@@ -126,9 +149,14 @@ export default function LogosPage() {
         >
           {loading ? "Uploading…" : "Upload Logos"}
         </button>
+
+        {progress !== null && (
+          <div className="text-sm text-gray-700">
+            Upload progress: {progress}%
+          </div>
+        )}
       </div>
 
-      {/* Saved Logos */}
       <h2 className="text-xl font-semibold mb-3">Saved Logos</h2>
 
       <div className="grid grid-cols-3 gap-4">
