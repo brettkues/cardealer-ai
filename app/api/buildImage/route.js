@@ -19,10 +19,10 @@ async function fetchImage(url) {
 
 export async function POST(req) {
   try {
-    let { images, caption = "", logos = [] } = await req.json();
+    const { images, logos = [], captionImage } = await req.json();
 
     while (images.length < 4) images.push(images[0]);
-    images = images.slice(0, 4);
+    const imgList = images.slice(0, 4);
 
     const canvas = 850;
     const imgW = 425;
@@ -39,7 +39,7 @@ export async function POST(req) {
     });
 
     const vehicleBuffers = await Promise.all(
-      images.map(async (url) =>
+      imgList.map(async (url) =>
         sharp(await fetchImage(url))
           .resize(imgW, imgH, { fit: "cover" })
           .toBuffer()
@@ -64,51 +64,30 @@ export async function POST(req) {
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    // --- Caption (baseline, still broken) ---
-    if (caption.trim()) {
-      const safe = caption
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+    const hasCaption = !!captionImage;
 
-      const svg = `
-        <svg width="${canvas}" height="${ribbonH}">
-          <text
-            x="50%"
-            y="50%"
-            text-anchor="middle"
-            dominant-baseline="middle"
-            font-size="36"
-            fill="white"
-          >
-            ${safe}
-          </text>
-        </svg>
-      `;
+    if (captionImage) {
+      const captionBuffer = Buffer.from(
+        captionImage.replace(/^data:image\/png;base64,/, ""),
+        "base64"
+      );
 
       layers.push({
-        input: Buffer.from(svg),
+        input: captionBuffer,
         left: 0,
-        top: imgH,
+        top: imgH + 20,
       });
     }
 
-    // --- Logos (working) ---
     if (logos.length > 0) {
       const logoBuffers = await Promise.all(
         logos.map(async (url) => fetchImage(url))
       );
 
-      const hasCaption = caption.trim().length > 0;
       let logoHeight;
-
-      if (!hasCaption) {
-        logoHeight = Math.floor(ribbonH * 0.5);
-      } else if (logos.length === 1) {
-        logoHeight = Math.floor(ribbonH * 0.35);
-      } else {
-        logoHeight = Math.floor(ribbonH * 0.3);
-      }
+      if (!hasCaption) logoHeight = Math.floor(ribbonH * 0.5);
+      else if (logos.length === 1) logoHeight = Math.floor(ribbonH * 0.35);
+      else logoHeight = Math.floor(ribbonH * 0.3);
 
       const logoY =
         imgH +
@@ -152,10 +131,6 @@ export async function POST(req) {
       output: `data:image/png;base64,${final.toString("base64")}`,
     });
   } catch (err) {
-    console.error("BUILD ERROR:", err);
-    return NextResponse.json(
-      { error: "Image build failed." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Image build failed." }, { status: 500 });
   }
 }
