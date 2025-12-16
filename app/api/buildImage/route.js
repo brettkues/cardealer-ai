@@ -21,13 +21,6 @@ export async function POST(req) {
   try {
     let { images, logos = [], captionImage } = await req.json();
 
-    if (!images || images.length === 0) {
-      return NextResponse.json(
-        { error: "No images provided" },
-        { status: 400 }
-      );
-    }
-
     while (images.length < 4) images.push(images[0]);
     images = images.slice(0, 4);
 
@@ -60,7 +53,6 @@ export async function POST(req) {
       { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
     ];
 
-    // --- Ribbon ---
     const ribbon = await sharp({
       create: {
         width: canvas,
@@ -74,7 +66,7 @@ export async function POST(req) {
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    // ===== STEP 3: captionImage → ribbon =====
+    // ===== FIXED CAPTION COMPOSITE =====
     if (captionImage) {
       const base64 = captionImage.replace(
         /^data:image\/png;base64,/,
@@ -82,14 +74,10 @@ export async function POST(req) {
       );
       const captionBuffer = Buffer.from(base64, "base64");
 
-      // Reserve lower half of ribbon for logos
-      const captionAreaH = Math.floor(ribbonH * 0.45);
-
       const resizedCaption = await sharp(captionBuffer)
         .resize({
-          width: canvas,
-          height: captionAreaH,
-          fit: "contain",
+          width: canvas,     // FULL WIDTH
+          withoutEnlargement: true,
         })
         .toBuffer();
 
@@ -99,9 +87,8 @@ export async function POST(req) {
         top: imgH + Math.floor(ribbonH * 0.05),
       });
     }
-    // ===== END STEP 3 =====
+    // ===== END FIX =====
 
-    // --- Logos (unchanged) ---
     if (logos.length > 0) {
       const logoBuffers = await Promise.all(logos.map(fetchImage));
 
