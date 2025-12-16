@@ -7,7 +7,7 @@ import LogoPicker from "./LogoPicker";
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
-  const [logos, setLogos] = useState([]); // up to 3
+  const [logos, setLogos] = useState([]);
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
@@ -27,7 +27,6 @@ export default function ImageGeneratorPage() {
     }
 
     setLoading(true);
-
     try {
       const res = await fetch("/api/lookupVehicle", {
         method: "POST",
@@ -37,7 +36,6 @@ export default function ImageGeneratorPage() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-
       setImages(data.images);
     } catch (err) {
       setError(err.message || "Vehicle lookup failed.");
@@ -73,7 +71,6 @@ export default function ImageGeneratorPage() {
     }
 
     setLoading(true);
-
     try {
       const logoBase64List = [];
       for (const l of logos) {
@@ -86,7 +83,7 @@ export default function ImageGeneratorPage() {
         body: JSON.stringify({
           images: selectedImages,
           caption,
-          logos: logoBase64List, // multiple logos (handled next step)
+          logos: logoBase64List,
         }),
       });
 
@@ -115,6 +112,50 @@ export default function ImageGeneratorPage() {
     }
   }
 
+  async function handleDownload() {
+    if (!finalImage) return;
+    const res = await fetch(finalImage);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vehicle-image.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleShare() {
+    if (!finalImage) return;
+
+    if (navigator.share) {
+      const res = await fetch(finalImage);
+      const blob = await res.blob();
+      const file = new File([blob], "vehicle-image.png", {
+        type: "image/png",
+      });
+
+      try {
+        await navigator.share({
+          files: [file],
+          title: "Vehicle Image",
+          text: "Check out this vehicle",
+        });
+      } catch (err) {
+        // user canceled share — do nothing
+      }
+    } else {
+      window.open(
+        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+          finalImage
+        )}`,
+        "_blank"
+      );
+    }
+  }
+
   function resetAll() {
     setVehicleUrl("");
     setCaption("");
@@ -133,7 +174,6 @@ export default function ImageGeneratorPage() {
 
       {!finalImage && (
         <>
-          {/* VEHICLE URL */}
           <div className="mb-4">
             <label className="block font-medium mb-1">Vehicle URL</label>
             <input
@@ -147,21 +187,17 @@ export default function ImageGeneratorPage() {
             </p>
           </div>
 
-          {/* CAPTION */}
           <div className="mb-4">
             <label className="block font-medium mb-1">Caption</label>
             <input
               className="w-full border p-3 rounded"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              placeholder="Example: One-owner • Clean Carfax • Just Arrived"
             />
           </div>
 
-          {/* LOGO VAULT */}
           <div className="mb-4">
             <label className="block font-medium mb-1">Logos (optional)</label>
-
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setOpenLogos(true)}
@@ -169,7 +205,6 @@ export default function ImageGeneratorPage() {
               >
                 Select Logos ({logos.length}/3)
               </button>
-
               <Link
                 href="/image-generator/logos"
                 className="px-4 py-2 bg-gray-200 text-gray-800 rounded border"
@@ -207,21 +242,16 @@ export default function ImageGeneratorPage() {
                 {loading ? "Building…" : "Finish Build"}
               </button>
 
-              <h2 className="text-xl font-semibold mb-3">Select 4 Images</h2>
-
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 {images.map((src) => {
                   const index = selectedImages.indexOf(src);
                   const selected = index !== -1;
-
                   return (
                     <div
                       key={src}
                       onClick={() => toggleImage(src)}
-                      className={`relative cursor-pointer border rounded overflow-hidden ${
-                        selected
-                          ? "border-blue-600 ring-4 ring-blue-300"
-                          : "border-gray-300"
+                      className={`relative cursor-pointer border rounded ${
+                        selected ? "ring-4 ring-blue-300" : ""
                       }`}
                     >
                       {selected && (
@@ -229,19 +259,14 @@ export default function ImageGeneratorPage() {
                           {index + 1}
                         </div>
                       )}
-                      <img src={src} className="w-full h-40 object-cover" />
+                      <img
+                        src={src}
+                        className="w-full h-40 object-cover"
+                      />
                     </div>
                   );
                 })}
               </div>
-
-              <button
-                onClick={handleFinishBuild}
-                disabled={loading || selectedImages.length !== 4}
-                className="px-6 py-3 bg-green-600 text-white rounded"
-              >
-                {loading ? "Building…" : "Finish Build"}
-              </button>
             </>
           )}
         </>
@@ -250,29 +275,23 @@ export default function ImageGeneratorPage() {
       {finalImage && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-3">Final Image</h2>
-
           <img src={finalImage} className="border rounded max-w-full mb-6" />
 
-          <a
-            href={finalImage}
-            download
-            className="inline-block mb-4 mr-4 px-6 py-3 bg-gray-700 text-white rounded"
-          >
-            Download Image
-          </a>
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={handleDownload}
+              className="px-6 py-3 bg-gray-700 text-white rounded"
+            >
+              Download Image
+            </button>
 
-          <a
-            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-              finalImage
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block mb-4 px-6 py-3 bg-blue-700 text-white rounded"
-          >
-            Share on Facebook
-          </a>
+            <button
+              onClick={handleShare}
+              className="px-6 py-3 bg-blue-700 text-white rounded"
+            >
+              Share Image
+            </button>
 
-          <div className="mt-4">
             <button
               onClick={resetAll}
               className="px-6 py-3 bg-gray-600 text-white rounded"
