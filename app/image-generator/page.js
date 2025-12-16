@@ -7,70 +7,31 @@ import LogoPicker from "./LogoPicker";
 /* ===== CAPTION PNG SETTINGS ===== */
 const CANVAS_W = 850;
 const RIBBON_H = 212;
-const CAPTION_ZONE_H = Math.floor(RIBBON_H * 0.3); // top 30%
+
+// ZONE SPLITS (ABSOLUTE, NOT RELATIVE)
+const CAPTION_TOP = 0;
+const CAPTION_BOTTOM = 64;          // ~30% of ribbon
+const LOGO_TOP = 64;
+const LOGO_BOTTOM = 197;            // leaves room for disclosure
+const DISCLOSURE_TOP = 197;
+const DISCLOSURE_BOTTOM = 212;
+
 const MAX_CAPTION = 85;
 const MAX_FONT = 36;
 const MIN_FONT = 22;
 const LINE_GAP = 6;
 
-/* ===== STEP A ADDITIONS: DISCLOSURE ===== */
-const DISCLOSURE_H = 15;
+/* ===== DISCLOSURE ===== */
 const DISCLOSURE_TEXT =
   "Price and payment shown are examples. Taxes, fees, terms, and credit approval may affect final offer.";
 
-function needsDisclosure(text) {
-  if (!text) return false;
-  const t = text.toLowerCase();
-  return (
-    /\$/.test(t) ||
-    /%/.test(t) ||
-    /apr/.test(t) ||
-    /price/.test(t) ||
-    /payment/.test(t) ||
-    /per month/.test(t) ||
-    /monthly/.test(t) ||
-    /\/mo/.test(t) ||
-    /lease/.test(t) ||
-    /finance/.test(t)
-  );
-}
-/* ===== END STEP A ADDITIONS ===== */
-
-/* ===== STEP B ADDITIONS: AI CONFIRMATION (FAIL-SAFE) ===== */
-async function aiNeedsDisclosure(text) {
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [
-          {
-            role: "system",
-            content:
-              "Classify the caption. Reply with ONLY one token: YES_FINANCIAL, NO_FINANCIAL, or UNCLEAR.",
-          },
-          { role: "user", content: text },
-        ],
-      }),
-    });
-
-    const data = await res.json();
-    const reply = (data?.message || "").toUpperCase();
-
-    if (reply.includes("NO_FINANCIAL")) return false;
-    return true; // YES or UNCLEAR → disclosure ON
-  } catch {
-    return true; // AI failure → disclosure ON
-  }
-}
-/* ===== END STEP B ADDITIONS ===== */
-
-function captionToPng(text, showDisclosure = false) {
+/* ===== CAPTION IMAGE (CAPTION ONLY) ===== */
+function captionToPng(text) {
   if (!text) return null;
 
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_W;
-  canvas.height = RIBBON_H; // 🔒 FIXED HEIGHT
+  canvas.height = CAPTION_BOTTOM - CAPTION_TOP;
 
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff";
@@ -94,42 +55,51 @@ function captionToPng(text, showDisclosure = false) {
     }
     if (line) lines.push(line);
 
-    const height = lines.length * (fontSize + LINE_GAP);
-    return { lines, height };
+    return lines;
   }
 
   let fontSize = MAX_FONT;
-  let wrapped;
+  let lines = [];
 
   while (fontSize >= MIN_FONT) {
-    wrapped = wrap(fontSize);
-    if (wrapped.height <= CAPTION_ZONE_H - 10) break;
+    lines = wrap(fontSize);
+    if (lines.length * (fontSize + LINE_GAP) <= canvas.height - 8) break;
     fontSize -= 2;
   }
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.font = `bold ${fontSize}px Arial`;
+  let y = 6;
 
-  let y = 8;
-  wrapped.lines.forEach((line) => {
-    ctx.fillText(line, canvas.width / 2, y);
+  lines.forEach((line) => {
+    ctx.fillText(line, CANVAS_W / 2, y);
     y += fontSize + LINE_GAP;
   });
 
-  if (true) {
-    ctx.font = "10px Arial";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      DISCLOSURE_TEXT,
-      canvas.width / 2,
-      RIBBON_H - DISCLOSURE_H / 2 // 🔒 BOTTOM OF RIBBON
-    );
-  }
+  return canvas.toDataURL("image/png");
+}
+
+/* ===== DISCLOSURE IMAGE (DISCLOSURE ONLY) ===== */
+function disclosureToPng() {
+  const canvas = document.createElement("canvas");
+  canvas.width = CANVAS_W;
+  canvas.height = DISCLOSURE_BOTTOM - DISCLOSURE_TOP;
+
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "10px Arial";
+
+  ctx.fillText(
+    DISCLOSURE_TEXT,
+    CANVAS_W / 2,
+    canvas.height / 2
+  );
 
   return canvas.toDataURL("image/png");
 }
-/* ===== END CAPTION PNG ===== */
 
+/* ===== PAGE COMPONENT ===== */
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
@@ -191,23 +161,18 @@ export default function ImageGeneratorPage() {
       const logoUrls = logos.map((l) => l.url);
       const cappedCaption = caption.slice(0, MAX_CAPTION);
 
-      const ruleHit = needsDisclosure(cappedCaption);
-      const aiHit = ruleHit ? true : await aiNeedsDisclosure(cappedCaption);
-      const disclosureNeeded = ruleHit || aiHit;
-
-      const captionImage = captionToPng(
-        cappedCaption,
-        disclosureNeeded
-      );
+      // 🔒 SEPARATE PNGs — NO MIXING
+      const captionImage = captionToPng(cappedCaption);
+      const disclosureImage = disclosureToPng();
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           images: selectedImages,
-          caption,
           logos: logoUrls,
           captionImage,
+          disclosureImage,
         }),
       });
 
@@ -233,7 +198,7 @@ export default function ImageGeneratorPage() {
     } finally {
       setLoading(false);
     }
-  }
+}
 
   async function handleDownload() {
     if (!finalImage) return;
