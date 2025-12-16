@@ -60,7 +60,6 @@ export default function ImageGeneratorPage() {
 
     setLoading(true);
     try {
-      // ✅ SEND LOGO URLS ONLY (no browser fetch)
       const logoUrls = logos.map((l) => l.url);
 
       const buildRes = await fetch("/api/buildImage", {
@@ -161,7 +160,7 @@ export default function ImageGeneratorPage() {
               className="w-full border p-3 rounded"
               value={vehicleUrl}
               onChange={(e) => setVehicleUrl(e.target.value)}
-              placeholder="https://www.yoursite.com/vehicle/12345"
+              placeholder="Paste the URL from the vehicle listing page"
             />
             <p className="text-sm text-gray-600 mt-1">
               Paste the URL from the vehicle’s listing page on your website.
