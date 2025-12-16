@@ -73,7 +73,7 @@ export async function POST(req) {
     const captionH = hasCaption ? Math.floor(ribbonH * 0.4) : 0;
     const logoAreaH = ribbonH - captionH;
 
-    // Caption
+    // ✅ CAPTION — DejaVu Sans (fixes squares)
     if (hasCaption) {
       const safe = caption
         .replace(/&/g, "&amp;")
@@ -82,14 +82,18 @@ export async function POST(req) {
 
       const svg = `
         <svg width="${canvas}" height="${captionH}">
+          <style>
+            text {
+              font-family: "DejaVu Sans";
+              font-size: 36px;
+              fill: white;
+            }
+          </style>
           <text
             x="50%"
             y="50%"
             text-anchor="middle"
-            alignment-baseline="central"
-            font-size="36"
-            fill="white"
-            font-family="Arial, Helvetica, sans-serif"
+            dominant-baseline="middle"
           >
             ${safe}
           </text>
@@ -103,7 +107,7 @@ export async function POST(req) {
       });
     }
 
-    // Logos
+    // Logos (unchanged, already correct)
     if (logoCount > 0) {
       const logoBuffers = await Promise.all(
         logos.map(async (url) => fetchImage(url))
@@ -126,9 +130,11 @@ export async function POST(req) {
           .resize({ height: logoHeight })
           .toBuffer();
 
+        const meta = await sharp(resized).metadata();
+
         layers.push({
           input: resized,
-          left: Math.floor((canvas - (await sharp(resized).metadata()).width) / 2),
+          left: Math.floor((canvas - meta.width) / 2),
           top: logoY,
         });
       } else {
