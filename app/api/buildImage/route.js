@@ -5,126 +5,148 @@ export const dynamic = "force-dynamic";
 
 function getRibbonColor() {
   const m = new Date().getMonth() + 1;
-  if (m <= 2 || m === 12) return "#5CA8FF"; // Winter
-  if (m <= 5) return "#65C67A";             // Spring
-  if (m <= 8) return "#1B4B9B";             // Summer
-  return "#D46A1E";                         // Fall
+  if (m <= 2 || m === 12) return "#5CA8FF";
+  if (m <= 5) return "#65C67A";
+  if (m <= 8) return "#1B4B9B";
+  return "#D46A1E";
 }
 
-async function fetchAsBuffer(url) {
+async function fetchImage(url) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Fetch failed");
-  const arr = await res.arrayBuffer();
-  return Buffer.from(arr);
+  if (!res.ok) throw new Error("Image fetch failed");
+  return Buffer.from(await res.arrayBuffer());
 }
 
 export async function POST(req) {
   try {
-    const { images, caption, logos = [] } = await req.json();
+    let { images, caption = "", logos = [] } = await req.json();
 
-    if (!Array.isArray(images) || images.length === 0) {
-      return NextResponse.json({ error: "No images provided." }, { status: 400 });
-    }
+    while (images.length < 4) images.push(images[0]);
+    images = images.slice(0, 4);
 
-    // Ensure exactly 4 images
-    const imgs = [...images];
-    while (imgs.length < 4) imgs.push(imgs[0]);
-    const four = imgs.slice(0, 4);
-
-    const canvasSize = 850;
+    const canvas = 850;
     const imgW = 425;
     const imgH = 319;
     const ribbonH = 212;
 
     const base = sharp({
       create: {
-        width: canvasSize,
-        height: canvasSize,
+        width: canvas,
+        height: canvas,
         channels: 4,
         background: "#ffffff",
       },
     });
 
-    // Vehicle images
-    const buffers = await Promise.all(
-      four.map(async (url) => {
-        const buf = await fetchAsBuffer(url);
-        return sharp(buf).resize(imgW, imgH, { fit: "cover" }).toBuffer();
-      })
+    const vehicleBuffers = await Promise.all(
+      images.map(async (url) =>
+        sharp(await fetchImage(url))
+          .resize(imgW, imgH, { fit: "cover" })
+          .toBuffer()
+      )
     );
 
     const layers = [
-      { input: buffers[0], left: 0,    top: 0 },
-      { input: buffers[1], left: imgW, top: 0 },
-      { input: buffers[2], left: 0,    top: canvasSize - imgH },
-      { input: buffers[3], left: imgW, top: canvasSize - imgH },
+      { input: vehicleBuffers[0], left: 0, top: 0 },
+      { input: vehicleBuffers[1], left: imgW, top: 0 },
+      { input: vehicleBuffers[2], left: 0, top: canvas - imgH },
+      { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
     ];
 
-    // Ribbon
     const ribbon = await sharp({
       create: {
-        width: canvasSize,
+        width: canvas,
         height: ribbonH,
         channels: 4,
         background: getRibbonColor(),
       },
-    }).png().toBuffer();
+    })
+      .png()
+      .toBuffer();
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    // Caption (SVG, safe text)
-    if (caption) {
+    const hasCaption = caption.trim().length > 0;
+    const logoCount = logos.length;
+
+    const contentTop = imgH;
+    const captionH = hasCaption ? Math.floor(ribbonH * 0.4) : 0;
+    const logoAreaH = ribbonH - captionH;
+
+    // Caption
+    if (hasCaption) {
       const safe = caption
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
       const svg = `
-        <svg width="${canvasSize}" height="${ribbonH}">
+        <svg width="${canvas}" height="${captionH}">
           <text
             x="50%"
             y="50%"
             text-anchor="middle"
             alignment-baseline="central"
-            font-size="38"
-            fill="#ffffff"
+            font-size="36"
+            fill="white"
             font-family="Arial, Helvetica, sans-serif"
-          >${safe}</text>
+          >
+            ${safe}
+          </text>
         </svg>
       `;
 
-      layers.push({ input: Buffer.from(svg), left: 0, top: imgH });
+      layers.push({
+        input: Buffer.from(svg),
+        left: 0,
+        top: contentTop,
+      });
     }
 
-    // Logos (URLs OR base64 data URLs) — server-side fetch, no CORS
-    if (Array.isArray(logos) && logos.length > 0) {
-      const max = Math.min(3, logos.length);
-      const logoSize = 90;
-      const gap = 14;
-      const totalW = max * logoSize + (max - 1) * gap;
-      let leftStart = Math.round((canvasSize - totalW) / 2);
-      const topPos = imgH + ribbonH - logoSize - 18;
+    // Logos
+    if (logoCount > 0) {
+      const logoBuffers = await Promise.all(
+        logos.map(async (url) => fetchImage(url))
+      );
 
-      for (let i = 0; i < max; i++) {
-        const src = logos[i];
-        let logoBuf;
+      let logoHeight;
+      if (!hasCaption) {
+        logoHeight = Math.floor(ribbonH * 0.5);
+      } else if (logoCount === 1) {
+        logoHeight = Math.floor(ribbonH * 0.35);
+      } else {
+        logoHeight = Math.floor(ribbonH * 0.3);
+      }
 
-        if (typeof src === "string" && src.startsWith("data:image")) {
-          logoBuf = Buffer.from(src.split(",")[1], "base64");
-        } else {
-          logoBuf = await fetchAsBuffer(src);
-        }
+      const logoY =
+        contentTop + captionH + Math.floor((logoAreaH - logoHeight) / 2);
 
-        const resized = await sharp(logoBuf)
-          .resize(logoSize, logoSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-          .png()
+      if (logoCount === 1) {
+        const resized = await sharp(logoBuffers[0])
+          .resize({ height: logoHeight })
           .toBuffer();
 
         layers.push({
           input: resized,
-          left: leftStart + i * (logoSize + gap),
-          top: topPos,
+          left: Math.floor((canvas - (await sharp(resized).metadata()).width) / 2),
+          top: logoY,
         });
+      } else {
+        const spacing = Math.floor(canvas / logoCount);
+
+        for (let i = 0; i < logoCount; i++) {
+          const resized = await sharp(logoBuffers[i])
+            .resize({ height: logoHeight })
+            .toBuffer();
+
+          const meta = await sharp(resized).metadata();
+
+          layers.push({
+            input: resized,
+            left: Math.floor(spacing * i + (spacing - meta.width) / 2),
+            top: logoY,
+          });
+        }
       }
     }
 
@@ -135,6 +157,9 @@ export async function POST(req) {
     });
   } catch (err) {
     console.error("BUILD ERROR:", err);
-    return NextResponse.json({ error: "Image build failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Image build failed." },
+      { status: 500 }
+    );
   }
 }
