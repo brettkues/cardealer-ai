@@ -4,6 +4,52 @@ import { useState } from "react";
 import Link from "next/link";
 import LogoPicker from "./LogoPicker";
 
+/* ===== STEP 1 ADDITIONS (SAFE, CLIENT-ONLY) ===== */
+const CANVAS_W = 850;
+const RIBBON_H = 212;
+const MAX_CAPTION = 85;
+
+function captionToPng(text) {
+  if (!text) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = CANVAS_W;
+  canvas.height = RIBBON_H;
+
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 36px Arial";
+
+  const words = text.split(" ");
+  const lines = [];
+  let line = "";
+
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > CANVAS_W - 80) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+
+  const lineH = 40;
+  const startY = canvas.height / 2 - ((lines.length - 1) * lineH) / 2;
+
+  lines.forEach((l, i) => {
+    ctx.fillText(l, canvas.width / 2, startY + i * lineH);
+  });
+
+  return canvas.toDataURL("image/png");
+}
+/* ===== END STEP 1 ADDITIONS ===== */
+
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
@@ -64,6 +110,11 @@ export default function ImageGeneratorPage() {
     try {
       const logoUrls = logos.map((l) => l.url);
 
+      /* ===== STEP 1 ADDITIONS ===== */
+      const cappedCaption = caption.slice(0, MAX_CAPTION);
+      const captionImage = captionToPng(cappedCaption);
+      /* ===== END STEP 1 ADDITIONS ===== */
+
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,6 +122,7 @@ export default function ImageGeneratorPage() {
           images: selectedImages,
           caption,
           logos: logoUrls,
+          captionImage, // sent but not used yet
         }),
       });
 
@@ -118,7 +170,9 @@ export default function ImageGeneratorPage() {
     try {
       const res = await fetch(finalImage);
       const blob = await res.blob();
-      const file = new File([blob], "vehicle-image.png", { type: "image/png" });
+      const file = new File([blob], "vehicle-image.png", {
+        type: "image/png",
+      });
 
       await navigator.share({
         files: [file],
