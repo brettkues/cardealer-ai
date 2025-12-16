@@ -4,51 +4,69 @@ import { useState } from "react";
 import Link from "next/link";
 import LogoPicker from "./LogoPicker";
 
-/* ===== STEP 1 ADDITIONS (SAFE, CLIENT-ONLY) ===== */
+/* ===== CAPTION PNG SETTINGS ===== */
 const CANVAS_W = 850;
 const RIBBON_H = 212;
+const CAPTION_ZONE_H = Math.floor(RIBBON_H * 0.4); // top 40%
 const MAX_CAPTION = 85;
+const MAX_FONT = 36;
+const MIN_FONT = 22;
+const LINE_GAP = 6;
 
 function captionToPng(text) {
   if (!text) return null;
 
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_W;
-  canvas.height = RIBBON_H;
+  canvas.height = CAPTION_ZONE_H;
 
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = "bold 36px Arial";
+  ctx.textBaseline = "top";
 
-  const words = text.split(" ");
-  const lines = [];
-  let line = "";
+  function wrap(fontSize) {
+    ctx.font = `bold ${fontSize}px Arial`;
+    const words = text.split(" ");
+    const lines = [];
+    let line = "";
 
-  for (const w of words) {
-    const test = line ? line + " " + w : w;
-    if (ctx.measureText(test).width > CANVAS_W - 80) {
-      lines.push(line);
-      line = w;
-    } else {
-      line = test;
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > CANVAS_W - 80) {
+        lines.push(line);
+        line = w;
+      } else {
+        line = test;
+      }
     }
+    if (line) lines.push(line);
+
+    const height = lines.length * (fontSize + LINE_GAP);
+    return { lines, height };
   }
-  if (line) lines.push(line);
 
-  const lineH = 40;
-  const startY = canvas.height / 2 - ((lines.length - 1) * lineH) / 2;
+  let fontSize = MAX_FONT;
+  let wrapped;
 
-  lines.forEach((l, i) => {
-    ctx.fillText(l, canvas.width / 2, startY + i * lineH);
+  while (fontSize >= MIN_FONT) {
+    wrapped = wrap(fontSize);
+    if (wrapped.height <= CAPTION_ZONE_H - 10) break;
+    fontSize -= 2;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = `bold ${fontSize}px Arial`;
+
+  let y = 8; // small top padding
+  wrapped.lines.forEach((line) => {
+    ctx.fillText(line, canvas.width / 2, y);
+    y += fontSize + LINE_GAP;
   });
 
   return canvas.toDataURL("image/png");
 }
-/* ===== END STEP 1 ADDITIONS ===== */
+/* ===== END CAPTION PNG ===== */
 
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
@@ -109,11 +127,8 @@ export default function ImageGeneratorPage() {
     setLoading(true);
     try {
       const logoUrls = logos.map((l) => l.url);
-
-      /* ===== STEP 1 ADDITIONS ===== */
       const cappedCaption = caption.slice(0, MAX_CAPTION);
       const captionImage = captionToPng(cappedCaption);
-      /* ===== END STEP 1 ADDITIONS ===== */
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
@@ -122,7 +137,7 @@ export default function ImageGeneratorPage() {
           images: selectedImages,
           caption,
           logos: logoUrls,
-          captionImage, // sent but not used yet
+          captionImage,
         }),
       });
 
