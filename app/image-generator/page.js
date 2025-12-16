@@ -33,7 +33,6 @@ export default function ImageGeneratorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: vehicleUrl }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setImages(data.images);
@@ -64,7 +63,6 @@ export default function ImageGeneratorPage() {
 
   async function handleFinishBuild() {
     setError("");
-
     if (selectedImages.length !== 4) {
       setError("Select exactly 4 images.");
       return;
@@ -101,7 +99,6 @@ export default function ImageGeneratorPage() {
         headers: { "Content-Type": "image/png" },
         body: blob,
       });
-
       if (!uploadRes.ok) throw new Error("Image upload failed.");
 
       setFinalImage(urlData.publicUrl);
@@ -127,33 +124,31 @@ export default function ImageGeneratorPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function handleShare() {
-    if (!finalImage) return;
-
-    if (navigator.share) {
+  async function handleNativeShare() {
+    if (!finalImage || !navigator.share) return;
+    try {
       const res = await fetch(finalImage);
       const blob = await res.blob();
-      const file = new File([blob], "vehicle-image.png", {
-        type: "image/png",
+      const file = new File([blob], "vehicle-image.png", { type: "image/png" });
+      await navigator.share({
+        files: [file],
+        title: "Vehicle Image",
+        text: "Check out this vehicle",
       });
-
-      try {
-        await navigator.share({
-          files: [file],
-          title: "Vehicle Image",
-          text: "Check out this vehicle",
-        });
-      } catch (err) {
-        // user canceled share — do nothing
-      }
-    } else {
-      window.open(
-        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-          finalImage
-        )}`,
-        "_blank"
-      );
+    } catch {
+      // user cancelled or not supported
     }
+  }
+
+  function handleFacebookShare() {
+    if (!finalImage) return;
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+        finalImage
+      )}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 
   function resetAll() {
@@ -259,10 +254,7 @@ export default function ImageGeneratorPage() {
                           {index + 1}
                         </div>
                       )}
-                      <img
-                        src={src}
-                        className="w-full h-40 object-cover"
-                      />
+                      <img src={src} className="w-full h-40 object-cover" />
                     </div>
                   );
                 })}
@@ -286,10 +278,18 @@ export default function ImageGeneratorPage() {
             </button>
 
             <button
-              onClick={handleShare}
-              className="px-6 py-3 bg-blue-700 text-white rounded"
+              onClick={handleNativeShare}
+              className="px-6 py-3 bg-blue-600 text-white rounded"
+              title="Share via text, email, apps (mobile)"
             >
               Share Image
+            </button>
+
+            <button
+              onClick={handleFacebookShare}
+              className="px-6 py-3 bg-blue-700 text-white rounded"
+            >
+              Share on Facebook
             </button>
 
             <button
