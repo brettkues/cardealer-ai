@@ -51,16 +51,6 @@ export default function ImageGeneratorPage() {
     });
   }
 
-  async function loadLogoAsBase64(url) {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(blob);
-    });
-  }
-
   async function handleFinishBuild() {
     setError("");
     if (selectedImages.length !== 4) {
@@ -70,10 +60,8 @@ export default function ImageGeneratorPage() {
 
     setLoading(true);
     try {
-      const logoBase64List = [];
-      for (const l of logos) {
-        logoBase64List.push(await loadLogoAsBase64(l.url));
-      }
+      // ✅ SEND LOGO URLS ONLY (no browser fetch)
+      const logoUrls = logos.map((l) => l.url);
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
@@ -81,7 +69,7 @@ export default function ImageGeneratorPage() {
         body: JSON.stringify({
           images: selectedImages,
           caption,
-          logos: logoBase64List,
+          logos: logoUrls,
         }),
       });
 
@@ -135,9 +123,7 @@ export default function ImageGeneratorPage() {
         title: "Vehicle Image",
         text: "Check out this vehicle",
       });
-    } catch {
-      // user cancelled or not supported
-    }
+    } catch {}
   }
 
   function handleFacebookShare() {
@@ -280,7 +266,6 @@ export default function ImageGeneratorPage() {
             <button
               onClick={handleNativeShare}
               className="px-6 py-3 bg-blue-600 text-white rounded"
-              title="Share via text, email, apps (mobile)"
             >
               Share Image
             </button>
