@@ -19,10 +19,17 @@ async function fetchImage(url) {
 
 export async function POST(req) {
   try {
-    const { images, logos = [], captionImage } = await req.json();
+    const body = await req.json();
+    let images = body.images || [];
+    const logos = body.logos || [];
+    const captionImage = body.captionImage || null;
+
+    if (!images.length) {
+      return NextResponse.json({ error: "No images" }, { status: 400 });
+    }
 
     while (images.length < 4) images.push(images[0]);
-    const imgList = images.slice(0, 4);
+    images = images.slice(0, 4);
 
     const canvas = 850;
     const imgW = 425;
@@ -39,7 +46,7 @@ export async function POST(req) {
     });
 
     const vehicleBuffers = await Promise.all(
-      imgList.map(async (url) =>
+      images.map(async (url) =>
         sharp(await fetchImage(url))
           .resize(imgW, imgH, { fit: "cover" })
           .toBuffer()
@@ -64,7 +71,7 @@ export async function POST(req) {
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    const hasCaption = !!captionImage;
+    const hasCaption = Boolean(captionImage);
 
     if (captionImage) {
       const captionBuffer = Buffer.from(
@@ -79,7 +86,7 @@ export async function POST(req) {
       });
     }
 
-    if (logos.length > 0) {
+    if (logos.length) {
       const logoBuffers = await Promise.all(
         logos.map(async (url) => fetchImage(url))
       );
@@ -94,8 +101,10 @@ export async function POST(req) {
         (hasCaption ? Math.floor(ribbonH * 0.4) : 0) +
         Math.floor((ribbonH - logoHeight) / 2);
 
-      if (logos.length === 1) {
-        const resized = await sharp(logoBuffers[0])
+      const spacing = Math.floor(canvas / logos.length);
+
+      for (let i = 0; i < logos.length; i++) {
+        const resized = await sharp(logoBuffers[i])
           .resize({ height: logoHeight })
           .toBuffer();
 
@@ -103,25 +112,12 @@ export async function POST(req) {
 
         layers.push({
           input: resized,
-          left: Math.floor((canvas - meta.width) / 2),
+          left:
+            logos.length === 1
+              ? Math.floor((canvas - meta.width) / 2)
+              : Math.floor(spacing * i + (spacing - meta.width) / 2),
           top: logoY,
         });
-      } else {
-        const spacing = Math.floor(canvas / logos.length);
-
-        for (let i = 0; i < logos.length; i++) {
-          const resized = await sharp(logoBuffers[i])
-            .resize({ height: logoHeight })
-            .toBuffer();
-
-          const meta = await sharp(resized).metadata();
-
-          layers.push({
-            input: resized,
-            left: Math.floor(spacing * i + (spacing - meta.width) / 2),
-            top: logoY,
-          });
-        }
       }
     }
 
@@ -130,7 +126,7 @@ export async function POST(req) {
     return NextResponse.json({
       output: `data:image/png;base64,${final.toString("base64")}`,
     });
-  } catch (err) {
-    return NextResponse.json({ error: "Image build failed." }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Image build failed" }, { status: 500 });
   }
 }
