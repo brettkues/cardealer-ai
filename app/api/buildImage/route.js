@@ -19,7 +19,12 @@ async function fetchImage(url) {
 
 export async function POST(req) {
   try {
-    let { images, logos = [], captionImage } = await req.json();
+    let {
+      images,
+      logos = [],
+      captionImage,
+      disclosureImage,
+    } = await req.json();
 
     while (images.length < 4) images.push(images[0]);
     images = images.slice(0, 4);
@@ -28,6 +33,12 @@ export async function POST(req) {
     const imgW = 425;
     const imgH = 319;
     const ribbonH = 212;
+
+    // Absolute layout
+    const CAPTION_Y = 320;
+    const LOGO_TOP = 380;
+    const LOGO_BOTTOM = 513;
+    const DISCLOSURE_Y = 513;
 
     const base = sharp({
       create: {
@@ -53,7 +64,7 @@ export async function POST(req) {
       { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
     ];
 
-    /* ===== RIBBON ===== */
+    // Ribbon
     const ribbon = await sharp({
       create: {
         width: canvas,
@@ -65,60 +76,60 @@ export async function POST(req) {
       .png()
       .toBuffer();
 
-    const ribbonTop = imgH;
-    layers.push({ input: ribbon, left: 0, top: ribbonTop });
+    layers.push({ input: ribbon, left: 0, top: imgH });
 
-    /* ===== CAPTION (TOP 30% OF RIBBON) ===== */
+    // ===== CAPTION (320–380) =====
     if (captionImage) {
       const captionBuffer = Buffer.from(
         captionImage.replace(/^data:image\/png;base64,/, ""),
         "base64"
       );
 
-      const captionMaxH = Math.floor(ribbonH * 0.3);
-
-      const resizedCaption = await sharp(captionBuffer)
+      const resized = await sharp(captionBuffer)
         .resize({
           width: canvas,
-          height: captionMaxH,
+          height: 60,
           fit: "inside",
           withoutEnlargement: true,
         })
         .toBuffer();
 
+      const meta = await sharp(resized).metadata();
+
       layers.push({
-        input: resizedCaption,
-        left: 0,
-        top: ribbonTop,
+        input: resized,
+        left: Math.floor((canvas - meta.width) / 2),
+        top: CAPTION_Y,
       });
     }
 
-    /* ===== LOGOS (MIDDLE 60% OF RIBBON) ===== */
+    // ===== LOGOS (380–513) =====
     if (logos.length > 0) {
       const logoBuffers = await Promise.all(logos.map(fetchImage));
 
-      const logoZoneTop = ribbonTop + Math.floor(ribbonH * 0.3);
-      const logoZoneH = Math.floor(ribbonH * 0.6);
-      const logoHeight = Math.floor(logoZoneH * 0.8);
+      const logoZoneH = LOGO_BOTTOM - LOGO_TOP;
+      const logoMaxH = Math.floor(logoZoneH * 0.9);
 
       if (logos.length === 1) {
         const resized = await sharp(logoBuffers[0])
-          .resize({ height: logoHeight })
+          .resize({ height: logoMaxH, fit: "inside" })
           .toBuffer();
+
         const meta = await sharp(resized).metadata();
 
         layers.push({
           input: resized,
           left: Math.floor((canvas - meta.width) / 2),
-          top: logoZoneTop + Math.floor((logoZoneH - meta.height) / 2),
+          top: LOGO_TOP + Math.floor((logoZoneH - meta.height) / 2),
         });
       } else {
         const spacing = Math.floor(canvas / logos.length);
 
         for (let i = 0; i < logos.length; i++) {
           const resized = await sharp(logoBuffers[i])
-            .resize({ height: logoHeight })
+            .resize({ height: logoMaxH, fit: "inside" })
             .toBuffer();
+
           const meta = await sharp(resized).metadata();
 
           layers.push({
@@ -126,10 +137,35 @@ export async function POST(req) {
             left: Math.floor(
               spacing * i + (spacing - meta.width) / 2
             ),
-            top: logoZoneTop + Math.floor((logoZoneH - meta.height) / 2),
+            top: LOGO_TOP + Math.floor((logoZoneH - meta.height) / 2),
           });
         }
       }
+    }
+
+    // ===== DISCLOSURE (513–528) =====
+    if (disclosureImage) {
+      const disclosureBuffer = Buffer.from(
+        disclosureImage.replace(/^data:image\/png;base64,/, ""),
+        "base64"
+      );
+
+      const resized = await sharp(disclosureBuffer)
+        .resize({
+          width: canvas,
+          height: 15,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .toBuffer();
+
+      const meta = await sharp(resized).metadata();
+
+      layers.push({
+        input: resized,
+        left: Math.floor((canvas - meta.width) / 2),
+        top: DISCLOSURE_Y,
+      });
     }
 
     const final = await base.composite(layers).png().toBuffer();
