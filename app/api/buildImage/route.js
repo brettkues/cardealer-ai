@@ -60,40 +60,26 @@ export async function POST(req) {
         channels: 4,
         background: getRibbonColor(),
       },
-    })
-      .png()
-      .toBuffer();
+    }).png().toBuffer();
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    const hasCaption = caption.trim().length > 0;
-    const logoCount = logos.length;
-
-    const contentTop = imgH;
-    const captionH = hasCaption ? Math.floor(ribbonH * 0.4) : 0;
-    const logoAreaH = ribbonH - captionH;
-
-    // ✅ CAPTION — DejaVu Sans (fixes squares)
-    if (hasCaption) {
+    // --- Caption (baseline, still broken) ---
+    if (caption.trim()) {
       const safe = caption
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
       const svg = `
-        <svg width="${canvas}" height="${captionH}">
-          <style>
-            text {
-              font-family: "DejaVu Sans";
-              font-size: 36px;
-              fill: white;
-            }
-          </style>
+        <svg width="${canvas}" height="${ribbonH}">
           <text
             x="50%"
             y="50%"
             text-anchor="middle"
             dominant-baseline="middle"
+            font-size="36"
+            fill="white"
           >
             ${safe}
           </text>
@@ -103,29 +89,33 @@ export async function POST(req) {
       layers.push({
         input: Buffer.from(svg),
         left: 0,
-        top: contentTop,
+        top: imgH,
       });
     }
 
-    // Logos (unchanged, already correct)
-    if (logoCount > 0) {
+    // --- Logos (working) ---
+    if (logos.length > 0) {
       const logoBuffers = await Promise.all(
         logos.map(async (url) => fetchImage(url))
       );
 
+      const hasCaption = caption.trim().length > 0;
       let logoHeight;
+
       if (!hasCaption) {
         logoHeight = Math.floor(ribbonH * 0.5);
-      } else if (logoCount === 1) {
+      } else if (logos.length === 1) {
         logoHeight = Math.floor(ribbonH * 0.35);
       } else {
         logoHeight = Math.floor(ribbonH * 0.3);
       }
 
       const logoY =
-        contentTop + captionH + Math.floor((logoAreaH - logoHeight) / 2);
+        imgH +
+        (hasCaption ? Math.floor(ribbonH * 0.4) : 0) +
+        Math.floor((ribbonH - logoHeight) / 2);
 
-      if (logoCount === 1) {
+      if (logos.length === 1) {
         const resized = await sharp(logoBuffers[0])
           .resize({ height: logoHeight })
           .toBuffer();
@@ -138,9 +128,9 @@ export async function POST(req) {
           top: logoY,
         });
       } else {
-        const spacing = Math.floor(canvas / logoCount);
+        const spacing = Math.floor(canvas / logos.length);
 
-        for (let i = 0; i < logoCount; i++) {
+        for (let i = 0; i < logos.length; i++) {
           const resized = await sharp(logoBuffers[i])
             .resize({ height: logoHeight })
             .toBuffer();
