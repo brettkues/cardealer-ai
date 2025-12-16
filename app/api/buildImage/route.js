@@ -3,141 +3,156 @@ import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
-function getRibbonColor() {
-  const m = new Date().getMonth() + 1;
-  if (m <= 2 || m === 12) return "#5CA8FF";
-  if (m <= 5) return "#65C67A";
-  if (m <= 8) return "#1B4B9B";
-  return "#D46A1E";
-}
+/* ===== CANVAS / LAYOUT CONSTANTS ===== */
+const CANVAS_W = 1200;
+const CANVAS_H = 1200;
 
+const RIBBON_H = 212;
+
+const CAPTION_ZONE_H = Math.floor(RIBBON_H * 0.3); // 30%
+const DISCLOSURE_H = Math.floor(RIBBON_H * 0.1);   // 10%
+const LOGO_ZONE_H = RIBBON_H - CAPTION_ZONE_H - DISCLOSURE_H; // 60%
+
+/* ===== UTIL ===== */
 async function fetchImage(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Image fetch failed");
   return Buffer.from(await res.arrayBuffer());
 }
 
+/* ===== MAIN ===== */
 export async function POST(req) {
   try {
-    let { images, logos = [], captionImage } = await req.json();
+    const { images, logos = [], captionImage } = await req.json();
 
-    while (images.length < 4) images.push(images[0]);
-    images = images.slice(0, 4);
+    if (!images || images.length !== 4) {
+      return NextResponse.json(
+        { error: "Exactly 4 images required" },
+        { status: 400 }
+      );
+    }
 
-    const canvas = 850;
-    const imgW = 425;
-    const imgH = 319;
-    const ribbonH = 212;
+    /* ===== BUILD BASE GRID ===== */
+    const tileSize = CANVAS_W / 2;
 
-    const base = sharp({
+    const tiles = await Promise.all(
+      images.map(async (src) =>
+        sharp(await fetchImage(src))
+          .resize(tileSize, tileSize, { fit: "cover" })
+          .toBuffer()
+      )
+    );
+
+    let base = sharp({
       create: {
-        width: canvas,
-        height: canvas,
+        width: CANVAS_W,
+        height: CANVAS_H,
         channels: 4,
         background: "#ffffff",
       },
     });
 
-    const vehicleBuffers = await Promise.all(
-      images.map(async (url) =>
-        sharp(await fetchImage(url))
-          .resize(imgW, imgH, { fit: "cover" })
-          .toBuffer()
-      )
-    );
+    base = base.composite([
+      { input: tiles[0], top: 0, left: 0 },
+      { input: tiles[1], top: 0, left: tileSize },
+      { input: tiles[2], top: tileSize, left: 0 },
+      { input: tiles[3], top: tileSize, left: tileSize },
+    ]);
 
-    const layers = [
-      { input: vehicleBuffers[0], left: 0, top: 0 },
-      { input: vehicleBuffers[1], left: imgW, top: 0 },
-      { input: vehicleBuffers[2], left: 0, top: canvas - imgH },
-      { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
-    ];
-
+    /* ===== RIBBON BACKGROUND ===== */
     const ribbon = await sharp({
       create: {
-        width: canvas,
-        height: ribbonH,
+        width: CANVAS_W,
+        height: RIBBON_H,
         channels: 4,
-        background: getRibbonColor(),
+        background: "#000000",
       },
-    })
-      .png()
-      .toBuffer();
+    }).toBuffer();
 
-    layers.push({ input: ribbon, left: 0, top: imgH });
-
-    // ===== FIXED CAPTION COMPOSITE =====
-    if (captionImage) {
-      const base64 = captionImage.replace(
-        /^data:image\/png;base64,/,
-        ""
-      );
-      const captionBuffer = Buffer.from(base64, "base64");
-
-      const resizedCaption = await sharp(captionBuffer)
-        .resize({
-          width: canvas,     // FULL WIDTH
-          withoutEnlargement: true,
-        })
-        .toBuffer();
-
-      layers.push({
-        input: resizedCaption,
+    base = base.composite([
+      {
+        input: ribbon,
+        top: CANVAS_H - RIBBON_H,
         left: 0,
-        top: imgH + Math.floor(ribbonH * 0.05),
-      });
-    }
-    // ===== END FIX =====
+      },
+    ]);
 
+    /* ===== CAPTION IMAGE (PNG FROM CLIENT) ===== */
+    if (captionImage) {
+      const captionBuffer = Buffer.from(
+        captionImage.replace(/^data:image\/png;base64,/, ""),
+        "base64"
+      );
+
+      base = base.composite([
+        {
+          input: captionBuffer,
+          top: CANVAS_H - RIBBON_H,
+          left: 0,
+        },
+      ]);
+    }
+
+    /* ===== LOGOS (AUTO-SCALE, CENTERED) ===== */
     if (logos.length > 0) {
-      const logoBuffers = await Promise.all(logos.map(fetchImage));
+      const logoBuffers = await Promise.all(
+        logos.map(async (url) => {
+          const buf = await fetchImage(url);
+          const meta = await sharp(buf).metadata();
 
-      const logoHeight = Math.floor(ribbonH * 0.35);
-      const logoY =
-        imgH +
-        Math.floor(ribbonH * 0.55) +
-        Math.floor((ribbonH * 0.45 - logoHeight) / 2);
+          const scale = Math.min(
+            (CANVAS_W * 0.9) / meta.width,
+            (LOGO_ZONE_H * 0.9) / meta.height,
+            1
+          );
 
-      if (logos.length === 1) {
-        const resized = await sharp(logoBuffers[0])
-          .resize({ height: logoHeight })
-          .toBuffer();
-        const meta = await sharp(resized).metadata();
+          const w = Math.round(meta.width * scale);
+          const h = Math.round(meta.height * scale);
 
-        layers.push({
-          input: resized,
-          left: Math.floor((canvas - meta.width) / 2),
-          top: logoY,
-        });
-      } else {
-        const spacing = Math.floor(canvas / logos.length);
+          return {
+            buffer: await sharp(buf).resize(w, h).toBuffer(),
+            width: w,
+            height: h,
+          };
+        })
+      );
 
-        for (let i = 0; i < logos.length; i++) {
-          const resized = await sharp(logoBuffers[i])
-            .resize({ height: logoHeight })
-            .toBuffer();
-          const meta = await sharp(resized).metadata();
+      const totalLogoWidth =
+        logoBuffers.reduce((sum, l) => sum + l.width, 0) +
+        (logoBuffers.length - 1) * 20;
 
-          layers.push({
-            input: resized,
-            left: Math.floor(
-              spacing * i + (spacing - meta.width) / 2
-            ),
-            top: logoY,
-          });
-        }
-      }
+      let x =
+        Math.floor((CANVAS_W - totalLogoWidth) / 2);
+
+      const logoTop =
+        CANVAS_H -
+        RIBBON_H +
+        CAPTION_ZONE_H +
+        Math.floor((LOGO_ZONE_H - logoBuffers[0].height) / 2);
+
+      const logoComposites = logoBuffers.map((l) => {
+        const entry = {
+          input: l.buffer,
+          top: logoTop,
+          left: x,
+        };
+        x += l.width + 20;
+        return entry;
+      });
+
+      base = base.composite(logoComposites);
     }
 
-    const final = await base.composite(layers).png().toBuffer();
+    /* ===== FINAL OUTPUT ===== */
+    const output = await base.png().toBuffer();
 
     return NextResponse.json({
-      output: `data:image/png;base64,${final.toString("base64")}`,
+      output: `data:image/png;base64,${output.toString("base64")}`,
     });
   } catch (err) {
-    console.error("BUILD ERROR:", err);
+    console.error(err);
     return NextResponse.json(
-      { error: "Image build failed." },
+      { error: err.message || "Image build failed" },
       { status: 500 }
     );
   }
