@@ -19,10 +19,13 @@ async function fetchImage(url) {
 
 export async function POST(req) {
   try {
-    let { images = [], logos = [] } = await req.json();
+    let { images, logos = [], captionImage } = await req.json();
 
-    if (!images.length) {
-      return NextResponse.json({ error: "No images provided" }, { status: 400 });
+    if (!images || images.length === 0) {
+      return NextResponse.json(
+        { error: "No images provided" },
+        { status: 400 }
+      );
     }
 
     while (images.length < 4) images.push(images[0]);
@@ -69,6 +72,19 @@ export async function POST(req) {
       .toBuffer();
 
     layers.push({ input: ribbon, left: 0, top: imgH });
+
+    /* ===== STEP 2: captionImage decode & validate ONLY ===== */
+    if (captionImage) {
+      const base64 = captionImage.replace(
+        /^data:image\/png;base64,/,
+        ""
+      );
+      const captionBuffer = Buffer.from(base64, "base64");
+
+      // Validate image — no compositing yet
+      await sharp(captionBuffer).metadata();
+    }
+    /* ===== END STEP 2 ===== */
 
     // --- Logos (unchanged, working path) ---
     if (logos.length > 0) {
