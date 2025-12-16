@@ -1,169 +1,128 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { storage, db, auth } from "@/lib/firebaseClient";
+import { storage, db } from "@/lib/firebaseClient";
 import {
   ref,
-  uploadBytesResumable,
+  uploadBytes,
   getDownloadURL,
   listAll,
+  deleteObject,
 } from "firebase/storage";
 import {
+  collection,
   setDoc,
   doc,
+  getDocs,
+  deleteDoc,
 } from "firebase/firestore";
 
 export default function LogosPage() {
   const [files, setFiles] = useState([]);
   const [saved, setSaved] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [progress, setProgress] = useState(null);
 
   useEffect(() => {
     loadSaved();
   }, []);
 
   async function loadSaved() {
-    try {
-      const folderRef = ref(storage, "logos/");
-      const all = await listAll(folderRef);
-
-      const urls = await Promise.all(
-        all.items.map(async (item) => {
-          const url = await getDownloadURL(item);
-          return { id: item.name, url };
-        })
-      );
-
-      setSaved(urls);
-    } catch (err) {
-      console.error("LOAD LOGOS ERROR:", err);
-      setError("Failed to load saved logos.");
-    }
-  }
-
-  function uploadSingleFile(file, index) {
-    return new Promise((resolve, reject) => {
-      if (!["image/png", "image/jpeg"].includes(file.type)) {
-        reject(new Error("Only PNG or JPG images are allowed."));
-        return;
-      }
-
-      const fileId = `logo_${Date.now()}_${index}`;
-      const fileRef = ref(storage, `logos/${fileId}`);
-
-      const task = uploadBytesResumable(fileRef, file, {
-        contentType: file.type,
-      });
-
-      task.on(
-        "state_changed",
-        (snapshot) => {
-          const pct = Math.round(
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-          );
-          setProgress(pct);
-        },
-        (err) => {
-          reject(err);
-        },
-        async () => {
-          try {
-            const url = await getDownloadURL(task.snapshot.ref);
-
-            await setDoc(doc(db, "logos", fileId), {
-              url,
-              uploadedAt: new Date(),
-              uploadedBy: auth.currentUser.uid,
-            });
-
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        }
-      );
-    });
+    const snap = await getDocs(collection(db, "logos"));
+    const list = snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    setSaved(list);
   }
 
   async function handleUpload() {
-    setError("");
-    setProgress(null);
-
-    if (!files.length) {
-      setError("Please select at least one file.");
-      return;
-    }
-
-    const user = auth.currentUser;
-    if (!user) {
-      setError("You must be logged in to upload logos.");
-      return;
-    }
+    if (!files.length) return;
 
     setLoading(true);
 
     try {
       for (let i = 0; i < files.length; i++) {
-        await uploadSingleFile(files[i], i);
+        const file = files[i];
+
+        // Only allow JPG / PNG
+        if (!["image/png", "image/jpeg"].includes(file.type)) continue;
+
+        const id = `logo_${Date.now()}_${i}`;
+        const fileRef = ref(storage, `logos/${id}`);
+
+        await uploadBytes(fileRef, file);
+        const url = await getDownloadURL(fileRef);
+
+        await setDoc(doc(db, "logos", id), { url });
       }
 
       setFiles([]);
-      setProgress(null);
       await loadSaved();
-    } catch (err) {
-      console.error("UPLOAD ERROR:", err);
-      setError(err.message || "Logo upload failed.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleDelete(logo) {
+    if (!confirm("Delete this logo?")) return;
+
+    // Delete from Storage
+    await deleteObject(ref(storage, `logos/${logo.id}`));
+
+    // Delete Firestore record
+    await deleteDoc(doc(db, "logos", logo.id));
+
+    await loadSaved();
+  }
+
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Logo Vault</h1>
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Manage Logos</h1>
 
-      {error && (
-        <div className="mb-4 text-red-600 font-medium">
-          {error}
-        </div>
-      )}
-
-      <div className="space-y-4 mb-8 border p-4 rounded">
-        <h2 className="text-xl font-semibold">Upload Logos</h2>
-
+      {/* Upload */}
+      <div className="mb-6 space-y-3">
         <input
           type="file"
           accept="image/png,image/jpeg"
           multiple
-          onChange={(e) =>
-            setFiles(Array.from(e.target.files || []))
-          }
+          onChange={(e) => setFiles(Array.from(e.target.files))}
         />
 
         <button
           onClick={handleUpload}
           disabled={loading}
-          className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
+          className="px-6 py-3 bg-blue-600 text-white rounded"
         >
           {loading ? "Uploading…" : "Upload Logos"}
         </button>
 
-        {progress !== null && (
-          <div className="text-sm text-gray-700">
-            Upload progress: {progress}%
-          </div>
-        )}
+        <p className="text-sm text-gray-600">
+          PNG or JPG only. Logos are used in generated images.
+        </p>
       </div>
 
-      <h2 className="text-xl font-semibold mb-3">Saved Logos</h2>
+      {/* Saved Logos */}
+      <h2 className="text-xl font-semibold mb-3">
+        Saved Logos ({saved.length})
+      </h2>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {saved.map((l) => (
-          <div key={l.id} className="border rounded p-2">
+          <div
+            key={l.id}
+            className="relative border rounded p-3 bg-white"
+          >
+            <button
+              onClick={() => handleDelete(l)}
+              className="absolute top-1 right-1 text-red-600 font-bold text-lg"
+              title="Delete logo"
+            >
+              ×
+            </button>
+
             <img
               src={l.url}
+              alt="Logo"
               className="w-full h-24 object-contain"
             />
           </div>
