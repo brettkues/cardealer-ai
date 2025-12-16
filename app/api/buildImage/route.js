@@ -110,12 +110,15 @@ export async function POST(req) {
     if (ribbon.pattern) {
       const svg = patternSvg(ribbon.pattern);
       if (svg) {
-        const tile = await sharp(Buffer.from(svg))
-          .resize({ width: canvas, height: ribbonH, fit: "tile" })
-          .png()
-          .toBuffer();
+        const patternBuffer = Buffer.from(svg);
 
-        ribbonLayer = ribbonLayer.composite([{ input: tile }]);
+ribbonLayer = ribbonLayer.composite([
+  {
+    input: patternBuffer,
+    tile: true,
+    blend: "over"
+  }
+]);
       }
     }
 
