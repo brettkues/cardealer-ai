@@ -293,7 +293,7 @@ export default function ImageGeneratorPage() {
         onSelect={setLogos}
         selected={logos}
         maxSelect={3}
-        canDelete={true}
+        canDelete={false}
       />
     </div>
   );
