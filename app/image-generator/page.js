@@ -36,6 +36,35 @@ function needsDisclosure(text) {
 }
 /* ===== END STEP A ADDITIONS ===== */
 
+/* ===== STEP B ADDITIONS: AI CONFIRMATION (FAIL-SAFE) ===== */
+async function aiNeedsDisclosure(text) {
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "system",
+            content:
+              "Classify the caption. Reply with ONLY one token: YES_FINANCIAL, NO_FINANCIAL, or UNCLEAR.",
+          },
+          { role: "user", content: text },
+        ],
+      }),
+    });
+
+    const data = await res.json();
+    const reply = (data?.message || "").toUpperCase();
+
+    if (reply.includes("NO_FINANCIAL")) return false;
+    return true; // YES or UNCLEAR → disclosure ON
+  } catch {
+    return true; // AI failure → disclosure ON
+  }
+}
+/* ===== END STEP B ADDITIONS ===== */
+
 function captionToPng(text, showDisclosure = false) {
   if (!text) return null;
 
@@ -83,13 +112,12 @@ function captionToPng(text, showDisclosure = false) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.font = `bold ${fontSize}px Arial`;
 
-  let y = 8; // small top padding
+  let y = 8;
   wrapped.lines.forEach((line) => {
     ctx.fillText(line, canvas.width / 2, y);
     y += fontSize + LINE_GAP;
   });
 
-  /* ===== STEP A: DISCLOSURE STRIP RENDER ===== */
   if (showDisclosure) {
     ctx.font = "10px Arial";
     ctx.textBaseline = "middle";
@@ -99,7 +127,6 @@ function captionToPng(text, showDisclosure = false) {
       CAPTION_ZONE_H + DISCLOSURE_H / 2
     );
   }
-  /* ===== END DISCLOSURE ===== */
 
   return canvas.toDataURL("image/png");
 }
@@ -166,13 +193,16 @@ export default function ImageGeneratorPage() {
       const logoUrls = logos.map((l) => l.url);
       const cappedCaption = caption.slice(0, MAX_CAPTION);
 
-      /* ===== STEP A ADDITION ===== */
-      const disclosureNeeded = needsDisclosure(cappedCaption);
+      /* ===== STEP B LOGIC (RULES WIN, AI CONFIRMS) ===== */
+      const ruleHit = needsDisclosure(cappedCaption);
+      const aiHit = ruleHit ? true : await aiNeedsDisclosure(cappedCaption);
+      const disclosureNeeded = ruleHit || aiHit;
+      /* ===== END STEP B LOGIC ===== */
+
       const captionImage = captionToPng(
         cappedCaption,
         disclosureNeeded
       );
-      /* ===== END STEP A ADDITION ===== */
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
