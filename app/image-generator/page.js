@@ -7,7 +7,7 @@ import LogoPicker from "./LogoPicker";
 /* ===== CAPTION PNG SETTINGS ===== */
 const CANVAS_W = 850;
 const RIBBON_H = 212;
-const CAPTION_ZONE_H = Math.floor(RIBBON_H * 0.4); // top 40%
+const CAPTION_ZONE_H = Math.floor(RIBBON_H * 0.3); // top 30%
 const MAX_CAPTION = 85;
 const MAX_FONT = 36;
 const MIN_FONT = 22;
@@ -116,7 +116,7 @@ function captionToPng(text, showDisclosure = false) {
     y += fontSize + LINE_GAP;
   });
 
-  if (showDisclosure) {
+  if (true) {
     ctx.font = "10px Arial";
     ctx.textBaseline = "middle";
     ctx.fillText(
