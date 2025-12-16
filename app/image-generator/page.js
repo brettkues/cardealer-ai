@@ -51,6 +51,25 @@ export default function ImageGeneratorPage() {
     });
   }
 
+  // ✅ Render caption text to PNG in browser
+  function buildCaptionImage(text, width, height) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "36px Arial";
+
+    ctx.fillText(text, width / 2, height / 2);
+
+    return canvas.toDataURL("image/png");
+  }
+
   async function handleFinishBuild() {
     setError("");
     if (selectedImages.length !== 4) {
@@ -62,13 +81,18 @@ export default function ImageGeneratorPage() {
     try {
       const logoUrls = logos.map((l) => l.url);
 
+      const captionImage =
+        caption.trim().length > 0
+          ? buildCaptionImage(caption, 850, 80)
+          : null;
+
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           images: selectedImages,
-          caption,
           logos: logoUrls,
+          captionImage,
         }),
       });
 
@@ -96,56 +120,6 @@ export default function ImageGeneratorPage() {
     }
   }
 
-  async function handleDownload() {
-    if (!finalImage) return;
-    const res = await fetch(finalImage);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "vehicle-image.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleNativeShare() {
-    if (!finalImage || !navigator.share) return;
-    try {
-      const res = await fetch(finalImage);
-      const blob = await res.blob();
-      const file = new File([blob], "vehicle-image.png", { type: "image/png" });
-      await navigator.share({
-        files: [file],
-        title: "Vehicle Image",
-        text: "Check out this vehicle",
-      });
-    } catch {}
-  }
-
-  function handleFacebookShare() {
-    if (!finalImage) return;
-    window.open(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-        finalImage
-      )}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  }
-
-  function resetAll() {
-    setVehicleUrl("");
-    setCaption("");
-    setLogos([]);
-    setImages([]);
-    setSelectedImages([]);
-    setFinalImage(null);
-    setError("");
-  }
-
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-semibold mb-6">Image Generator</h1>
@@ -160,11 +134,8 @@ export default function ImageGeneratorPage() {
               className="w-full border p-3 rounded"
               value={vehicleUrl}
               onChange={(e) => setVehicleUrl(e.target.value)}
-              placeholder="Paste the URL from the vehicle listing page"
+              placeholder="Paste the URL from the vehicle’s listing page"
             />
-            <p className="text-sm text-gray-600 mt-1">
-              Paste the URL from the vehicle’s listing page on your website.
-            </p>
           </div>
 
           <div className="mb-4">
@@ -173,6 +144,7 @@ export default function ImageGeneratorPage() {
               className="w-full border p-3 rounded"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
+              placeholder="Enter your message here"
             />
           </div>
 
@@ -192,16 +164,6 @@ export default function ImageGeneratorPage() {
                 Manage Logos
               </Link>
             </div>
-
-            {logos.length > 0 && (
-              <div className="mt-2 flex gap-2">
-                {logos.map((l) => (
-                  <div key={l.id} className="border rounded p-1">
-                    <img src={l.url} className="h-12 object-contain" />
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <button
@@ -247,43 +209,6 @@ export default function ImageGeneratorPage() {
             </>
           )}
         </>
-      )}
-
-      {finalImage && (
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-3">Final Image</h2>
-          <img src={finalImage} className="border rounded max-w-full mb-6" />
-
-          <div className="flex flex-wrap gap-4">
-            <button
-              onClick={handleDownload}
-              className="px-6 py-3 bg-gray-700 text-white rounded"
-            >
-              Download Image
-            </button>
-
-            <button
-              onClick={handleNativeShare}
-              className="px-6 py-3 bg-blue-600 text-white rounded"
-            >
-              Share Image
-            </button>
-
-            <button
-              onClick={handleFacebookShare}
-              className="px-6 py-3 bg-blue-700 text-white rounded"
-            >
-              Share on Facebook
-            </button>
-
-            <button
-              onClick={resetAll}
-              className="px-6 py-3 bg-gray-600 text-white rounded"
-            >
-              Start Over
-            </button>
-          </div>
-        </div>
       )}
 
       <LogoPicker
