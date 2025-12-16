@@ -34,11 +34,15 @@ export async function POST(req) {
     const imgH = 319;
     const ribbonH = 212;
 
-    // Absolute layout
-    const CAPTION_Y = 320;
-    const LOGO_TOP = 380;
-    const LOGO_BOTTOM = 513;
-    const DISCLOSURE_Y = 513;
+    /* ===============================
+       RIBBON-RELATIVE LAYOUT (FIXED)
+       =============================== */
+    const RIBBON_TOP = imgH; // 319
+
+    const CAPTION_Y = RIBBON_TOP + 0;      // 319–383
+    const LOGO_TOP = RIBBON_TOP + 64;       // 383
+    const LOGO_BOTTOM = RIBBON_TOP + 197;   // 516
+    const DISCLOSURE_Y = RIBBON_TOP + 197;  // 516–531
 
     const base = sharp({
       create: {
@@ -64,7 +68,7 @@ export async function POST(req) {
       { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
     ];
 
-    // Ribbon
+    /* ===== RIBBON ===== */
     const ribbon = await sharp({
       create: {
         width: canvas,
@@ -76,9 +80,9 @@ export async function POST(req) {
       .png()
       .toBuffer();
 
-    layers.push({ input: ribbon, left: 0, top: imgH });
+    layers.push({ input: ribbon, left: 0, top: RIBBON_TOP });
 
-    // ===== CAPTION (320–380) =====
+    /* ===== CAPTION (TOP 30%) ===== */
     if (captionImage) {
       const captionBuffer = Buffer.from(
         captionImage.replace(/^data:image\/png;base64,/, ""),
@@ -88,7 +92,7 @@ export async function POST(req) {
       const resized = await sharp(captionBuffer)
         .resize({
           width: canvas,
-          height: 60,
+          height: 64,
           fit: "inside",
           withoutEnlargement: true,
         })
@@ -103,7 +107,7 @@ export async function POST(req) {
       });
     }
 
-    // ===== LOGOS (380–513) =====
+    /* ===== LOGOS (MIDDLE 60%) ===== */
     if (logos.length > 0) {
       const logoBuffers = await Promise.all(logos.map(fetchImage));
 
@@ -143,7 +147,7 @@ export async function POST(req) {
       }
     }
 
-    // ===== DISCLOSURE (513–528) =====
+    /* ===== DISCLOSURE (BOTTOM STRIP) ===== */
     if (disclosureImage) {
       const disclosureBuffer = Buffer.from(
         disclosureImage.replace(/^data:image\/png;base64,/, ""),
