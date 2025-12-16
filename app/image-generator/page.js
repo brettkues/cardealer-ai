@@ -164,6 +164,11 @@ export default function ImageGeneratorPage() {
       // 🔒 SEPARATE PNGs — NO MIXING
       const captionImage = captionToPng(cappedCaption);
       const disclosureImage = disclosureToPng();
+      
+const ribbonRes = await fetch("/api/ribbon", {
+  method: "POST",
+});
+const ribbon = await ribbonRes.json();
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
@@ -173,6 +178,7 @@ export default function ImageGeneratorPage() {
           logos: logoUrls,
           captionImage,
           disclosureImage,
+          ribbon
         }),
       });
 
