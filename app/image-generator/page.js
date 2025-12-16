@@ -34,7 +34,7 @@ function needsDisclosure(text) {
     /finance/.test(t)
   );
 }
- /* ===== END STEP A ADDITIONS ===== */
+/* ===== END STEP A ADDITIONS ===== */
 
 /* ===== STEP B ADDITIONS: AI CONFIRMATION (FAIL-SAFE) ===== */
 async function aiNeedsDisclosure(text) {
@@ -63,16 +63,14 @@ async function aiNeedsDisclosure(text) {
     return true; // AI failure → disclosure ON
   }
 }
- /* ===== END STEP B ADDITIONS ===== */
+/* ===== END STEP B ADDITIONS ===== */
 
 function captionToPng(text, showDisclosure = false) {
   if (!text) return null;
 
-  const totalHeight = CAPTION_ZONE_H + (showDisclosure ? DISCLOSURE_H : 0);
-
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_W;
-  canvas.height = totalHeight;
+  canvas.height = RIBBON_H; // 🔒 FIXED HEIGHT
 
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff";
@@ -124,13 +122,13 @@ function captionToPng(text, showDisclosure = false) {
     ctx.fillText(
       DISCLOSURE_TEXT,
       canvas.width / 2,
-      CAPTION_ZONE_H + DISCLOSURE_H / 2
+      RIBBON_H - DISCLOSURE_H / 2 // 🔒 BOTTOM OF RIBBON
     );
   }
 
   return canvas.toDataURL("image/png");
 }
- /* ===== END CAPTION PNG ===== */
+/* ===== END CAPTION PNG ===== */
 
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
@@ -193,11 +191,9 @@ export default function ImageGeneratorPage() {
       const logoUrls = logos.map((l) => l.url);
       const cappedCaption = caption.slice(0, MAX_CAPTION);
 
-      /* ===== STEP B LOGIC (RULES WIN, AI CONFIRMS) ===== */
       const ruleHit = needsDisclosure(cappedCaption);
       const aiHit = ruleHit ? true : await aiNeedsDisclosure(cappedCaption);
       const disclosureNeeded = ruleHit || aiHit;
-      /* ===== END STEP B LOGIC ===== */
 
       const captionImage = captionToPng(
         cappedCaption,
