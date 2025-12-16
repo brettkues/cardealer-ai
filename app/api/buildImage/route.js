@@ -3,14 +3,6 @@ import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
-function getRibbonColor() {
-  const m = new Date().getMonth() + 1;
-  if (m <= 2 || m === 12) return "#5CA8FF";
-  if (m <= 5) return "#65C67A";
-  if (m <= 8) return "#1B4B9B";
-  return "#D46A1E";
-}
-
 async function fetchImage(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Image fetch failed");
@@ -24,7 +16,12 @@ export async function POST(req) {
       logos = [],
       captionImage,
       disclosureImage,
+      ribbon, // ← NEW
     } = await req.json();
+
+    if (!ribbon || !ribbon.backgroundColor) {
+      throw new Error("Missing ribbon data");
+    }
 
     while (images.length < 4) images.push(images[0]);
     images = images.slice(0, 4);
@@ -37,12 +34,12 @@ export async function POST(req) {
     /* ===============================
        RIBBON-RELATIVE LAYOUT (FIXED)
        =============================== */
-    const RIBBON_TOP = imgH; // 319
+    const RIBBON_TOP = imgH;
 
-    const CAPTION_Y = RIBBON_TOP + 0;      // 319–383
-    const LOGO_TOP = RIBBON_TOP + 64;       // 383
-    const LOGO_BOTTOM = RIBBON_TOP + 197;   // 516
-    const DISCLOSURE_Y = RIBBON_TOP + 197;  // 516–531
+    const CAPTION_Y = RIBBON_TOP;
+    const LOGO_TOP = RIBBON_TOP + 64;
+    const LOGO_BOTTOM = RIBBON_TOP + 197;
+    const DISCLOSURE_Y = RIBBON_TOP + 197;
 
     const base = sharp({
       create: {
@@ -68,21 +65,21 @@ export async function POST(req) {
       { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
     ];
 
-    /* ===== RIBBON ===== */
-    const ribbon = await sharp({
+    /* ===== RIBBON BACKGROUND (DATA-DRIVEN) ===== */
+    const ribbonBg = await sharp({
       create: {
         width: canvas,
         height: ribbonH,
         channels: 4,
-        background: getRibbonColor(),
+        background: ribbon.backgroundColor,
       },
     })
       .png()
       .toBuffer();
 
-    layers.push({ input: ribbon, left: 0, top: RIBBON_TOP });
+    layers.push({ input: ribbonBg, left: 0, top: RIBBON_TOP });
 
-    /* ===== CAPTION (TOP 30%) ===== */
+    /* ===== CAPTION (TOP ZONE) ===== */
     if (captionImage) {
       const captionBuffer = Buffer.from(
         captionImage.replace(/^data:image\/png;base64,/, ""),
@@ -107,15 +104,17 @@ export async function POST(req) {
       });
     }
 
-    /* ===== LOGOS (MIDDLE 60%) ===== */
+    /* ===== LOGOS (MIDDLE ZONE) ===== */
     if (logos.length > 0) {
       const logoBuffers = await Promise.all(logos.map(fetchImage));
 
       const logoZoneH = LOGO_BOTTOM - LOGO_TOP;
       const logoMaxH = Math.floor(logoZoneH * 0.9);
 
-      if (logos.length === 1) {
-        const resized = await sharp(logoBuffers[0])
+      const spacing = Math.floor(canvas / logos.length);
+
+      for (let i = 0; i < logos.length; i++) {
+        const resized = await sharp(logoBuffers[i])
           .resize({ height: logoMaxH, fit: "inside" })
           .toBuffer();
 
@@ -123,31 +122,15 @@ export async function POST(req) {
 
         layers.push({
           input: resized,
-          left: Math.floor((canvas - meta.width) / 2),
+          left: logos.length === 1
+            ? Math.floor((canvas - meta.width) / 2)
+            : Math.floor(spacing * i + (spacing - meta.width) / 2),
           top: LOGO_TOP + Math.floor((logoZoneH - meta.height) / 2),
         });
-      } else {
-        const spacing = Math.floor(canvas / logos.length);
-
-        for (let i = 0; i < logos.length; i++) {
-          const resized = await sharp(logoBuffers[i])
-            .resize({ height: logoMaxH, fit: "inside" })
-            .toBuffer();
-
-          const meta = await sharp(resized).metadata();
-
-          layers.push({
-            input: resized,
-            left: Math.floor(
-              spacing * i + (spacing - meta.width) / 2
-            ),
-            top: LOGO_TOP + Math.floor((logoZoneH - meta.height) / 2),
-          });
-        }
       }
     }
 
-    /* ===== DISCLOSURE (BOTTOM STRIP) ===== */
+    /* ===== DISCLOSURE ===== */
     if (disclosureImage) {
       const disclosureBuffer = Buffer.from(
         disclosureImage.replace(/^data:image\/png;base64,/, ""),
@@ -180,7 +163,7 @@ export async function POST(req) {
   } catch (err) {
     console.error("BUILD ERROR:", err);
     return NextResponse.json(
-      { error: "Image build failed." },
+      { error: err.message || "Image build failed." },
       { status: 500 }
     );
   }
