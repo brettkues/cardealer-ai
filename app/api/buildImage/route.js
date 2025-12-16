@@ -60,6 +60,7 @@ export async function POST(req) {
       { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
     ];
 
+    // --- Ribbon ---
     const ribbon = await sharp({
       create: {
         width: canvas,
@@ -73,7 +74,7 @@ export async function POST(req) {
 
     layers.push({ input: ribbon, left: 0, top: imgH });
 
-    /* ===== STEP 2: captionImage decode & validate ONLY ===== */
+    // ===== STEP 3: captionImage → ribbon =====
     if (captionImage) {
       const base64 = captionImage.replace(
         /^data:image\/png;base64,/,
@@ -81,17 +82,34 @@ export async function POST(req) {
       );
       const captionBuffer = Buffer.from(base64, "base64");
 
-      // Validate image — no compositing yet
-      await sharp(captionBuffer).metadata();
-    }
-    /* ===== END STEP 2 ===== */
+      // Reserve lower half of ribbon for logos
+      const captionAreaH = Math.floor(ribbonH * 0.45);
 
-    // --- Logos (unchanged, working path) ---
+      const resizedCaption = await sharp(captionBuffer)
+        .resize({
+          width: canvas,
+          height: captionAreaH,
+          fit: "contain",
+        })
+        .toBuffer();
+
+      layers.push({
+        input: resizedCaption,
+        left: 0,
+        top: imgH + Math.floor(ribbonH * 0.05),
+      });
+    }
+    // ===== END STEP 3 =====
+
+    // --- Logos (unchanged) ---
     if (logos.length > 0) {
       const logoBuffers = await Promise.all(logos.map(fetchImage));
 
-      const logoHeight = Math.floor(ribbonH * 0.5);
-      const logoY = imgH + Math.floor((ribbonH - logoHeight) / 2);
+      const logoHeight = Math.floor(ribbonH * 0.35);
+      const logoY =
+        imgH +
+        Math.floor(ribbonH * 0.55) +
+        Math.floor((ribbonH * 0.45 - logoHeight) / 2);
 
       if (logos.length === 1) {
         const resized = await sharp(logoBuffers[0])
