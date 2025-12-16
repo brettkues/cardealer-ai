@@ -7,7 +7,7 @@ import LogoPicker from "./LogoPicker";
 export default function ImageGeneratorPage() {
   const [vehicleUrl, setVehicleUrl] = useState("");
   const [caption, setCaption] = useState("");
-  const [logo, setLogo] = useState(null);
+  const [logos, setLogos] = useState([]); // up to 3
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
@@ -57,7 +57,6 @@ export default function ImageGeneratorPage() {
   async function loadLogoAsBase64(url) {
     const res = await fetch(url);
     const blob = await res.blob();
-
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
@@ -76,34 +75,30 @@ export default function ImageGeneratorPage() {
     setLoading(true);
 
     try {
-      let logoBase64 = null;
-      if (logo?.url) {
-        logoBase64 = await loadLogoAsBase64(logo.url);
+      const logoBase64List = [];
+      for (const l of logos) {
+        logoBase64List.push(await loadLogoAsBase64(l.url));
       }
 
-      // 1️⃣ Build image
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           images: selectedImages,
           caption,
-          logoBase64,
+          logos: logoBase64List, // multiple logos (handled next step)
         }),
       });
 
       const built = await buildRes.json();
       if (!buildRes.ok) throw new Error(built.error);
 
-      // Convert base64 → Blob
       const blob = await (await fetch(built.output)).blob();
 
-      // 2️⃣ Get signed upload URL
       const urlRes = await fetch("/api/getUploadUrl", { method: "POST" });
       const urlData = await urlRes.json();
       if (!urlRes.ok) throw new Error(urlData.error);
 
-      // 3️⃣ Upload to GCS
       const uploadRes = await fetch(urlData.uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": "image/png" },
@@ -123,7 +118,7 @@ export default function ImageGeneratorPage() {
   function resetAll() {
     setVehicleUrl("");
     setCaption("");
-    setLogo(null);
+    setLogos([]);
     setImages([]);
     setSelectedImages([]);
     setFinalImage(null);
@@ -145,7 +140,11 @@ export default function ImageGeneratorPage() {
               className="w-full border p-3 rounded"
               value={vehicleUrl}
               onChange={(e) => setVehicleUrl(e.target.value)}
+              placeholder="https://www.yoursite.com/vehicle/12345"
             />
+            <p className="text-sm text-gray-600 mt-1">
+              Paste the URL from the vehicle’s listing page on your website.
+            </p>
           </div>
 
           {/* CAPTION */}
@@ -161,14 +160,14 @@ export default function ImageGeneratorPage() {
 
           {/* LOGO VAULT */}
           <div className="mb-4">
-            <label className="block font-medium mb-1">Logo (optional)</label>
+            <label className="block font-medium mb-1">Logos (optional)</label>
 
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setOpenLogos(true)}
                 className="px-4 py-2 bg-gray-700 text-white rounded"
               >
-                {logo ? "Change Logo" : "Select Logo"}
+                Select Logos ({logos.length}/3)
               </button>
 
               <Link
@@ -179,9 +178,13 @@ export default function ImageGeneratorPage() {
               </Link>
             </div>
 
-            {logo && (
-              <div className="mt-2 border rounded p-2 inline-block">
-                <img src={logo.url} className="h-16 object-contain" />
+            {logos.length > 0 && (
+              <div className="mt-2 flex gap-2">
+                {logos.map((l) => (
+                  <div key={l.id} className="border rounded p-1">
+                    <img src={l.url} className="h-12 object-contain" />
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -283,11 +286,10 @@ export default function ImageGeneratorPage() {
       <LogoPicker
         open={openLogos}
         onClose={() => setOpenLogos(false)}
-        onSelect={(l) => {
-          setLogo(l);
-          setOpenLogos(false);
-        }}
-        selected={logo}
+        onSelect={setLogos}
+        selected={logos}
+        maxSelect={3}
+        canDelete={true}
       />
     </div>
   );
