@@ -13,12 +13,37 @@ const MAX_FONT = 36;
 const MIN_FONT = 22;
 const LINE_GAP = 6;
 
-function captionToPng(text) {
+/* ===== STEP A ADDITIONS: DISCLOSURE ===== */
+const DISCLOSURE_H = 15;
+const DISCLOSURE_TEXT =
+  "Price and payment shown are examples. Taxes, fees, terms, and credit approval may affect final offer.";
+
+function needsDisclosure(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return (
+    /\$/.test(t) ||
+    /%/.test(t) ||
+    /apr/.test(t) ||
+    /price/.test(t) ||
+    /payment/.test(t) ||
+    /per month/.test(t) ||
+    /monthly/.test(t) ||
+    /\/mo/.test(t) ||
+    /lease/.test(t) ||
+    /finance/.test(t)
+  );
+}
+/* ===== END STEP A ADDITIONS ===== */
+
+function captionToPng(text, showDisclosure = false) {
   if (!text) return null;
+
+  const totalHeight = CAPTION_ZONE_H + (showDisclosure ? DISCLOSURE_H : 0);
 
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_W;
-  canvas.height = CAPTION_ZONE_H;
+  canvas.height = totalHeight;
 
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff";
@@ -63,6 +88,18 @@ function captionToPng(text) {
     ctx.fillText(line, canvas.width / 2, y);
     y += fontSize + LINE_GAP;
   });
+
+  /* ===== STEP A: DISCLOSURE STRIP RENDER ===== */
+  if (showDisclosure) {
+    ctx.font = "10px Arial";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      DISCLOSURE_TEXT,
+      canvas.width / 2,
+      CAPTION_ZONE_H + DISCLOSURE_H / 2
+    );
+  }
+  /* ===== END DISCLOSURE ===== */
 
   return canvas.toDataURL("image/png");
 }
@@ -128,7 +165,14 @@ export default function ImageGeneratorPage() {
     try {
       const logoUrls = logos.map((l) => l.url);
       const cappedCaption = caption.slice(0, MAX_CAPTION);
-      const captionImage = captionToPng(cappedCaption);
+
+      /* ===== STEP A ADDITION ===== */
+      const disclosureNeeded = needsDisclosure(cappedCaption);
+      const captionImage = captionToPng(
+        cappedCaption,
+        disclosureNeeded
+      );
+      /* ===== END STEP A ADDITION ===== */
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
