@@ -49,7 +49,6 @@ export async function POST(req) {
       logos = [],
       captionImage,
       disclosureImage,
-      ribbon,
       ribbonImage
     } = await req.json();
 
