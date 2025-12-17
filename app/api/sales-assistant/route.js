@@ -15,16 +15,15 @@ export async function POST(req) {
     const { messages } = await req.json();
     const question = messages[messages.length - 1]?.content || "";
 
-    // Embed the question
     const queryEmbedding = await embedText(question);
 
-    // Vector search directly (no RPC)
-    const { data: matches, error } = await supabase
-      .from("sales_training_vectors")
-      .select("content, source")
-      .order("embedding <=> $1", { ascending: true })
-      .limit(8)
-      .bind([queryEmbedding]);
+    const { data: matches, error } = await supabase.rpc(
+      "match_sales_training",
+      {
+        query_embedding: queryEmbedding,
+        match_count: 8
+      }
+    );
 
     if (error) {
       return NextResponse.json({ reply: String(error) }, { status: 500 });
@@ -56,14 +55,7 @@ ANSWER:
       input: prompt
     });
 
-    return NextResponse.json({
-      reply: response.output_text
-    });
+    return NextResponse.json({ reply: response.output_text });
 
   } catch (err) {
-    return NextResponse.json(
-      { reply: String(err) },
-      { status: 500 }
-    );
-  }
-}
+    return NextResponse.json({ reply: String(err) }, { st
