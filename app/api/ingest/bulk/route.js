@@ -7,13 +7,15 @@ export async function POST(req) {
   try {
     const { department = "sales", limit = 20 } = await req.json();
 
-    // 1. Get already-ingested files
+    // 1. Get already-ingested files (may be empty)
     const { data: existing } = await supabase
       .from("sales_training_vectors")
       .select("source")
       .eq("department", department);
 
-    const ingested = new Set(existing.map(r => r.source));
+    const ingested = new Set(
+      (existing || []).map(r => r.source)
+    );
 
     // 2. List files in storage
     const { data: files, error } = await supabase
