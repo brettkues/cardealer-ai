@@ -4,16 +4,36 @@ import { useState } from "react";
 
 export default function TrainPage() {
   const [salesFiles, setSalesFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
 
   async function uploadSalesFiles() {
-    alert("BUTTON CLICKED");
-
     if (!salesFiles.length) {
-      alert("NO FILES SELECTED");
+      alert("No files selected");
       return;
     }
 
-    alert(`FILES COUNT: ${salesFiles.length}`);
+    setLoading(true);
+    setStatus("Uploading and training… this can take a minute.");
+
+    try {
+      const form = new FormData();
+      salesFiles.forEach(f => form.append("files", f));
+
+      const res = await fetch("/api/train/sales", {
+        method: "POST",
+        body: form
+      });
+
+      const data = await res.json();
+
+      setStatus(`Done. ${data.stored} chunks stored.`);
+      setSalesFiles([]);
+    } catch (err) {
+      setStatus("Upload failed.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -27,13 +47,26 @@ export default function TrainPage() {
           onChange={(e) => setSalesFiles(Array.from(e.target.files))}
         />
 
+        {salesFiles.length > 0 && (
+          <div className="text-sm text-gray-600">
+            {salesFiles.length} file(s) selected
+          </div>
+        )}
+
         <button
           type="button"
           onClick={uploadSalesFiles}
-          className="w-full bg-blue-600 text-white p-3 rounded"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
         >
-          Upload Sales Files
+          {loading ? "Training…" : "Upload Sales Files"}
         </button>
+
+        {status && (
+          <div className="text-sm text-gray-700 mt-2">
+            {status}
+          </div>
+        )}
       </div>
     </div>
   );
