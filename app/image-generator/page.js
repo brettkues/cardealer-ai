@@ -179,7 +179,7 @@ const { ribbonImage } = await ribbonRes.json();
           logos: logoUrls,
           captionImage,
           disclosureImage,
-          ribbonImmage
+          ribbonImage
         }),
       });
 
