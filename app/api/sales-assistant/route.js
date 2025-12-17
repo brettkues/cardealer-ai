@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import salesSystemPrompt from "@/app/api/_system/salesPrompt";
+import salesSystemPrompt from "../_system/salesPrompt";
 import { embedText } from "@/lib/vectorClient";
 import { searchVectors } from "@/lib/vectorStore";
 
