@@ -15,7 +15,9 @@ export async function POST(req) {
       model: "gpt-4.1-mini",
       input: messages.map(m => ({
         role: m.role,
-        content: [{ type: "text", text: m.content }]
+        content: [
+          { type: "input_text", text: m.content }
+        ]
       }))
     });
 
