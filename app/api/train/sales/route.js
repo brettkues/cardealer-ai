@@ -1,34 +1,48 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { embedText } from "@/lib/vectorClient";
+import { addVector } from "@/lib/vectorStore";
 
-export const runtime = "nodejs";
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function chunkText(text, size = 800, overlap = 100) {
+  const chunks = [];
+  let start = 0;
+
+  while (start < text.length) {
+    chunks.push(text.slice(start, start + size));
+    start += size - overlap;
+  }
+
+  return chunks;
+}
 
 export async function POST(req) {
   try {
     const form = await req.formData();
     const files = form.getAll("files");
 
-    for (let file of files) {
-      const buffer = Buffer.from(await file.arrayBuffer());
+    for (const file of files) {
+      const text = await file.text();
+      const chunks = chunkText(text);
 
-      await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Learn this for automotive SALES training." },
-              { type: "input_file", input_file: { data: buffer, mime_type: file.type } }
-            ]
+      for (const chunk of chunks) {
+        const embedding = await embedText(chunk);
+
+        addVector({
+          embedding,
+          text: chunk,
+          metadata: {
+            department: "sales",
+            filename: file.name
           }
-        ]
-      });
+        });
+      }
     }
 
     return NextResponse.json({ ok: true });
-
   } catch (err) {
     return NextResponse.json({ error: "Training failed" }, { status: 500 });
   }
