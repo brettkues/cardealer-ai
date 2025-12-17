@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { embedText } from "@/lib/vectorClient";
 import { addVector } from "@/lib/vectorStore";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+export const runtime = "nodejs";
 
 function chunkText(text, size = 800, overlap = 100) {
   const chunks = [];
@@ -24,26 +21,31 @@ export async function POST(req) {
     const form = await req.formData();
     const files = form.getAll("files");
 
+    let chunkCount = 0;
+
     for (const file of files) {
       const text = await file.text();
       const chunks = chunkText(text);
 
       for (const chunk of chunks) {
         const embedding = await embedText(chunk);
-
         addVector({
           embedding,
           text: chunk,
-          metadata: {
-            department: "sales",
-            filename: file.name
-          }
+          metadata: { filename: file.name }
         });
+        chunkCount++;
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      chunksStored: chunkCount
+    });
   } catch (err) {
-    return NextResponse.json({ error: "Training failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: String(err) },
+      { status: 500 }
+    );
   }
 }
