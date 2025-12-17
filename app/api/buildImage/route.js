@@ -50,6 +50,7 @@ export async function POST(req) {
       captionImage,
       disclosureImage,
       ribbon,
+      ribbonImage
     } = await req.json();
 
     if (!ribbon || !ribbon.backgroundColor) {
