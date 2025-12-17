@@ -21,17 +21,9 @@ export default function SalesAssistant() {
       body: JSON.stringify({ messages: newChat })
     });
 
-    const text = await res.text();
+    const data = await res.json();
 
-    console.log("RAW RESPONSE:", text);
-
-    try {
-      const data = JSON.parse(text);
-      setChat([...newChat, { role: "assistant", content: data.reply || data.error }]);
-    } catch {
-      setChat([...newChat, { role: "assistant", content: text }]);
-    }
-
+    setChat([...newChat, { role: "assistant", content: data.reply }]);
     setLoading(false);
   }
 
@@ -43,27 +35,27 @@ export default function SalesAssistant() {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Sales Assistant</h1>
-
-      <div className="space-y-4">
-        <div className="border rounded p-4 h-96 overflow-auto bg-white">
-          {chat.map((m, i) => (
-            <div key={i} className="mb-3">
-              <b>{m.role === "user" ? "You" : "AI"}:</b> {m.content}
-            </div>
-          ))}
-          {loading && <div>AI is typing...</div>}
-        </div>
-
+    <div className="h-screen flex flex-col">
+      <div className="p-4 border-b">
+        <h1 className="text-2xl font-bold">Sales Assistant</h1>
         <textarea
-          className="w-full p-3 border rounded"
-          placeholder="Ask something… (Enter to send)"
+          className="w-full p-3 border rounded mt-3"
+          placeholder="Ask a sales question… (Enter to send)"
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={3}
+          rows={2}
         />
+      </div>
+
+      <div className="flex-1 overflow-auto p-4 bg-gray-50">
+        {chat.map((m, i) => (
+          <div key={i} className="mb-4">
+            <b>{m.role === "user" ? "You" : "AI"}:</b>
+            <div>{m.content}</div>
+          </div>
+        ))}
+        {loading && <div>AI is typing…</div>}
       </div>
     </div>
   );
