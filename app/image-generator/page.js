@@ -168,7 +168,7 @@ export default function ImageGeneratorPage() {
 const ribbonRes = await fetch("/api/ribbon", {
   method: "POST",
 });
-const ribbon = await ribbonRes.json();
+const ribbonImage = await ribbonRes.json();
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
