@@ -12,7 +12,8 @@ const openai = new OpenAI({
 
 export async function POST(req) {
   try {
-    const { messages } = await req.json();
+    const body = await req.json();
+    const messages = body.messages || [];
     const question = messages[messages.length - 1]?.content || "";
 
     const queryEmbedding = await embedText(question);
@@ -26,7 +27,10 @@ export async function POST(req) {
     );
 
     if (error) {
-      return NextResponse.json({ reply: String(error) }, { status: 500 });
+      return NextResponse.json(
+        { reply: String(error) },
+        { status: 500 }
+      );
     }
 
     const context = (matches || [])
@@ -55,7 +59,14 @@ ANSWER:
       input: prompt
     });
 
-    return NextResponse.json({ reply: response.output_text });
+    return NextResponse.json({
+      reply: response.output_text
+    });
 
   } catch (err) {
-    return NextResponse.json({ reply: String(err) }, { st
+    return NextResponse.json(
+      { reply: String(err) },
+      { status: 500 }
+    );
+  }
+}
