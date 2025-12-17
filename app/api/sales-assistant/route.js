@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import salesSystemPrompt from "../_system/salesPrompt";
+import { embedText } from "@/lib/vectorClient";
+import { searchVectors } from "@/lib/vectorStore";
 
 export const runtime = "nodejs";
 
@@ -10,15 +13,26 @@ const openai = new OpenAI({
 export async function POST(req) {
   try {
     const { messages } = await req.json();
+    const userMessage = messages[messages.length - 1]?.content;
+
+    const queryEmbedding = await embedText(userMessage);
+    const matches = searchVectors(queryEmbedding, 8);
+
+    const context = matches.map(m => m.text).join("\n\n");
 
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
-      input: messages.map(m => ({
-        role: m.role,
-        content: [
-          { type: "input_text", text: m.content }
-        ]
-      }))
+      input: `
+${salesSystemPrompt}
+
+DEALER TRAINING MATERIAL:
+${context || "None"}
+
+CONVERSATION:
+${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n")}
+
+ANSWER AS DEALERSHIP SALES EXPERT:
+`
     });
 
     return NextResponse.json({
