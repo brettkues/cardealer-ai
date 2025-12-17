@@ -8,12 +8,10 @@ export const runtime = "nodejs";
 function chunkText(text, size = 800, overlap = 100) {
   const chunks = [];
   let start = 0;
-
   while (start < text.length) {
     chunks.push(text.slice(start, start + size));
     start += size - overlap;
   }
-
   return chunks;
 }
 
@@ -22,26 +20,47 @@ export async function POST(req) {
     const { filename, department = "sales" } = await req.json();
 
     if (!filename) {
-      return NextResponse.json({ error: "filename required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "filename required" },
+        { status: 400 }
+      );
     }
 
-    // 1. Download file from Storage
-    const { data, error } = await supabase
+    // 1. Download file from Supabase Storage
+    const { data, error: downloadError } = await supabase
       .storage
       .from("TRAINING FILES")
       .download(filename);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (downloadError) {
+      console.error("DOWNLOAD ERROR:", downloadError);
+      return NextResponse.json(
+        { error: "Storage download failed", details: downloadError },
+        { status: 500 }
+      );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: "No file data returned from storage" },
+        { status: 500 }
+      );
     }
 
     const buffer = Buffer.from(await data.arrayBuffer());
 
-    // 2. Extract text (PDF)
+    // 2. Parse PDF
     const parsed = await pdf(buffer);
     const text = parsed.text;
 
-    // 3. Remove old vectors for this file
+    if (!text || text.length < 100) {
+      return NextResponse.json(
+        { error: "Parsed text is empty or too small" },
+        { status: 500 }
+      );
+    }
+
+    // 3. Remove existing vectors for this file
     await supabase
       .from("sales_training_vectors")
       .delete()
@@ -55,12 +74,22 @@ export async function POST(req) {
     for (const chunk of chunks) {
       const embedding = await embedText(chunk);
 
-      await supabase.from("sales_training_vectors").insert({
-        content: chunk,
-        embedding,
-        source: filename,
-        department
-      });
+      const { error: insertError } = await supabase
+        .from("sales_training_vectors")
+        .insert({
+          content: chunk,
+          embedding,
+          source: filename,
+          department
+        });
+
+      if (insertError) {
+        console.error("INSERT ERROR:", insertError);
+        return NextResponse.json(
+          { error: "Vector insert failed", details: insertError },
+          { status: 500 }
+        );
+      }
 
       stored++;
     }
@@ -73,6 +102,7 @@ export async function POST(req) {
     });
 
   } catch (err) {
+    console.error("INGEST FATAL ERROR:", err);
     return NextResponse.json(
       { error: String(err) },
       { status: 500 }
