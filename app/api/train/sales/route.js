@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { embedText } from "@/lib/vectorClient";
-import { addVector } from "@/lib/vectorStore";
+import { supabase } from "@/lib/supabaseClient";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function POST(req) {
     const form = await req.formData();
     const files = form.getAll("files");
 
-    let chunkCount = 0;
+    let stored = 0;
 
     for (const file of files) {
       const text = await file.text();
@@ -29,19 +29,21 @@ export async function POST(req) {
 
       for (const chunk of chunks) {
         const embedding = await embedText(chunk);
-        addVector({
-          embedding,
-          text: chunk,
-          metadata: { filename: file.name }
-        });
-        chunkCount++;
+
+        const { error } = await supabase
+          .from("sales_training_vectors")
+          .insert({
+            content: chunk,
+            embedding,
+            source: file.name
+          });
+
+        if (!error) stored++;
       }
     }
 
-    return NextResponse.json({
-      ok: true,
-      chunksStored: chunkCount
-    });
+    return NextResponse.json({ ok: true, stored });
+
   } catch (err) {
     return NextResponse.json(
       { error: String(err) },
