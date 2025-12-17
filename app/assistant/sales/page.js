@@ -8,7 +8,7 @@ export default function SalesAssistant() {
   const [loading, setLoading] = useState(false);
 
   async function sendMessage() {
-    if (!msg) return;
+    if (!msg || loading) return;
 
     const newChat = [...chat, { role: "user", content: msg }];
     setChat(newChat);
@@ -17,9 +17,7 @@ export default function SalesAssistant() {
 
     const res = await fetch("/api/sales-assistant", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: newChat })
     });
 
@@ -27,6 +25,13 @@ export default function SalesAssistant() {
 
     setChat([...newChat, { role: "assistant", content: data.reply }]);
     setLoading(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   }
 
   return (
@@ -43,20 +48,14 @@ export default function SalesAssistant() {
           {loading && <div>AI is typing...</div>}
         </div>
 
-        <div className="flex gap-2">
-          <input
-            className="flex-1 p-3 border rounded"
-            placeholder="Ask something..."
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-          />
-          <button
-            onClick={sendMessage}
-            className="px-4 bg-blue-600 text-white rounded"
-          >
-            Send
-          </button>
-        </div>
+        <textarea
+          className="w-full p-3 border rounded"
+          placeholder="Ask something... (Enter to send, Shift+Enter for new line)"
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={3}
+        />
       </div>
     </div>
   );
