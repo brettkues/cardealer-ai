@@ -35,10 +35,15 @@ export default function LoginPage() {
       } else {
         const userCred = await createUserWithEmailAndPassword(auth, email, password);
 
-        await setDoc(doc(db, "users", userCred.user.uid), {
-          email,
-          role: "admin",
-        });
+        await setDoc(
+  doc(db, "users", userCred.user.uid),
+  {
+    email,
+    role: "user",
+  },
+  { merge: true } // important
+);
+
       }
     } catch (err) {
       setError("Invalid login.");
