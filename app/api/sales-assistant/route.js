@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import salesSystemPrompt from "../_system/salesPrompt";
 import { embedText } from "@/lib/vectorClient";
-import { searchVectors } from "@/lib/vectorStore";
+import { supabase } from "@/lib/supabaseClient";
 
 export const runtime = "nodejs";
 
@@ -13,29 +13,40 @@ const openai = new OpenAI({
 export async function POST(req) {
   try {
     const { messages } = await req.json();
-    const userMessage = messages[messages.length - 1]?.content || "";
+    const question = messages[messages.length - 1]?.content || "";
 
-    const queryEmbedding = await embedText(userMessage);
-    const matches = searchVectors(queryEmbedding, 10);
+    // Embed the question
+    const queryEmbedding = await embedText(question);
 
-    const context = matches.map((m, i) =>
-      `[SOURCE ${i + 1}] ${m.text}`
-    ).join("\n\n");
+    // Vector search directly (no RPC)
+    const { data: matches, error } = await supabase
+      .from("sales_training_vectors")
+      .select("content, source")
+      .order("embedding <=> $1", { ascending: true })
+      .limit(8)
+      .bind([queryEmbedding]);
+
+    if (error) {
+      return NextResponse.json({ reply: String(error) }, { status: 500 });
+    }
+
+    const context = (matches || [])
+      .map((m, i) => `[SOURCE ${i + 1}] ${m.content}`)
+      .join("\n\n");
 
     const prompt = `
 ${salesSystemPrompt}
 
-RULES (MANDATORY):
-- You MUST base your answer on the TRAINING MATERIAL below
-- If the answer is not found in the training, say: "Not found in dealership training"
-- Do NOT answer from general knowledge
-- Do NOT change industries
+RULES:
+- Answer ONLY from the training material
+- If not found, say: "Not found in dealership training"
+- Stay in automotive dealer law and sales
 
 TRAINING MATERIAL:
 ${context || "None"}
 
 QUESTION:
-${userMessage}
+${question}
 
 ANSWER:
 `;
