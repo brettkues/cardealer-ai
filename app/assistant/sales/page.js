@@ -21,9 +21,17 @@ export default function SalesAssistant() {
       body: JSON.stringify({ messages: newChat })
     });
 
-    const data = await res.json();
+    const text = await res.text();
 
-    setChat([...newChat, { role: "assistant", content: data.reply }]);
+    console.log("RAW RESPONSE:", text);
+
+    try {
+      const data = JSON.parse(text);
+      setChat([...newChat, { role: "assistant", content: data.reply || data.error }]);
+    } catch {
+      setChat([...newChat, { role: "assistant", content: text }]);
+    }
+
     setLoading(false);
   }
 
@@ -50,7 +58,7 @@ export default function SalesAssistant() {
 
         <textarea
           className="w-full p-3 border rounded"
-          placeholder="Ask something... (Enter to send, Shift+Enter for new line)"
+          placeholder="Ask something… (Enter to send)"
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={handleKeyDown}
