@@ -10,14 +10,17 @@ const openai = new OpenAI({
 
 export async function POST(req) {
   try {
-    const { messages } = await req.json();
+    const body = await req.json();
+
+    if (!body || !body.messages) {
+      return NextResponse.json({ reply: "No messages received." });
+    }
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.6,
       messages: [
         { role: "system", content: salesSystemPrompt },
-        ...messages
+        ...body.messages
       ]
     });
 
@@ -26,10 +29,9 @@ export async function POST(req) {
     });
 
   } catch (err) {
-    console.error("SALES ASSISTANT ERROR:", err);
-    return NextResponse.json(
-      { reply: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      error: String(err),
+      stack: err?.stack || "no stack"
+    }, { status: 500 });
   }
 }
