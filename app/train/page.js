@@ -45,14 +45,21 @@ export default function TrainPage() {
 
         <div className="border rounded p-4">
           <h2 className="text-xl font-semibold mb-3">
-            Upload Sales Files (Multiple / Folder)
+            Upload Sales Files (Files or Folder)
           </h2>
+
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setSalesFiles(Array.from(e.target.files))}
+          />
 
           <input
             type="file"
             multiple
             webkitdirectory="true"
             directory="true"
+            className="mt-2"
             onChange={(e) => setSalesFiles(Array.from(e.target.files))}
           />
 
@@ -78,7 +85,7 @@ export default function TrainPage() {
           <textarea
             className="w-full p-3 border rounded"
             rows={6}
-            placeholder="Paste dealership sales processes, scripts, objections, rules, etc."
+            placeholder="Paste dealership sales processes, scripts, laws, rules, etc."
             value={salesText}
             onChange={(e) => setSalesText(e.target.value)}
           />
