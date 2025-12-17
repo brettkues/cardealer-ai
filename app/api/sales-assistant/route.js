@@ -13,26 +13,36 @@ const openai = new OpenAI({
 export async function POST(req) {
   try {
     const { messages } = await req.json();
-    const userMessage = messages[messages.length - 1]?.content;
+    const userMessage = messages[messages.length - 1]?.content || "";
 
     const queryEmbedding = await embedText(userMessage);
-    const matches = searchVectors(queryEmbedding, 8);
+    const matches = searchVectors(queryEmbedding, 10);
 
-    const context = matches.map(m => m.text).join("\n\n");
+    const context = matches.map((m, i) =>
+      `[SOURCE ${i + 1}] ${m.text}`
+    ).join("\n\n");
+
+    const prompt = `
+${salesSystemPrompt}
+
+RULES (MANDATORY):
+- You MUST base your answer on the TRAINING MATERIAL below
+- If the answer is not found in the training, say: "Not found in dealership training"
+- Do NOT answer from general knowledge
+- Do NOT change industries
+
+TRAINING MATERIAL:
+${context || "None"}
+
+QUESTION:
+${userMessage}
+
+ANSWER:
+`;
 
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
-      input: `
-${salesSystemPrompt}
-
-DEALER TRAINING MATERIAL:
-${context || "None"}
-
-CONVERSATION:
-${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n")}
-
-ANSWER AS DEALERSHIP SALES EXPERT:
-`
+      input: prompt
     });
 
     return NextResponse.json({
