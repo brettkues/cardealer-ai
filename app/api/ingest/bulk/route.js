@@ -7,13 +7,15 @@ export async function POST(req) {
   try {
     const { department = "sales", limit = 20 } = await req.json();
 
-    // 1. Get already-ingested files
-    const { data: existing } = await supabase
-      .from("sales_training_vectors")
-      .select("source")
+    // 1. Files already attempted (success OR failed)
+    const { data: attempted } = await supabase
+      .from("training_ingest_log")
+      .select("file_path")
       .eq("department", department);
 
-    const ingested = new Set((existing || []).map(r => r.source));
+    const attemptedSet = new Set(
+      (attempted || []).map(r => r.file_path)
+    );
 
     // 2. List files in storage
     const { data: files, error } = await supabase
@@ -25,16 +27,17 @@ export async function POST(req) {
       return NextResponse.json({ error }, { status: 500 });
     }
 
-    // 3. Filter duplicates + already ingested
+    // 3. Filter out attempted files + obvious duplicates
     const seen = new Set();
     const candidates = files.filter(f => {
       const base = f.name.replace(/\s*\(\d+\)/, "");
       if (seen.has(base)) return false;
-      if (ingested.has(f.name)) return false;
+      if (attemptedSet.has(f.name)) return false;
       seen.add(base);
       return true;
     });
 
+    // 4. Take next batch
     const batch = candidates.slice(0, limit);
     const results = [];
 
@@ -52,10 +55,7 @@ export async function POST(req) {
         })
       });
 
-      results.push({
-        file: file.name,
-        status: res.status
-      });
+      results.push({ file: file.name, status: res.status });
     }
 
     return NextResponse.json({
