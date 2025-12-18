@@ -16,16 +16,16 @@ function chunkText(text, size = 800, overlap = 100) {
 }
 
 export async function POST(req) {
+  let filename;
+  let department;
+
   try {
     const body = await req.json();
-    const filename = body.filePath || body.filename;
-    const department = body.department || "sales";
+    filename = body.filePath || body.filename;
+    department = body.department || "sales";
 
     if (!filename) {
-      return NextResponse.json(
-        { error: "filename required" },
-        { status: 400 }
-      );
+      throw new Error("filename required");
     }
 
     const { data, error: downloadError } = await supabase
@@ -33,24 +33,17 @@ export async function POST(req) {
       .from("TRAINING FILES")
       .download(filename);
 
-    if (downloadError) {
-      return NextResponse.json(
-        { error: "Storage download failed", details: downloadError },
-        { status: 500 }
-      );
-    }
+    if (downloadError) throw downloadError;
 
     const buffer = Buffer.from(await data.arrayBuffer());
     const parsed = await pdf(buffer);
     const text = parsed.text;
 
     if (!text || text.length < 100) {
-      return NextResponse.json(
-        { error: "Parsed text empty or too small" },
-        { status: 500 }
-      );
+      throw new Error("Parsed text empty");
     }
 
+    // remove old vectors
     await supabase
       .from("sales_training_vectors")
       .delete()
@@ -58,29 +51,41 @@ export async function POST(req) {
       .eq("department", department);
 
     const chunks = chunkText(text);
-    let stored = 0;
 
     for (const chunk of chunks) {
       const embedding = await embedText(chunk);
-
       await supabase.from("sales_training_vectors").insert({
         content: chunk,
         embedding,
         source: filename,
         department
       });
-
-      stored++;
     }
+
+    // LOG SUCCESS
+    await supabase.from("training_ingest_log").upsert({
+      file_path: filename,
+      department,
+      status: "success"
+    });
 
     return NextResponse.json({
       ok: true,
       filename,
       department,
-      chunksStored: stored
+      chunksStored: chunks.length
     });
 
   } catch (err) {
+    // LOG FAILURE
+    if (filename) {
+      await supabase.from("training_ingest_log").upsert({
+        file_path: filename,
+        department,
+        status: "failed"
+      });
+    }
+
     return NextResponse.json(
       { error: String(err) },
       { status: 500 }
