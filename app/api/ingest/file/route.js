@@ -14,6 +14,7 @@ export async function POST() {
     if (error) throw error;
 
     const buffer = Buffer.from(await data.arrayBuffer());
+
     const parsed = await pdf(buffer);
 
     return NextResponse.json({
@@ -23,7 +24,10 @@ export async function POST() {
 
   } catch (err) {
     return NextResponse.json(
-      { error: String(err) },
+      {
+        error: err?.message || String(err),
+        raw: err
+      },
       { status: 500 }
     );
   }
