@@ -3,41 +3,45 @@ import { supabase } from "@/lib/supabaseClient";
 
 export const runtime = "nodejs";
 
+async function listAllFiles(bucket) {
+  let files = [];
+  let offset = 0;
+  const limit = 100;
+
+  while (true) {
+    const { data, error } = await supabase
+      .storage
+      .from(bucket)
+      .list("", { limit, offset });
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    files = files.concat(data);
+    offset += limit;
+  }
+
+  return files;
+}
+
 export async function POST(req) {
   try {
     const { department = "sales", limit = 20 } = await req.json();
 
-    // 1. Files already attempted (success OR failed)
+    // files already attempted
     const { data: attempted } = await supabase
       .from("training_ingest_log")
       .select("file_path")
       .eq("department", department);
 
-    const attemptedSet = new Set(
-      (attempted || []).map(r => r.file_path)
-    );
+    const attemptedSet = new Set((attempted || []).map(r => r.file_path));
 
-    // 2. List files in storage
-    const { data: files, error } = await supabase
-      .storage
-      .from("TRAINING FILES")
-      .list("", { limit: 1000 });
+    // ✅ list ALL storage files (not just first 100)
+    const files = await listAllFiles("TRAINING FILES");
 
-    if (error) {
-      return NextResponse.json({ error }, { status: 500 });
-    }
+    // filter unattempted
+    const candidates = files.filter(f => !attemptedSet.has(f.name));
 
-    // 3. Filter out attempted files + obvious duplicates
-    const seen = new Set();
-    const candidates = files.filter(f => {
-      const base = f.name.replace(/\s*\(\d+\)/, "");
-      if (seen.has(base)) return false;
-      if (attemptedSet.has(f.name)) return false;
-      seen.add(base);
-      return true;
-    });
-
-    // 4. Take next batch
     const batch = candidates.slice(0, limit);
     const results = [];
 
@@ -61,7 +65,7 @@ export async function POST(req) {
     return NextResponse.json({
       ok: true,
       processed: results.length,
-      results
+      remaining: candidates.length - batch.length
     });
 
   } catch (err) {
