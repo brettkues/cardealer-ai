@@ -1,32 +1,28 @@
 export function detectTrainingIntent(message) {
   const text = message.toLowerCase().trim();
 
-  // FORGET — any reasonable human phrasing
+  // FORGET — must explicitly say forget/delete/remove
   if (
     text.startsWith("forget ") ||
-    text.startsWith("forget that") ||
-    text.startsWith("delete my") ||
-    text.startsWith("remove my") ||
-    text.startsWith("stop remembering")
+    text.startsWith("delete ") ||
+    text.startsWith("remove ")
   ) {
     return "forget";
   }
 
   // PERSONAL NOTE
   if (
-    text.includes("remember this for me") ||
-    text.includes("note for me") ||
+    text.startsWith("remember this for me") ||
     text.startsWith("i like ") ||
     text.startsWith("my preference is")
   ) {
     return "personal";
   }
 
-  // REPLACE (authoritative)
+  // REPLACE (policy change)
   if (
     text.includes("effective immediately") ||
     text.includes("this replaces") ||
-    text.includes("update our") ||
     text.includes("no longer")
   ) {
     return "replace";
@@ -35,18 +31,13 @@ export function detectTrainingIntent(message) {
   // ADD (authoritative)
   if (
     text.includes("we should always") ||
-    text.includes("this is our process") ||
-    text.includes("from now on")
+    text.includes("this is our process")
   ) {
     return "add";
   }
 
-  // FYI / reference
-  if (
-    text.includes("for context") ||
-    text.includes("heads up") ||
-    text.startsWith("fyi")
-  ) {
+  // FYI
+  if (text.startsWith("fyi")) {
     return "reference";
   }
 
