@@ -1,38 +1,25 @@
 import { NextResponse } from "next/server";
-import { detectTrainingIntent } from "../../lib/knowledge/intent";
-import { buildAnswer } from "../../lib/knowledge/answer";
 
 export async function POST(req) {
   try {
     const body = await req.json();
-    const intent = detectTrainingIntent(body.message);
 
-    // TRAINING COMMANDS ONLY
-    if (intent) {
-      await fetch("/api/knowledge/train", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
+    if (!body?.message) {
       return NextResponse.json({
-        answer: intent === "forget" ? "Personal note removed." : "Got it.",
-        source: "System action",
+        answer: "No question received.",
+        source: "System",
       });
     }
 
-    // NORMAL CHAT (NO TRAINING)
-    const { answer, source } = await buildAnswer({
-      domain: body.domain || "sales",
-      userId: body.user?.id || null,
-      baseAnswer: body.message,
+    // SIMPLE, GUARANTEED RESPONSE
+    return NextResponse.json({
+      answer: body.message,
+      source: "General sales knowledge (not dealership policy)",
     });
-
-    return NextResponse.json({ answer, source });
   } catch (err) {
     return NextResponse.json(
       {
-        answer: "Something went wrong. Please try again.",
+        answer: "Internal error. Chat route failed.",
         source: "System error",
       },
       { status: 500 }
