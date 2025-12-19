@@ -1,37 +1,25 @@
-import { db } from "@/app/lib/db";
+import { supabase } from "../supabaseClient";
 
-export async function retrieveKnowledge({
-  domain,
-  userId = null,
-}) {
-  const params = [domain];
-  let userClause = "";
+export async function retrieveKnowledge({ domain, userId = null }) {
+  let query = supabase
+    .from("knowledge")
+    .select("*")
+    .eq("domain", domain)
+    .eq("status", "active")
+    .or("expires_at.is.null,expires_at.gt.now()");
 
   if (userId) {
-    params.push(userId);
-    userClause = `
-      OR (scope = 'user' AND owner_user_id = $2)
-    `;
+    query = query.or(
+      `scope.eq.global,scope.eq.user.and(owner_user_id.eq.${userId})`
+    );
+  } else {
+    query = query.eq("scope", "global");
   }
 
-  const result = await db.query(
-    `
-    SELECT *
-    FROM knowledge
-    WHERE
-      domain = $1
-      AND status = 'active'
-      AND (
-        scope = 'global'
-        ${userClause}
-      )
-      AND (expires_at IS NULL OR expires_at > NOW())
-    ORDER BY
-      authority DESC,
-      added_at DESC
-    `,
-    params
-  );
+  const { data, error } = await query
+    .order("authority", { ascending: false })
+    .order("added_at", { ascending: false });
 
-  return result.rows;
+  if (error) throw error;
+  return data;
 }
