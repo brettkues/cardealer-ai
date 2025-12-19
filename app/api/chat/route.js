@@ -1,32 +1,28 @@
 import { NextResponse } from "next/server";
-import { buildAnswer } from "../../lib/knowledge/answer";
-
-// Still no training. No internal fetch. No Supabase writes.
-
-async function getBaseAnswer(question) {
-  return `Base answer OK. Question was: ${question}`;
-}
+import { retrieveKnowledge } from "../../lib/knowledge/retrieve";
 
 export async function POST(req) {
   try {
     const body = await req.json();
 
-    const baseAnswer = await getBaseAnswer(body.message);
-
-    const { answer, source } = await buildAnswer({
+    const knowledge = await retrieveKnowledge({
       domain: body.domain || "sales",
       userId: body.user?.id || null,
-      baseAnswer,
     });
 
-    return NextResponse.json({ answer, source });
+    return NextResponse.json({
+      answer: "retrieveKnowledge OK",
+      source: "Isolation",
+      debug: knowledge,
+    });
   } catch (err) {
-    console.error("CHAT BUILDANSWER ERROR:", err);
+    console.error("RETRIEVE KNOWLEDGE ERROR:", err);
 
     return NextResponse.json(
       {
-        answer: "Chat failed while building answer.",
-        source: "BuildAnswer error",
+        answer: "retrieveKnowledge crashed",
+        source: "Isolation error",
+        error: err.message || String(err),
       },
       { status: 500 }
     );
