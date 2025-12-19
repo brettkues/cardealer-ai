@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 import {
   setPersonalMemory,
   getPersonalMemory,
@@ -6,18 +7,34 @@ import {
 } from "../../lib/memory/personalStore";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const MAX_TURNS = 6;
+
+function detectMemoryIntent(text) {
+  const t = text.toLowerCase().trim();
+  if (t.startsWith("remember this for me")) return "remember";
+  if (t === "forget that" || t.startsWith("forget")) return "forget";
+  if (t === "what do you remember about me") return "recall";
+  return null;
+}
+
 export async function POST(req) {
   try {
     const {
       message,
+      history = [],
       userId = "default",
       domain = "sales",
     } = await req.json();
 
-    // ===== MEMORY COMMANDS (unchanged) =====
-    const t = message.toLowerCase().trim();
+    const intent = detectMemoryIntent(message);
 
-    if (t.startsWith("remember this for me")) {
+    /* ===== PERSONAL MEMORY ===== */
+
+    if (intent === "remember") {
       const content = message
         .replace(/remember this for me[:]?/i, "")
         .trim();
@@ -30,7 +47,7 @@ export async function POST(req) {
       });
     }
 
-    if (t === "forget that" || t.startsWith("forget")) {
+    if (intent === "forget") {
       await clearPersonalMemory(userId);
 
       return NextResponse.json({
@@ -39,7 +56,7 @@ export async function POST(req) {
       });
     }
 
-    if (t === "what do you remember about me") {
+    if (intent === "recall") {
       const personalPreference = await getPersonalMemory(userId);
 
       return NextResponse.json({
@@ -50,18 +67,53 @@ export async function POST(req) {
       });
     }
 
-    // ===== DEALER BRAIN DEBUG =====
+    /* ===== DEALER BRAIN ===== */
+
     const dealerKnowledge = await retrieveKnowledge(message, domain);
+    const personalPreference = await getPersonalMemory(userId);
+
+    let systemPrompt =
+      "You are a professional automotive sales assistant.\n" +
+      "Be concise, practical, and accurate.\n";
+
+    if (personalPreference) {
+      systemPrompt += `Personal preference: ${personalPreference}\n`;
+    }
+
+    if (dealerKnowledge.length > 0) {
+      systemPrompt +=
+        "\nUse the following dealership-approved guidance when relevant:\n" +
+        dealerKnowledge.map((k) => `- ${k}`).join("\n");
+    }
+
+    /* ===== OPENAI ===== */
+
+    const recentHistory = history.slice(0, MAX_TURNS).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...recentHistory.reverse(),
+        { role: "user", content: message },
+      ],
+      temperature: 0.7,
+    });
 
     return NextResponse.json({
-      answer: "DEALER BRAIN DEBUG",
-      dealerKnowledge,
-      source: "debug",
+      answer: response.choices[0].message.content,
+      source:
+        dealerKnowledge.length > 0
+          ? "Dealership training"
+          : "General sales knowledge",
     });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
-      { answer: "DEBUG ERROR", error: err.message },
+      { answer: "AI failed to respond.", source: "System error" },
       { status: 500 }
     );
   }
