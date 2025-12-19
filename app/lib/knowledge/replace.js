@@ -1,4 +1,4 @@
-import { db } from "@/app/lib/db";
+import { db } from "../db";
 import { insertKnowledge } from "./insert";
 import { writeKnowledgeAudit } from "./audit";
 
