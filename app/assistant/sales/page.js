@@ -48,7 +48,7 @@ export default function SalesAssistant() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto p-4 bg-gray-50">
+      <div className="flex-1 overflow-auto p-4 bg-gray-50 flex flex-col-reverse">
         {chat.map((m, i) => (
           <div key={i} className="mb-4">
             <b>{m.role === "user" ? "You" : "AI"}:</b>
