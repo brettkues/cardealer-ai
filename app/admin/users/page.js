@@ -9,7 +9,6 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
 
-  // Get logged-in user from Firebase
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -25,6 +24,7 @@ export default function AdminUsersPage() {
 
   async function loadUsers(userId) {
     setLoading(true);
+
     const res = await fetch("/api/admin/users", {
       headers: {
         "x-user-id": userId,
@@ -69,7 +69,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">User Roles (Admin)</h1>
 
       {users.length === 0 ? (
@@ -80,6 +80,7 @@ export default function AdminUsersPage() {
         <table className="w-full border">
           <thead>
             <tr className="bg-gray-100">
+              <th className="p-2 border text-left">Email</th>
               <th className="p-2 border text-left">User ID</th>
               <th className="p-2 border text-left">Role</th>
             </tr>
@@ -87,7 +88,12 @@ export default function AdminUsersPage() {
           <tbody>
             {users.map((u) => (
               <tr key={u.user_id}>
-                <td className="p-2 border text-sm">{u.user_id}</td>
+                <td className="p-2 border text-sm">
+                  {u.email || "—"}
+                </td>
+                <td className="p-2 border text-xs text-gray-500">
+                  {u.user_id}
+                </td>
                 <td className="p-2 border">
                   <select
                     className="border p-1 rounded"
