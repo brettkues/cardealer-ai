@@ -22,6 +22,16 @@ function detectMemoryIntent(text) {
 }
 
 export async function POST(req) {
+  /* ======================
+     HARD STOP — STEP 1
+     ====================== */
+  return NextResponse.json({
+    answer: "ROUTE HIT CONFIRMED",
+    source: "hard stop",
+  });
+
+  /* ===== EVERYTHING BELOW IS TEMPORARILY UNREACHABLE ===== */
+
   try {
     const {
       message,
@@ -31,10 +41,6 @@ export async function POST(req) {
     } = await req.json();
 
     const intent = detectMemoryIntent(message);
-
-    /* ======================
-       MEMORY COMMANDS
-       ====================== */
 
     if (intent === "remember") {
       const content = message
@@ -69,17 +75,8 @@ export async function POST(req) {
       });
     }
 
-    /* ======================
-       DEALER BRAIN LOOKUP
-       ====================== */
-
     const dealerKnowledge = await retrieveKnowledge(message, domain);
-    console.log("DEALER KNOWLEDGE:", dealerKnowledge);
     const personalPreference = await getPersonalMemory(userId);
-
-    /* ======================
-       SYSTEM PROMPT
-       ====================== */
 
     let systemPrompt =
       "You are a professional automotive sales assistant.\n" +
@@ -94,10 +91,6 @@ export async function POST(req) {
         "\nUse the following dealership-approved guidance exactly:\n" +
         dealerKnowledge.map((k) => `- ${k}`).join("\n");
     }
-
-    /* ======================
-       CHAT COMPLETION
-       ====================== */
 
     const recentHistory = history.slice(0, MAX_TURNS).map((m) => ({
       role: m.role,
