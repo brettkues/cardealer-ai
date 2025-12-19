@@ -1,6 +1,16 @@
 export function detectTrainingIntent(message) {
   const text = message.toLowerCase();
 
+  // FORGET (user-scoped only)
+  if (
+    text.startsWith("forget that") ||
+    text.startsWith("delete my note") ||
+    text.startsWith("remove my personal")
+  ) {
+    return "forget";
+  }
+
+  // REPLACE
   if (
     text.includes("replace") ||
     text.includes("effective immediately") ||
@@ -10,6 +20,7 @@ export function detectTrainingIntent(message) {
     return "replace";
   }
 
+  // ADD (authoritative)
   if (
     text.includes("add this to training") ||
     text.includes("remember this going forward") ||
@@ -19,6 +30,7 @@ export function detectTrainingIntent(message) {
     return "add";
   }
 
+  // FYI / reference
   if (
     text.includes("for context") ||
     text.includes("heads up") ||
@@ -28,6 +40,7 @@ export function detectTrainingIntent(message) {
     return "reference";
   }
 
+  // PERSONAL NOTE
   if (
     text.includes("remember this for me") ||
     text.includes("note for me") ||
