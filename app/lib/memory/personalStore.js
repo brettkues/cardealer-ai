@@ -1,28 +1,33 @@
-// In-memory personal preference store (per user/session)
-// Safe baseline. We can persist later.
+import { supabase } from "../supabaseClient";
 
-const personalMemory = new Map();
-
-/**
- * Save a personal preference
- */
-export function setPersonalMemory(userId, content) {
+export async function setPersonalMemory(userId, content) {
   if (!userId) return;
-  personalMemory.set(userId, content);
+
+  await supabase
+    .from("personal_memory")
+    .upsert(
+      { user_id: userId, content, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
 }
 
-/**
- * Get a personal preference
- */
-export function getPersonalMemory(userId) {
+export async function getPersonalMemory(userId) {
   if (!userId) return null;
-  return personalMemory.get(userId) || null;
+
+  const { data } = await supabase
+    .from("personal_memory")
+    .select("content")
+    .eq("user_id", userId)
+    .single();
+
+  return data?.content || null;
 }
 
-/**
- * Forget a personal preference
- */
-export function clearPersonalMemory(userId) {
+export async function clearPersonalMemory(userId) {
   if (!userId) return;
-  personalMemory.delete(userId);
+
+  await supabase
+    .from("personal_memory")
+    .delete()
+    .eq("user_id", userId);
 }
