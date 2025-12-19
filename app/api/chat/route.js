@@ -22,7 +22,7 @@ export async function POST(req) {
         {
           role: "system",
           content:
-            "You are a professional automotive sales assistant. " +
+            "You're a professional automotive sales assistant. " +
             "Be clear, practical, and helpful. Avoid fluff.",
         },
         {
