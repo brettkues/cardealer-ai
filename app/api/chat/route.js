@@ -1,41 +1,47 @@
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
-function normalize(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function answerSales(question) {
-  const q = normalize(question);
-
-  const hasFollowUp =
-    q.includes("follow up") || q.includes("followup");
-
-  if (hasFollowUp && q.includes("test drive")) {
-    return (
-      "Hi [Name], thanks again for taking the [Vehicle] for a drive today. " +
-      "Do you have any questions I can answer, or would you like to take the next step?"
-    );
-  }
-
-  return "Tell me a bit more about what you’re looking to accomplish and I’ll help.";
-}
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function POST(req) {
   try {
-    const body = await req.json();
+    const { message } = await req.json();
+
+    if (!message) {
+      return NextResponse.json({
+        answer: "No message received.",
+        source: "System",
+      });
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a professional automotive sales assistant. " +
+            "Be clear, practical, and helpful. Avoid fluff.",
+        },
+        {
+          role: "user",
+          content: message,
+        },
+      ],
+      temperature: 0.5,
+    });
 
     return NextResponse.json({
-      answer: answerSales(body.message || ""),
-      source: "General sales knowledge (not dealership policy)",
+      answer: response.choices[0].message.content,
+      source: "AI-generated response",
     });
-  } catch {
+  } catch (err) {
+    console.error("OpenAI error:", err);
     return NextResponse.json(
       {
-        answer: "Something went wrong. Please try again.",
+        answer: "AI failed to respond.",
         source: "System error",
       },
       { status: 500 }
