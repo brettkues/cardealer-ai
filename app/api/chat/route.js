@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildAnswer } from "@/app/lib/knowledge/answer";
+import { buildAnswer } from "../../lib/knowledge/answer";
 
 // NOTE: replace this stub with your real LLM call if it already exists
 async function getBaseAnswer(question) {
