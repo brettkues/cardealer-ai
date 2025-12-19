@@ -12,33 +12,48 @@ export default function SalesAssistant() {
 
     const userMessage = { role: "user", content: msg };
 
-    // PREPEND user message
+    // Put user message at the top
     const newChat = [userMessage, ...chat];
     setChat(newChat);
     setMsg("");
     setLoading(true);
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: msg,
-        domain: "sales",
-        user: { role: "sales" }, // add id later if needed
-      }),
-    });
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMessage.content,
+          domain: "sales",
+          user: { role: "sales" },
+        }),
+      });
 
-    const data = await res.json();
+      if (!res.ok) {
+        throw new Error("Request failed");
+      }
 
-    const aiMessage = {
-      role: "assistant",
-      content: data.answer || data.reply || "",
-      source: data.source || null,
-    };
+      const data = await res.json();
 
-    // PREPEND AI reply directly under the user message
-    setChat([aiMessage, ...newChat]);
-    setLoading(false);
+      const aiMessage = {
+        role: "assistant",
+        content: data.answer || "No response received.",
+        source: data.source || null,
+      };
+
+      // Put AI response directly under the user message
+      setChat([aiMessage, ...newChat]);
+    } catch (err) {
+      setChat([
+        {
+          role: "assistant",
+          content: "Something went wrong. Please try again.",
+        },
+        ...newChat,
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleKeyDown(e) {
@@ -60,6 +75,7 @@ export default function SalesAssistant() {
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={2}
+          disabled={loading}
         />
       </div>
 
@@ -70,6 +86,7 @@ export default function SalesAssistant() {
             <div className="font-semibold">
               {m.role === "user" ? "You" : "AI"}
             </div>
+
             <div className="whitespace-pre-wrap">{m.content}</div>
 
             {m.source && (
