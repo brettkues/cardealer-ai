@@ -17,12 +17,9 @@ export async function retrieveKnowledge(question, domain = "sales") {
 
   // Pull active dealership training
   const { data, error } = await supabase
-    .from("knowledge")
-    .select("content")
-    .eq("domain", domain)
-    .eq("status", "active")
-    .in("authority", ["approved", "reference"])
-    .limit(20);
+  .from("knowledge")
+  .select("*")
+  .limit(10);
 
   if (error || !data) return [];
 
