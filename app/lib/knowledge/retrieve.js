@@ -1,33 +1,44 @@
-import { supabase } from "../supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
-export async function retrieveKnowledge({ domain, userId }) {
-  const queries = [];
+/**
+ * Retrieve relevant dealership knowledge for a question.
+ * Safe baseline: keyword relevance against approved training only.
+ */
+export async function retrieveKnowledge(question, domain = "sales") {
+  if (!question) return [];
 
-  // Personal (user-scoped)
-  if (userId) {
-    queries.push(
-      supabase
-        .from("knowledge")
-        .select("*")
-        .eq("domain", domain)
-        .eq("scope", "user")
-        .eq("authority", "personal")
-        .eq("owner_user_id", userId)
-        .eq("status", "active")
-    );
-  }
+  // Extract meaningful terms
+  const terms = question
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
 
-  // Global approved
-  queries.push(
-    supabase
-      .from("knowledge")
-      .select("*")
-      .eq("domain", domain)
-      .eq("scope", "global")
-      .eq("authority", "approved")
-      .eq("status", "active")
-  );
+  if (terms.length === 0) return [];
 
-  const results = await Promise.all(queries);
-  return results.flatMap(r => r.data || []);
+  // Pull active dealership training
+  const { data, error } = await supabase
+    .from("knowledge")
+    .select("content")
+    .eq("domain", domain)
+    .eq("status", "active")
+    .in("authority", ["approved", "reference"])
+    .limit(20);
+
+  if (error || !data) return [];
+
+  // Score by keyword overlap (transparent + predictable)
+  const scored = data
+    .map((row) => {
+      const text = row.content.toLowerCase();
+      let score = 0;
+      for (const term of terms) {
+        if (text.includes(term)) score += 1;
+      }
+      return { content: row.content, score };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  // Return top matches only (never hallucinate)
+  return scored.slice(0, 3).map((r) => r.content);
 }
