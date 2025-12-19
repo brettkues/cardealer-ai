@@ -1,42 +1,42 @@
 export function detectTrainingIntent(message) {
   const text = message.toLowerCase().trim();
 
-  // FORGET — must explicitly say forget/delete/remove
+  // 🔒 FORGET — must be an explicit command
   if (
+    text === "forget" ||
     text.startsWith("forget ") ||
-    text.startsWith("delete ") ||
-    text.startsWith("remove ")
+    text.startsWith("forget that ") ||
+    text.startsWith("delete my ") ||
+    text.startsWith("remove my ")
   ) {
     return "forget";
   }
 
-  // PERSONAL NOTE
+  // PERSONAL MEMORY — explicit only
   if (
     text.startsWith("remember this for me") ||
-    text.startsWith("i like ") ||
-    text.startsWith("my preference is")
+    text.startsWith("remember for me")
   ) {
     return "personal";
   }
 
-  // REPLACE (policy change)
+  // AUTHORITATIVE ADD
   if (
-    text.includes("effective immediately") ||
-    text.includes("this replaces") ||
-    text.includes("no longer")
-  ) {
-    return "replace";
-  }
-
-  // ADD (authoritative)
-  if (
-    text.includes("we should always") ||
-    text.includes("this is our process")
+    text.startsWith("we should always") ||
+    text.startsWith("this is our process")
   ) {
     return "add";
   }
 
-  // FYI
+  // REPLACE POLICY
+  if (
+    text.includes("effective immediately") ||
+    text.includes("this replaces")
+  ) {
+    return "replace";
+  }
+
+  // FYI / NON-BINDING
   if (text.startsWith("fyi")) {
     return "reference";
   }
