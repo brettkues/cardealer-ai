@@ -1,41 +1,22 @@
 import { supabase } from "@/lib/supabaseClient";
 
 /**
- * Retrieve relevant dealership knowledge for a question.
- * Safe baseline: keyword relevance against approved training only.
+ * Retrieve dealership training from vector table (sales_training_vectors)
+ * This reconnects the dealer brain.
  */
-export async function retrieveKnowledge(question, domain = "sales") {
-  if (!question) return [];
-
-  // Extract meaningful terms
-  const terms = question
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => w.length > 3);
-
-  if (terms.length === 0) return [];
-
-  // Pull active dealership training
+export async function retrieveKnowledge(message, domain) {
   const { data, error } = await supabase
-  .from("knowledge")
-  .select("*")
-  .limit(10);
+    .from("sales_training_vectors")
+    .select("content")
+    .order("id", { ascending: false })
+    .limit(8);
 
-  if (error || !data) return [];
+  if (error) {
+    console.error("retrieveKnowledge error:", error);
+    return [];
+  }
 
-  // Score by keyword overlap (transparent + predictable)
-  const scored = data
-    .map((row) => {
-      const text = row.content.toLowerCase();
-      let score = 0;
-      for (const term of terms) {
-        if (text.includes(term)) score += 1;
-      }
-      return { content: row.content, score };
-    })
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  // Return top matches only (never hallucinate)
-  return scored.slice(0, 3).map((r) => r.content);
+  return (data || [])
+    .map((row) => row.content)
+    .filter(Boolean);
 }
