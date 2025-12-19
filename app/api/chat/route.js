@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
+function normalize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+}
+
 function answerSales(question) {
-  const q = question.toLowerCase();
+  const q = normalize(question);
 
   if (q.includes("follow up") && q.includes("test drive")) {
     return (
@@ -25,7 +29,10 @@ export async function POST(req) {
     });
   } catch {
     return NextResponse.json(
-      { answer: "Something went wrong. Please try again.", source: "System error" },
+      {
+        answer: "Something went wrong. Please try again.",
+        source: "System error",
+      },
       { status: 500 }
     );
   }
