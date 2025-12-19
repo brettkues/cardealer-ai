@@ -1,25 +1,33 @@
 import { supabase } from "../supabaseClient";
 
-export async function retrieveKnowledge({ domain, userId = null }) {
-  let query = supabase
-    .from("knowledge")
-    .select("*")
-    .eq("domain", domain)
-    .eq("status", "active")
-    .or("expires_at.is.null,expires_at.gt.now()");
+export async function retrieveKnowledge({ domain, userId }) {
+  const queries = [];
 
+  // Personal (user-scoped)
   if (userId) {
-    query = query.or(
-      `scope.eq.global,scope.eq.user.and(owner_user_id.eq.${userId})`
+    queries.push(
+      supabase
+        .from("knowledge")
+        .select("*")
+        .eq("domain", domain)
+        .eq("scope", "user")
+        .eq("authority", "personal")
+        .eq("owner_user_id", userId)
+        .eq("status", "active")
     );
-  } else {
-    query = query.eq("scope", "global");
   }
 
-  const { data, error } = await query
-    .order("authority", { ascending: false })
-    .order("added_at", { ascending: false });
+  // Global approved
+  queries.push(
+    supabase
+      .from("knowledge")
+      .select("*")
+      .eq("domain", domain)
+      .eq("scope", "global")
+      .eq("authority", "approved")
+      .eq("status", "active")
+  );
 
-  if (error) throw error;
-  return data;
+  const results = await Promise.all(queries);
+  return results.flatMap(r => r.data || []);
 }
