@@ -5,6 +5,7 @@ import {
   getPersonalMemory,
   clearPersonalMemory,
 } from "../../lib/memory/personalStore";
+import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -20,14 +21,21 @@ function detectMemoryIntent(text) {
   return null;
 }
 
-
 export async function POST(req) {
   try {
-    const { message, history = [], userId = "default" } = await req.json();
+    const {
+      message,
+      history = [],
+      userId = "default",
+      domain = "sales",
+    } = await req.json();
 
     const intent = detectMemoryIntent(message);
 
-    // MEMORY COMMANDS
+    /* ======================
+       MEMORY COMMANDS
+       ====================== */
+
     if (intent === "remember") {
       const content = message
         .replace(/remember this for me[:]?/i, "")
@@ -49,32 +57,51 @@ export async function POST(req) {
         source: "Personal memory",
       });
     }
-if (intent === "recall") {
-  const personalPreference = await getPersonalMemory(userId);
 
-  return NextResponse.json({
-    answer: personalPreference
-      ? `Here’s what I remember about you: ${personalPreference}`
-      : "I don’t have any personal preferences saved for you.",
-    source: "Personal memory",
-  });
-}
+    if (intent === "recall") {
+      const personalPreference = await getPersonalMemory(userId);
 
-    // NORMAL CHAT
+      return NextResponse.json({
+        answer: personalPreference
+          ? `Here’s what I remember about you: ${personalPreference}`
+          : "I don’t have any personal preferences saved for you.",
+        source: "Personal memory",
+      });
+    }
+
+    /* ======================
+       DEALER BRAIN LOOKUP
+       ====================== */
+
+    const dealerKnowledge = await retrieveKnowledge(message, domain);
     const personalPreference = await getPersonalMemory(userId);
+
+    /* ======================
+       SYSTEM PROMPT
+       ====================== */
+
+    let systemPrompt =
+      "You are a professional automotive sales assistant.\n" +
+      "Be concise, practical, and helpful.\n";
+
+    if (personalPreference) {
+      systemPrompt += `Personal preference: ${personalPreference}\n`;
+    }
+
+    if (dealerKnowledge.length > 0) {
+      systemPrompt +=
+        "\nUse the following dealership-approved guidance exactly:\n" +
+        dealerKnowledge.map((k) => `- ${k}`).join("\n");
+    }
+
+    /* ======================
+       CHAT COMPLETION
+       ====================== */
 
     const recentHistory = history.slice(0, MAX_TURNS).map((m) => ({
       role: m.role,
       content: m.content,
     }));
-
-    const systemPrompt = personalPreference
-      ? `You are a professional automotive sales assistant.
-Personal preference: ${personalPreference}.
-Vary wording slightly each time while keeping the same intent.
-Be concise, practical, and helpful.`
-      : `You are a professional automotive sales assistant.
-Be concise, practical, and helpful.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -88,11 +115,13 @@ Be concise, practical, and helpful.`;
 
     return NextResponse.json({
       answer: response.choices[0].message.content,
-      source: personalPreference
-        ? "AI-generated response (personal preference applied)"
-        : "AI-generated response",
+      source:
+        dealerKnowledge.length > 0
+          ? "Dealership training"
+          : "General sales knowledge",
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { answer: "AI failed to respond.", source: "System error" },
       { status: 500 }
