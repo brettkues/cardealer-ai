@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
-import { buildAnswer } from "../../lib/knowledge/answer";
 import { detectTrainingIntent } from "../../lib/knowledge/intent";
-
-async function getBaseAnswer(question) {
-  return question;
-}
+import { buildAnswer } from "../../lib/knowledge/answer";
 
 export async function POST(req) {
   try {
     const body = await req.json();
     const intent = detectTrainingIntent(body.message);
 
-    // ✅ TRAINING COMMANDS ONLY
+    // TRAINING COMMANDS ONLY
     if (intent) {
       await fetch("/api/knowledge/train", {
         method: "POST",
@@ -25,21 +21,18 @@ export async function POST(req) {
       });
     }
 
-    // ✅ NORMAL CHAT — NO TRAINING SIDE EFFECTS
-    const baseAnswer = await getBaseAnswer(body.message);
-
+    // NORMAL CHAT (NO TRAINING)
     const { answer, source } = await buildAnswer({
       domain: body.domain || "sales",
       userId: body.user?.id || null,
-      baseAnswer,
+      baseAnswer: body.message,
     });
 
     return NextResponse.json({ answer, source });
   } catch (err) {
-    console.error("CHAT ERROR:", err);
     return NextResponse.json(
       {
-        answer: "The assistant hit an internal error. Please try again.",
+        answer: "Something went wrong. Please try again.",
         source: "System error",
       },
       { status: 500 }
