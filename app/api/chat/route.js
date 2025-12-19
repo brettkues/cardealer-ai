@@ -74,6 +74,7 @@ export async function POST(req) {
        ====================== */
 
     const dealerKnowledge = await retrieveKnowledge(message, domain);
+    console.log("DEALER KNOWLEDGE:", dealerKnowledge);
     const personalPreference = await getPersonalMemory(userId);
 
     /* ======================
