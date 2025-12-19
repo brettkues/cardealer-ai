@@ -1,5 +1,6 @@
-import { db } from "../db";
+import { insertKnowledgeRow } from "./db";
 import { hashContent } from "./hash";
+import { writeKnowledgeAudit } from "./audit";
 
 export async function insertKnowledge(params) {
   const {
@@ -12,49 +13,31 @@ export async function insertKnowledge(params) {
     addedByUserId,
     effectiveDate = null,
     expiresAt = null,
-    replacesKnowledgeId = null,
   } = params;
 
   const contentHash = hashContent(content);
 
-  const result = await db.query(
-    `
-    INSERT INTO knowledge (
-      domain,
-      department,
-      content,
-      content_hash,
-      authority,
-      scope,
-      owner_user_id,
-      status,
-      effective_date,
-      expires_at,
-      replaces_knowledge_id,
-      added_by_user_id
-    )
-    VALUES (
-      $1,$2,$3,$4,
-      $5,$6,$7,
-      'active',$8,$9,
-      $10,$11
-    )
-    RETURNING *
-    `,
-    [
-      domain,
-      department,
-      content,
-      contentHash,
-      authority,
-      scope,
-      ownerUserId,
-      effectiveDate,
-      expiresAt,
-      replacesKnowledgeId,
-      addedByUserId,
-    ]
-  );
+  const record = await insertKnowledgeRow({
+    domain,
+    department,
+    content,
+    content_hash: contentHash,
+    authority,
+    scope,
+    owner_user_id: ownerUserId,
+    status: "active",
+    effective_date: effectiveDate,
+    expires_at: expiresAt,
+    added_by_user_id: addedByUserId,
+  });
 
-  return result.rows[0];
+  await writeKnowledgeAudit({
+    action: "add",
+    knowledgeId: record.knowledge_id,
+    userId: addedByUserId,
+    role: "system",
+    domain,
+  });
+
+  return record;
 }
