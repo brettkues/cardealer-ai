@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { supabase } from "../supabaseClient";
 
 export async function writeKnowledgeAudit({
   action,
@@ -7,13 +7,15 @@ export async function writeKnowledgeAudit({
   role,
   domain = null,
 }) {
-  await db.query(
-    `
-    INSERT INTO knowledge_audit
-      (action, knowledge_id, user_id, role, domain)
-    VALUES
-      ($1, $2, $3, $4, $5)
-    `,
-    [action, knowledgeId, userId, role, domain]
-  );
+  const { error } = await supabase
+    .from("knowledge_audit")
+    .insert({
+      action,
+      knowledge_id: knowledgeId,
+      user_id: userId,
+      role,
+      domain,
+    });
+
+  if (error) throw error;
 }
