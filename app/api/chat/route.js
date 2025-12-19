@@ -5,16 +5,17 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// how many past turns to include
+const MAX_TURNS = 6;
+
 export async function POST(req) {
   try {
-    const { message } = await req.json();
+    const { message, history = [] } = await req.json();
 
-    if (!message) {
-      return NextResponse.json({
-        answer: "No message received.",
-        source: "System",
-      });
-    }
+    const recentHistory = history.slice(0, MAX_TURNS).map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -22,13 +23,11 @@ export async function POST(req) {
         {
           role: "system",
           content:
-            "You're a professional automotive sales assistant. " +
-            "Be clear, practical, and helpful. Avoid fluff.",
+            "You are a professional automotive sales assistant. " +
+            "Be concise, practical, and helpful.",
         },
-        {
-          role: "user",
-          content: message,
-        },
+        ...recentHistory.reverse(),
+        { role: "user", content: message },
       ],
       temperature: 0.5,
     });
@@ -38,12 +37,8 @@ export async function POST(req) {
       source: "AI-generated response",
     });
   } catch (err) {
-    console.error("OpenAI error:", err);
     return NextResponse.json(
-      {
-        answer: "AI failed to respond.",
-        source: "System error",
-      },
+      { answer: "AI failed to respond.", source: "System error" },
       { status: 500 }
     );
   }
