@@ -5,20 +5,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function retrieveKnowledge(message, domain) {
-  // 1. Create embedding for the question
+export async function retrieveKnowledge(message, domain = "sales") {
+  // 1) Embed the question
   const embeddingResponse = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: message,
   });
 
-  const embedding = embeddingResponse.data[0].embedding;
+  const queryEmbedding = embeddingResponse.data[0].embedding;
 
-  // 2. Vector similarity search in Supabase
+  // 2) Vector similarity search
   const { data, error } = await supabase.rpc(
     "match_sales_training_vectors",
     {
-      query_embedding: embedding,
+      query_embedding: queryEmbedding,
       match_threshold: 0.78,
       match_count: 5,
     }
@@ -29,7 +29,7 @@ export async function retrieveKnowledge(message, domain) {
     return [];
   }
 
-  // 3. Return only relevant content
+  // 3) Return only relevant training text
   return (data || [])
     .map((row) => row.content)
     .filter(Boolean);
