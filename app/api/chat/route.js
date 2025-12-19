@@ -4,23 +4,15 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
-    if (!body?.message) {
-      return NextResponse.json({
-        answer: "No question received.",
-        source: "System",
-      });
-    }
-
-    // SIMPLE, GUARANTEED RESPONSE
     return NextResponse.json({
-      answer: body.message,
-      source: "General sales knowledge (not dealership policy)",
+      answer: `ANSWER OK: ${body.message}`,
+      source: "Echo test",
     });
-  } catch (err) {
+  } catch (e) {
     return NextResponse.json(
       {
-        answer: "Internal error. Chat route failed.",
-        source: "System error",
+        answer: "CHAT ROUTE CRASHED",
+        source: "Hard failure",
       },
       { status: 500 }
     );
