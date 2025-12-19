@@ -1,20 +1,27 @@
 import { NextResponse } from "next/server";
 
+// TEMP base answer stub
+async function getBaseAnswer(question) {
+  return `Base answer OK. Question was: ${question}`;
+}
+
 export async function POST(req) {
   try {
     const body = await req.json();
 
+    const baseAnswer = await getBaseAnswer(body.message);
+
     return NextResponse.json({
-      answer: `Echo test OK. You asked: "${body.message}"`,
-      source: "Isolation test",
+      answer: baseAnswer,
+      source: "Base answer only",
     });
   } catch (err) {
-    console.error("CHAT ISOLATION ERROR:", err);
+    console.error("CHAT BASE ERROR:", err);
 
     return NextResponse.json(
       {
-        answer: "Chat route crashed during isolation test.",
-        source: "Isolation error",
+        answer: "Chat failed during base-answer test.",
+        source: "Base error",
       },
       { status: 500 }
     );
