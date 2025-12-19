@@ -10,20 +10,34 @@ export default function SalesAssistant() {
   async function sendMessage() {
     if (!msg || loading) return;
 
-    const newChat = [...chat, { role: "user", content: msg }];
+    const userMessage = { role: "user", content: msg };
+
+    // PREPEND user message
+    const newChat = [userMessage, ...chat];
     setChat(newChat);
     setMsg("");
     setLoading(true);
 
-    const res = await fetch("/api/sales-assistant", {
+    const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: newChat })
+      body: JSON.stringify({
+        message: msg,
+        domain: "sales",
+        user: { role: "sales" }, // add id later if needed
+      }),
     });
 
     const data = await res.json();
 
-    setChat([...newChat, { role: "assistant", content: data.reply }]);
+    const aiMessage = {
+      role: "assistant",
+      content: data.answer || data.reply || "",
+      source: data.source || null,
+    };
+
+    // PREPEND AI reply directly under the user message
+    setChat([aiMessage, ...newChat]);
     setLoading(false);
   }
 
@@ -36,7 +50,8 @@ export default function SalesAssistant() {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="p-4 border-b">
+      {/* INPUT AREA */}
+      <div className="p-4 border-b bg-white">
         <h1 className="text-2xl font-bold">Sales Assistant</h1>
         <textarea
           className="w-full p-3 border rounded mt-3"
@@ -48,14 +63,26 @@ export default function SalesAssistant() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto p-4 bg-gray-50 flex flex-col-reverse">
+      {/* CHAT AREA */}
+      <div className="flex-1 overflow-auto p-4 bg-gray-50">
         {chat.map((m, i) => (
-          <div key={i} className="mb-4">
-            <b>{m.role === "user" ? "You" : "AI"}:</b>
-            <div>{m.content}</div>
+          <div key={i} className="mb-6">
+            <div className="font-semibold">
+              {m.role === "user" ? "You" : "AI"}
+            </div>
+            <div className="whitespace-pre-wrap">{m.content}</div>
+
+            {m.source && (
+              <div className="text-xs text-gray-500 mt-1">
+                {m.source}
+              </div>
+            )}
           </div>
         ))}
-        {loading && <div>AI is typing…</div>}
+
+        {loading && (
+          <div className="text-sm text-gray-500">AI is typing…</div>
+        )}
       </div>
     </div>
   );
