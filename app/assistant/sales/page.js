@@ -12,7 +12,7 @@ export default function SalesAssistant() {
 
     const userMessage = { role: "user", content: msg };
 
-    // Put user message at the top
+    // New messages go on top
     const newChat = [userMessage, ...chat];
     setChat(newChat);
     setMsg("");
@@ -24,8 +24,7 @@ export default function SalesAssistant() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage.content,
-          domain: "sales",
-          user: { role: "sales" },
+          history: newChat, // 👈 PASS CONTEXT
         }),
       });
 
@@ -41,7 +40,7 @@ export default function SalesAssistant() {
         source: data.source || null,
       };
 
-      // Put AI response directly under the user message
+      // AI reply goes directly under the user message
       setChat([aiMessage, ...newChat]);
     } catch (err) {
       setChat([
