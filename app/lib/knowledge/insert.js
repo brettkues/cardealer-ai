@@ -1,43 +1,30 @@
-import { insertKnowledgeRow } from "./db";
-import { hashContent } from "./hash";
-import { writeKnowledgeAudit } from "./audit";
+import { supabase } from "../supabaseClient";
 
-export async function insertKnowledge(params) {
-  const {
-    domain,
-    department = null,
-    content,
-    authority,
-    scope,
-    ownerUserId = null,
-    addedByUserId,
-    effectiveDate = null,
-    expiresAt = null,
-  } = params;
+export async function insertKnowledge({
+  domain,
+  content,
+  authority,
+  scope,
+  ownerUserId = null,
+  addedByUserId = null,
+}) {
+  const { data, error } = await supabase
+    .from("knowledge")
+    .insert({
+      domain,
+      content,
+      authority,
+      scope,
+      owner_user_id: ownerUserId,
+      added_by_user_id: addedByUserId,
+      status: "active",
+    })
+    .select()
+    .single();
 
-  const contentHash = hashContent(content);
+  if (error) {
+    throw error;
+  }
 
-  const record = await insertKnowledgeRow({
-    domain,
-    department,
-    content,
-    content_hash: contentHash,
-    authority,
-    scope,
-    owner_user_id: ownerUserId,
-    status: "active",
-    effective_date: effectiveDate,
-    expires_at: expiresAt,
-    added_by_user_id: addedByUserId,
-  });
-
-  await writeKnowledgeAudit({
-    action: "add",
-    knowledgeId: record.knowledge_id,
-    userId: addedByUserId,
-    role: "system",
-    domain,
-  });
-
-  return record;
+  return data;
 }
