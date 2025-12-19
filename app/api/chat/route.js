@@ -103,13 +103,20 @@ export async function POST(req) {
       temperature: 0.7,
     });
 
-    return NextResponse.json({
-      answer: response.choices[0].message.content,
-      source:
-        dealerKnowledge.length > 0
-          ? "Dealership training"
-          : "General sales knowledge",
-    });
+    const usedDealerTraining = dealerKnowledge.length > 0 &&
+  dealerKnowledge.some(k =>
+    response.choices[0].message.content.toLowerCase().includes(
+      k.toLowerCase().slice(0, 30)
+    )
+  );
+
+return NextResponse.json({
+  answer: response.choices[0].message.content,
+  source: usedDealerTraining
+    ? "Dealership training"
+    : "General sales knowledge",
+});
+
   } catch (err) {
     console.error(err);
     return NextResponse.json(
