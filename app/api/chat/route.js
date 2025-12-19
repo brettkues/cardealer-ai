@@ -49,6 +49,16 @@ export async function POST(req) {
         source: "Personal memory",
       });
     }
+if (intent === "recall") {
+  const personalPreference = await getPersonalMemory(userId);
+
+  return NextResponse.json({
+    answer: personalPreference
+      ? `Here’s what I remember about you: ${personalPreference}`
+      : "I don’t have any personal preferences saved for you.",
+    source: "Personal memory",
+  });
+}
 
     // NORMAL CHAT
     const personalPreference = await getPersonalMemory(userId);
