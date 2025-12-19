@@ -15,9 +15,11 @@ const MAX_TURNS = 6;
 function detectMemoryIntent(text) {
   const t = text.toLowerCase().trim();
   if (t.startsWith("remember this for me")) return "remember";
-  if (t.startsWith("forget")) return "forget";
+  if (t === "forget that" || t.startsWith("forget")) return "forget";
+  if (t === "what do you remember about me") return "recall";
   return null;
 }
+
 
 export async function POST(req) {
   try {
