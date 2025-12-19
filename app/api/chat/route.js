@@ -14,10 +14,8 @@ const MAX_TURNS = 6;
 
 function detectMemoryIntent(text) {
   const t = text.toLowerCase().trim();
-
   if (t.startsWith("remember this for me")) return "remember";
   if (t.startsWith("forget")) return "forget";
-
   return null;
 }
 
@@ -25,15 +23,15 @@ export async function POST(req) {
   try {
     const { message, history = [], userId = "default" } = await req.json();
 
-    const memoryIntent = detectMemoryIntent(message);
+    const intent = detectMemoryIntent(message);
 
-    // HANDLE MEMORY COMMANDS ONLY
-    if (memoryIntent === "remember") {
+    // MEMORY COMMANDS
+    if (intent === "remember") {
       const content = message
         .replace(/remember this for me[:]?/i, "")
         .trim();
 
-      setPersonalMemory(userId, content);
+      await setPersonalMemory(userId, content);
 
       return NextResponse.json({
         answer: "Got it. I’ll remember that.",
@@ -41,8 +39,8 @@ export async function POST(req) {
       });
     }
 
-    if (memoryIntent === "forget") {
-      clearPersonalMemory(userId);
+    if (intent === "forget") {
+      await clearPersonalMemory(userId);
 
       return NextResponse.json({
         answer: "Done. I’ve forgotten that preference.",
@@ -51,7 +49,7 @@ export async function POST(req) {
     }
 
     // NORMAL CHAT
-    const personalPreference = getPersonalMemory(userId);
+    const personalPreference = await getPersonalMemory(userId);
 
     const recentHistory = history.slice(0, MAX_TURNS).map((m) => ({
       role: m.role,
@@ -60,10 +58,11 @@ export async function POST(req) {
 
     const systemPrompt = personalPreference
       ? `You are a professional automotive sales assistant.
-         Personal preference: ${personalPreference}.
-         Be concise, practical, and helpful.`
+Personal preference: ${personalPreference}.
+Vary wording slightly each time while keeping the same intent.
+Be concise, practical, and helpful.`
       : `You are a professional automotive sales assistant.
-         Be concise, practical, and helpful.`;
+Be concise, practical, and helpful.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -81,12 +80,9 @@ export async function POST(req) {
         ? "AI-generated response (personal preference applied)"
         : "AI-generated response",
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
-      {
-        answer: "AI failed to respond.",
-        source: "System error",
-      },
+      { answer: "AI failed to respond.", source: "System error" },
       { status: 500 }
     );
   }
