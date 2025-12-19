@@ -72,7 +72,7 @@ export async function POST(req) {
         ...recentHistory.reverse(),
         { role: "user", content: message },
       ],
-      temperature: 0.5,
+      temperature: 0.8,
     });
 
     return NextResponse.json({
