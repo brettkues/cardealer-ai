@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { detectTrainingIntent } from "@/app/lib/knowledge/intent";
-import { insertKnowledge } from "@/app/lib/knowledge/insert";
-import { replaceKnowledge } from "@/app/lib/knowledge/replace";
-import { writeKnowledgeAudit } from "@/app/lib/knowledge/audit";
+import { detectTrainingIntent } from "../../../lib/knowledge/intent";
+import { insertKnowledge } from "../../../lib/knowledge/insert";
+import { replaceKnowledge } from "../../../lib/knowledge/replace";
+import { writeKnowledgeAudit } from "../../../lib/knowledge/audit";
 
 export async function POST(req) {
   const {
