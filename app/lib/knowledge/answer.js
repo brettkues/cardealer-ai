@@ -7,22 +7,32 @@ export async function buildAnswer({
 }) {
   const knowledge = await retrieveKnowledge({ domain, userId });
 
-  let sourceLabel = "General sales knowledge (not dealership policy)";
   let finalAnswer = baseAnswer;
+  let sourceLabel = "General sales knowledge (not dealership policy)";
 
-  if (knowledge && knowledge.length > 0) {
-    const approved = knowledge.find(k => k.authority === "approved");
+  // 1️⃣ Personal memory (highest priority for user tone)
+  const personal = knowledge.find(
+    k => k.authority === "personal" && k.scope === "user"
+  );
 
-    if (approved) {
-      finalAnswer = `${baseAnswer}\n\n—\n${approved.content}`;
-      sourceLabel = "Dealership-approved guidance";
-    } else {
-      sourceLabel = "Dealership guidance + general sales knowledge";
-    }
+  if (personal) {
+    finalAnswer = `${baseAnswer}
+
+(Keep in mind: ${personal.content})`;
+    sourceLabel = "Personal preference applied";
+    return { answer: finalAnswer, source: sourceLabel };
   }
 
-  return {
-    answer: finalAnswer,
-    source: sourceLabel,
-  };
+  // 2️⃣ Dealership-approved guidance
+  const approved = knowledge.find(k => k.authority === "approved");
+
+  if (approved) {
+    finalAnswer = `${baseAnswer}
+
+— 
+${approved.content}`;
+    sourceLabel = "Dealership-approved guidance";
+  }
+
+  return { answer: finalAnswer, source: sourceLabel };
 }
