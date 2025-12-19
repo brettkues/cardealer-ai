@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 import { buildAnswer } from "../../lib/knowledge/answer";
+import { detectTrainingIntent } from "../../lib/knowledge/intent";
 
-// NOTE: replace this stub with your real LLM call if it already exists
+// NOTE: replace with your real LLM call later
 async function getBaseAnswer(question) {
-  return question; // placeholder — keeps flow intact
+  return question;
 }
 
 export async function POST(req) {
   const body = await req.json();
 
-  // side-effect: training capture
+  const intent = detectTrainingIntent(body.message);
+
+  // ALWAYS send to training endpoint
+  let trained = false;
   try {
-    await fetch(
+    const res = await fetch(
       `${process.env.NEXT_PUBLIC_BASE_URL}/api/knowledge/train`,
       {
         method: "POST",
@@ -19,19 +23,28 @@ export async function POST(req) {
         body: JSON.stringify(body),
       }
     );
+    const json = await res.json();
+    trained = json.trained === true;
   } catch {}
 
+  // 🚫 SHORT-CIRCUIT FOR TRAINING-ONLY COMMANDS
+  if (intent === "forget" || intent === "personal" || intent === "add" || intent === "replace" || intent === "reference") {
+    return NextResponse.json({
+      answer: intent === "forget"
+        ? "Personal note removed."
+        : "Got it.",
+      source: "System action",
+    });
+  }
+
+  // Normal answer flow
   const baseAnswer = await getBaseAnswer(body.message);
 
   const { answer, source } = await buildAnswer({
     domain: body.domain || "sales",
     userId: body.user?.id || null,
-    question: body.message,
     baseAnswer,
   });
 
-  return NextResponse.json({
-    answer,
-    source,
-  });
+  return NextResponse.json({ answer, source });
 }
