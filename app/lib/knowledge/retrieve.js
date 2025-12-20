@@ -5,7 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const DEALER_ID = process.env.DEALER_ID; // you already set this
+const DEALER_ID = process.env.DEALER_ID;
 
 export async function retrieveKnowledge(message) {
   if (!DEALER_ID) {
@@ -21,7 +21,7 @@ export async function retrieveKnowledge(message) {
 
   const queryEmbedding = embeddingResponse.data[0].embedding;
 
-  // 2️⃣ Direct vector search (NO RPC)
+  // 2️⃣ Direct vector search against the table YOU ARE POPULATING
   const { data, error } = await supabase
     .from("sales_training_vectors")
     .select("content")
