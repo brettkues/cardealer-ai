@@ -24,8 +24,16 @@ export async function POST(req) {
     let stored = 0;
 
     for (const file of files) {
+
+      // 🔒 HARD STOP: only allow real text files
+      if (!file.type.startsWith("text/")) {
+        console.log("SKIPPED NON-TEXT FILE:", file.name, file.type);
+        continue;
+      }
+
       const text = await file.text();
-console.log("FILE:", file.name, "LENGTH:", text.length);
+      console.log("FILE:", file.name, "LENGTH:", text.length);
+
       const chunks = chunkText(text);
 
       for (const chunk of chunks) {
@@ -36,7 +44,7 @@ console.log("FILE:", file.name, "LENGTH:", text.length);
           .insert({
             content: chunk,
             embedding,
-            source: file.name
+            source: file.name,
           });
 
         if (!error) stored++;
@@ -46,6 +54,7 @@ console.log("FILE:", file.name, "LENGTH:", text.length);
     return NextResponse.json({ ok: true, stored });
 
   } catch (err) {
+    console.error("TRAINING ERROR:", err);
     return NextResponse.json(
       { error: String(err) },
       { status: 500 }
