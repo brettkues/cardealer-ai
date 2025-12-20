@@ -13,7 +13,7 @@ export async function retrieveKnowledge(message) {
     return [];
   }
 
-  // 1️⃣ Create query embedding
+  // 1️⃣ Create embedding for the question
   const embeddingResponse = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: message,
@@ -21,19 +21,19 @@ export async function retrieveKnowledge(message) {
 
   const queryEmbedding = embeddingResponse.data[0].embedding;
 
-  // 2️⃣ Direct vector search against the table YOU ARE POPULATING
-  const { data, error } = await supabase
-    .from("sales_training_vectors")
-    .select("content")
-    .eq("dealer_id", DEALER_ID)
-    .order("embedding <-> cast(? as vector)", {
-      ascending: true,
-    })
-    .limit(6)
-    .bind(queryEmbedding);
+  // 2️⃣ Use RAW SQL via RPC-style query (this ACTUALLY WORKS)
+  const { data, error } = await supabase.rpc(
+    "match_sales_training_vectors",
+    {
+      query_embedding: queryEmbedding,
+      match_threshold: 0.75,
+      match_count: 6,
+      dealer_id_param: DEALER_ID,
+    }
+  );
 
   if (error) {
-    console.error("Knowledge retrieval error:", error);
+    console.error("Dealer brain vector error:", error);
     return [];
   }
 
