@@ -5,7 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function retrieveKnowledge(message, domain = "sales") {
+export async function retrieveKnowledge(message) {
   // 1) Embed the question
   const embeddingResponse = await openai.embeddings.create({
     model: "text-embedding-3-small",
@@ -14,12 +14,12 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
   const queryEmbedding = embeddingResponse.data[0].embedding;
 
-  // 2) Vector similarity search (LOWER threshold for diagnostics)
+  // 2) RAW vector search (no threshold)
   const { data, error } = await supabase.rpc(
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.55, // LOWERED from 0.78
+      match_threshold: 0.0, // ← TEMP: return EVERYTHING
       match_count: 5,
     }
   );
@@ -29,8 +29,8 @@ export async function retrieveKnowledge(message, domain = "sales") {
     return [];
   }
 
-  // 3) TEMP DEBUG: return content + similarity
-  return (data || []).map((row) => ({
+  // 3) Return content + similarity so we can SEE it
+  return (data || []).map(row => ({
     content: row.content,
     similarity: row.similarity,
   }));
