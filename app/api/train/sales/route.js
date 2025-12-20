@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 /**
  * STEP 1 ONLY
- * - Upload files to Supabase Storage
+ * - Upload raw files to Supabase Storage
  * - Create pending ingest_jobs rows
  * - Return immediately
  *
@@ -19,7 +19,7 @@ export async function POST(req) {
     const form = await req.formData();
     const files = form.getAll("files");
 
-    if (!files.length) {
+    if (!files || files.length === 0) {
       return NextResponse.json(
         { ok: false, error: "No files received" },
         { status: 400 }
@@ -46,7 +46,7 @@ export async function POST(req) {
         continue;
       }
 
-      // 2️⃣ Insert pending ingestion job
+      // 2️⃣ Create ingestion job
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
@@ -57,14 +57,14 @@ export async function POST(req) {
         });
 
       if (jobError) {
-        console.error("JOB INSERT ERROR:", jobError);
+        console.error("INGEST JOB ERROR:", jobError);
         continue;
       }
 
       uploaded++;
     }
 
-    // ✅ Match UI expectation
+    // UI expects `stored`
     return NextResponse.json({
       ok: true,
       stored: uploaded,
