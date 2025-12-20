@@ -1,83 +1,74 @@
 import { NextResponse } from "next/server";
-import { embedText } from "@/lib/vectorClient";
 import { supabase } from "@/lib/supabaseClient";
-import pdf from "pdf-parse";
 
 export const runtime = "nodejs";
 
-function chunkText(text, size = 800, overlap = 100) {
-  const chunks = [];
-  let start = 0;
-
-  while (start < text.length) {
-    const chunk = text.slice(start, start + size).trim();
-    if (chunk.length > 50) chunks.push(chunk);
-    start += size - overlap;
-  }
-
-  return chunks;
-}
-
-async function extractText(file) {
-  const name = file.name.toLowerCase();
-
-  // TEXT FILES
-  if (name.endsWith(".txt")) {
-    return await file.text();
-  }
-
-  // PDF FILES (DO NOT TRUST MIME TYPE)
-  if (name.endsWith(".pdf")) {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const data = await pdf(buffer);
-    return data.text || "";
-  }
-
-  return "";
-}
+/**
+ * STEP 1 ONLY:
+ * - Upload files to Supabase Storage
+ * - Create a pending ingestion job
+ * - Return immediately
+ *
+ * NO parsing
+ * NO chunking
+ * NO embeddings
+ */
 
 export async function POST(req) {
   try {
     const form = await req.formData();
     const files = form.getAll("files");
 
-    let stored = 0;
+    if (!files.length) {
+      return NextResponse.json({ ok: false, error: "No files received" }, { status: 400 });
+    }
+
+    let uploaded = 0;
 
     for (const file of files) {
-      console.log("PROCESSING:", file.name, "TYPE:", file.type || "(empty)");
+      const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-      const text = await extractText(file);
+      // 1️⃣ Upload raw file to storage
+      const { error: uploadError } = await supabase.storage
+        .from("knowledge")
+        .upload(filePath, file, {
+          contentType: file.type || "application/octet-stream",
+          upsert: false,
+        });
 
-      if (!text || text.length < 100) {
-        console.log("NO USABLE TEXT:", file.name);
+      if (uploadError) {
+        console.error("UPLOAD ERROR:", uploadError);
         continue;
       }
 
-      console.log("EXTRACTED LENGTH:", text.length);
+      // 2️⃣ Create pending ingestion job
+      const { error: jobError } = await supabase
+        .from("ingest_jobs")
+        .insert({
+          file_path: filePath,
+          original_name: file.name,
+          status: "pending",
+          source: "sales",
+        });
 
-      const chunks = chunkText(text);
-
-      for (const chunk of chunks) {
-        const embedding = await embedText(chunk);
-
-        const { error } = await supabase
-          .from("sales_training_vectors")
-          .insert({
-            content: chunk,
-            embedding,
-            source: file.name,
-          });
-
-        if (!error) stored++;
+      if (jobError) {
+        console.error("JOB INSERT ERROR:", jobError);
+        continue;
       }
+
+      uploaded++;
     }
 
-    return NextResponse.json({ ok: true, stored });
+    return NextResponse.json({
+      ok: true,
+      uploaded,
+      message: "Files uploaded. Ingestion queued.",
+    });
 
   } catch (err) {
-    console.error("TRAINING ERROR:", err);
+    console.error("UPLOAD ROUTE ERROR:", err);
     return NextResponse.json(
-      { error: String(err) },
+      { ok: false, error: String(err) },
       { status: 500 }
     );
   }
