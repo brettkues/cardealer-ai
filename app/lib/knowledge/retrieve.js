@@ -5,34 +5,39 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const DEALER_ID = process.env.DEALER_ID; // you already set this
+
 export async function retrieveKnowledge(message) {
-  // 1. Create embedding (MATCHES YOUR STORED VECTORS)
-  const embedding = await openai.embeddings.create({
+  if (!DEALER_ID) {
+    console.error("Missing DEALER_ID");
+    return [];
+  }
+
+  // 1️⃣ Create query embedding
+  const embeddingResponse = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: message,
   });
 
-  const queryEmbedding = embedding.data[0].embedding;
+  const queryEmbedding = embeddingResponse.data[0].embedding;
 
-  // 2. VECTOR SEARCH — DEALER BRAIN ONLY
-  const { data, error } = await supabase.rpc(
-    "match_sales_training_vectors",
-    {
-      query_embedding: queryEmbedding,
-      match_threshold: 0.82,   // tighter = no internet junk
-      match_count: 6,
-    }
-  );
+  // 2️⃣ Direct vector search (NO RPC)
+  const { data, error } = await supabase
+    .from("sales_training_vectors")
+    .select("content")
+    .eq("dealer_id", DEALER_ID)
+    .order("embedding <-> cast(? as vector)", {
+      ascending: true,
+    })
+    .limit(6)
+    .bind(queryEmbedding);
 
   if (error) {
-    console.error("Dealer brain vector error:", error);
+    console.error("Knowledge retrieval error:", error);
     return [];
   }
 
-  // 3. HARD FILTER — ONLY TRAINED CONTENT
-  const results = (data || [])
-    .map(r => r.content)
+  return (data || [])
+    .map(row => row.content)
     .filter(Boolean);
-
-  return results;
 }
