@@ -11,7 +11,7 @@ function chunkText(text, size = 800, overlap = 100) {
 
   while (start < text.length) {
     const chunk = text.slice(start, start + size).trim();
-    if (chunk.length > 50) chunks.push(chunk); // ignore junk
+    if (chunk.length > 50) chunks.push(chunk);
     start += size - overlap;
   }
 
@@ -19,19 +19,20 @@ function chunkText(text, size = 800, overlap = 100) {
 }
 
 async function extractText(file) {
+  const name = file.name.toLowerCase();
+
   // TEXT FILES
-  if (file.type.startsWith("text/")) {
+  if (name.endsWith(".txt")) {
     return await file.text();
   }
 
-  // PDF FILES
-  if (file.type === "application/pdf") {
+  // PDF FILES (DO NOT TRUST MIME TYPE)
+  if (name.endsWith(".pdf")) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const data = await pdf(buffer);
     return data.text || "";
   }
 
-  // UNSUPPORTED
   return "";
 }
 
@@ -43,7 +44,7 @@ export async function POST(req) {
     let stored = 0;
 
     for (const file of files) {
-      console.log("PROCESSING:", file.name, file.type);
+      console.log("PROCESSING:", file.name, "TYPE:", file.type || "(empty)");
 
       const text = await extractText(file);
 
