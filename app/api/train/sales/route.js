@@ -25,6 +25,7 @@ export async function POST(req) {
 
     for (const file of files) {
       const text = await file.text();
+console.log("FILE:", file.name, "LENGTH:", text.length);
       const chunks = chunkText(text);
 
       for (const chunk of chunks) {
