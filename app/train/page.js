@@ -27,7 +27,8 @@ export default function TrainPage() {
 
       const data = await res.json();
 
-      setStatus(`Done. ${data.stored} chunks stored.`);
+      setStatus("Files uploaded successfully. Processing has started and may take several minutes.");
+
       setSalesFiles([]);
     } catch (err) {
       setStatus("Upload failed.");
