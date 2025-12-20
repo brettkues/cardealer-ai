@@ -64,10 +64,14 @@ export default function TrainPage() {
         </button>
 
         {status && (
-          <div className="text-sm text-gray-700 mt-2">
-            {status}
-          </div>
-        )}
+  <div className="text-sm text-gray-700 mt-2">
+    {status}
+    <div className="mt-2 text-xs text-gray-500">
+      You can safely leave this page. Files are processed in the background.
+    </div>
+  </div>
+)}
+
       </div>
     </div>
   );
