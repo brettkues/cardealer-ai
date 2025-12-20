@@ -14,12 +14,12 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
   const queryEmbedding = embeddingResponse.data[0].embedding;
 
-  // 2) Vector similarity search
+  // 2) Vector similarity search (LOWER threshold for diagnostics)
   const { data, error } = await supabase.rpc(
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.78,
+      match_threshold: 0.55, // LOWERED from 0.78
       match_count: 5,
     }
   );
@@ -29,8 +29,9 @@ export async function retrieveKnowledge(message, domain = "sales") {
     return [];
   }
 
-  // 3) Return only relevant training text
-  return (data || [])
-    .map((row) => row.content)
-    .filter(Boolean);
+  // 3) TEMP DEBUG: return content + similarity
+  return (data || []).map((row) => ({
+    content: row.content,
+    similarity: row.similarity,
+  }));
 }
