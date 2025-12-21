@@ -1,7 +1,8 @@
 import { retrieveKnowledge } from "./retrieve";
 
 export async function buildAnswer({ domain, userId, baseAnswer }) {
-  const knowledge = await retrieveKnowledge({ domain, userId });
+  const knowledge = await retrieveKnowledge(baseAnswer);
+
 
   // PERSONAL MEMORY (user-scoped)
   const personal = knowledge.find(
