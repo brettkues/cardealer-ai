@@ -1,20 +1,19 @@
 import { retrieveKnowledge } from "./retrieve";
 
 export async function buildAnswer({ domain, userId, baseAnswer }) {
-  // Pull dealership knowledge ONLY
   const knowledge = await retrieveKnowledge(baseAnswer);
 
-  // 🔒 VERIFICATION MODE — NO FALLBACK, NO GENERAL KNOWLEDGE
-  if (!knowledge || knowledge.length === 0) {
+  // ✅ DEALERSHIP TRAINING FOUND
+  if (knowledge && knowledge.length > 0) {
     return {
-      answer: "❌ NO DEALERSHIP TRAINING WAS RETRIEVED.",
-      source: "Dealer brain (empty)",
+      answer: knowledge.join("\n\n"),
+      source: "Dealership training (internal)",
     };
   }
 
-  // If we get here, the dealer brain IS working
+  // ⚠️ FALLBACK — GENERAL / INTERNET KNOWLEDGE
   return {
-    answer: knowledge.join("\n\n"),
-    source: "Dealership training (raw)",
+    answer: baseAnswer,
+    source: "General knowledge (verify before use)",
   };
 }
