@@ -37,7 +37,29 @@ export async function retrieveKnowledge(message) {
     return [];
   }
 
-  return (data || [])
+  // PRIMARY: vector matches
+const vectorResults = (data || [])
+  .map(row => row.content)
+  .filter(Boolean);
+
+if (vectorResults.length > 0) {
+  return vectorResults;
+}
+
+// FALLBACK: keyword search for statutory / definition text
+const { data: keywordHits, error: keywordError } = await supabase
+  .from("sales_training_vectors")
+  .select("content")
+  .ilike("content", `%${message.split(" ").slice(0, 4).join(" ")}%`)
+  .limit(5);
+
+if (keywordError) {
+  console.error("Keyword fallback error:", keywordError);
+  return [];
+}
+
+return (keywordHits || []).map(r => r.content).filter(Boolean);
+return (data || [])
     .map(row => row.content)
     .filter(Boolean);
 }
