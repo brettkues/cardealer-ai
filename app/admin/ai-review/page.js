@@ -12,7 +12,7 @@ export default function AIReviewPage() {
     setError("");
 
     try {
-      const res = await fetch("/admin/ai-review/list");
+      const res = await fetch("/api/admin/ai-review/list");
       const data = await res.json();
 
       if (!data.ok) {
