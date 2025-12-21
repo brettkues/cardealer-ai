@@ -1,33 +1,20 @@
 import { retrieveKnowledge } from "./retrieve";
 
 export async function buildAnswer({ domain, userId, baseAnswer }) {
+  // Pull dealership knowledge ONLY
   const knowledge = await retrieveKnowledge(baseAnswer);
 
-
-  // PERSONAL MEMORY (user-scoped)
-  const personal = knowledge.find(
-    k => k.authority === "personal" && k.scope === "user"
-  );
-
-  if (personal) {
+  // 🔒 VERIFICATION MODE — NO FALLBACK, NO GENERAL KNOWLEDGE
+  if (!knowledge || knowledge.length === 0) {
     return {
-      answer: `${baseAnswer}\n\n(Note: ${personal.content})`,
-      source: "Personal preference applied",
+      answer: "❌ NO DEALERSHIP TRAINING WAS RETRIEVED.",
+      source: "Dealer brain (empty)",
     };
   }
 
-  // DEALERSHIP POLICY
-  const approved = knowledge.find(k => k.authority === "approved");
-
-  if (approved) {
-    return {
-      answer: `${baseAnswer}\n\n${approved.content}`,
-      source: "Dealership-approved guidance",
-    };
-  }
-
+  // If we get here, the dealer brain IS working
   return {
-    answer: baseAnswer,
-    source: "General sales knowledge (not dealership policy)",
+    answer: knowledge.join("\n\n"),
+    source: "Dealership training (raw)",
   };
 }
