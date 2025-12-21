@@ -26,7 +26,7 @@ export async function retrieveKnowledge(message) {
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.75,
+      match_threshold: 0.1,
       match_count: 6,
       dealer_id_param: DEALER_ID,
     }
