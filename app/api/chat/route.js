@@ -4,7 +4,7 @@ import {
   setPersonalMemory,
   getPersonalMemory,
   clearPersonalMemory,
-} from "../../lib/memory/personalStore";
+} from "@/lib/memory/personalStore";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 
 const openai = new OpenAI({
@@ -67,29 +67,27 @@ export async function POST(req) {
       });
     }
 
-    /* ===== DEALER BRAIN ONLY ===== */
+    /* ===== DEALER BRAIN (FIRST) ===== */
 
     const dealerKnowledge = await retrieveKnowledge(message, domain);
-
-    // 🔒 ABSOLUTE LOCK — NO DEALER BRAIN, NO ANSWER
-    if (!dealerKnowledge || dealerKnowledge.length === 0) {
-      return NextResponse.json({
-        answer:
-          "❌ This system is restricted to dealership training only. No answer is available.",
-        source: "Dealer brain only (external knowledge disabled)",
-      });
-    }
-
-    /* ===== SYSTEM PROMPT (BRAIN ONLY) ===== */
+    const personalPreference = await getPersonalMemory(userId);
 
     let systemPrompt =
-      "You are a dealership AI assistant.\n" +
-      "You MUST answer using ONLY the dealership training provided below.\n" +
-      "Do NOT use general knowledge.\n" +
-      "Do NOT infer or guess.\n" +
-      "If the answer is not explicitly contained in the training, say you do not have dealership-approved guidance.\n\n" +
-      "DEALERSHIP TRAINING:\n" +
-      dealerKnowledge.map((k) => `- ${k}`).join("\n");
+      "You are a professional automotive sales and F&I assistant.\n" +
+      "Be concise, accurate, and practical.\n";
+
+    if (personalPreference) {
+      systemPrompt += `Personal preference: ${personalPreference}\n`;
+    }
+
+    let sourceLabel = "General knowledge (verify before use)";
+
+    if (dealerKnowledge.length > 0) {
+      systemPrompt +=
+        "\nUse the following dealership-approved guidance when relevant:\n" +
+        dealerKnowledge.map((k) => `- ${k}`).join("\n");
+      sourceLabel = "Dealership training";
+    }
 
     /* ===== OPENAI ===== */
 
@@ -105,12 +103,12 @@ export async function POST(req) {
         ...recentHistory.reverse(),
         { role: "user", content: message },
       ],
-      temperature: 0.2,
+      temperature: 0.7,
     });
 
     return NextResponse.json({
       answer: response.choices[0].message.content,
-      source: "Dealership training ONLY",
+      source: sourceLabel,
     });
 
   } catch (err) {
