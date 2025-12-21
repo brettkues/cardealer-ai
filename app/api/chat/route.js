@@ -67,24 +67,29 @@ export async function POST(req) {
       });
     }
 
-    /* ===== DEALER BRAIN ===== */
+    /* ===== DEALER BRAIN ONLY ===== */
 
     const dealerKnowledge = await retrieveKnowledge(message, domain);
-    const personalPreference = await getPersonalMemory(userId);
+
+    // 🔒 ABSOLUTE LOCK — NO DEALER BRAIN, NO ANSWER
+    if (!dealerKnowledge || dealerKnowledge.length === 0) {
+      return NextResponse.json({
+        answer:
+          "❌ This system is restricted to dealership training only. No answer is available.",
+        source: "Dealer brain only (external knowledge disabled)",
+      });
+    }
+
+    /* ===== SYSTEM PROMPT (BRAIN ONLY) ===== */
 
     let systemPrompt =
-      "You are a professional automotive sales assistant.\n" +
-      "Be concise, practical, and accurate.\n";
-
-    if (personalPreference) {
-      systemPrompt += `Personal preference: ${personalPreference}\n`;
-    }
-
-    if (dealerKnowledge.length > 0) {
-      systemPrompt +=
-        "\nUse the following dealership-approved guidance when relevant:\n" +
-        dealerKnowledge.map((k) => `- ${k}`).join("\n");
-    }
+      "You are a dealership AI assistant.\n" +
+      "You MUST answer using ONLY the dealership training provided below.\n" +
+      "Do NOT use general knowledge.\n" +
+      "Do NOT infer or guess.\n" +
+      "If the answer is not explicitly contained in the training, say you do not have dealership-approved guidance.\n\n" +
+      "DEALERSHIP TRAINING:\n" +
+      dealerKnowledge.map((k) => `- ${k}`).join("\n");
 
     /* ===== OPENAI ===== */
 
@@ -100,18 +105,12 @@ export async function POST(req) {
         ...recentHistory.reverse(),
         { role: "user", content: message },
       ],
-      temperature: 0.7,
+      temperature: 0.2,
     });
-
-    /* ===== SOURCE ATTRIBUTION (FIXED) ===== */
-
-    const usedDealerTraining = dealerKnowledge.length > 0;
 
     return NextResponse.json({
       answer: response.choices[0].message.content,
-      source: usedDealerTraining
-        ? "Dealership training"
-        : "General sales knowledge (verify before use)",
+      source: "Dealership training ONLY",
     });
 
   } catch (err) {
