@@ -19,12 +19,6 @@ function isCommand(text) {
   return /^(write|draft|create|summarize|generate|email|text|list)\b/i.test(text);
 }
 
-function isSimpleQuestion(text) {
-  return /^(can i|what is|does|do i|how do|when do|is it)\b/i.test(
-    text.trim().toLowerCase()
-  );
-}
-
 function userRequestedSearch(text) {
   return /(search|look up|google|find online|research)/i.test(text);
 }
@@ -47,23 +41,23 @@ export async function POST(req) {
       userId = "default",
       role = "sales", // sales | manager | admin
       domain = "sales",
+      allowSearch = false,
     } = await req.json();
 
-    const intent = detectMemoryIntent(message);
+    /* ===== MEMORY ===== */
 
-    /* ===== PERSONAL MEMORY ===== */
+    const memoryIntent = detectMemoryIntent(message);
 
-    if (intent === "remember") {
+    if (memoryIntent === "remember") {
       const content = message.replace(/remember this[:]?/i, "").trim();
       await setPersonalMemory(userId, content);
-
       return NextResponse.json({
-        answer: "Saved. I’ll remember that for you.",
+        answer: "Saved. I’ll remember that.",
         source: "Personal memory",
       });
     }
 
-    if (intent === "forget") {
+    if (memoryIntent === "forget") {
       await clearPersonalMemory(userId);
       return NextResponse.json({
         answer: "Done. I’ve forgotten that.",
@@ -71,57 +65,59 @@ export async function POST(req) {
       });
     }
 
-    if (intent === "recall") {
+    if (memoryIntent === "recall") {
       const mem = await getPersonalMemory(userId);
       return NextResponse.json({
-        answer: mem
-          ? `Here’s what I remember about you: ${mem}`
-          : "I don’t have anything saved for you yet.",
+        answer: mem || "I don’t have anything saved yet.",
         source: "Personal memory",
       });
     }
 
-    /* ===== COMMANDS (FAST PATH) ===== */
+    /* ===== ALWAYS CHECK BRAIN FIRST ===== */
+
+    const dealerKnowledge = await retrieveKnowledge(message, domain);
+    const hasBrain = dealerKnowledge && dealerKnowledge.length > 0;
+
+    /* ===== COMMANDS ===== */
 
     if (isCommand(message)) {
+      const messages = [];
+
+      if (hasBrain) {
+        messages.push({
+          role: "system",
+          content:
+            "Use the following dealership-approved guidance if relevant:\n\n" +
+            dealerKnowledge.map(k => k).join("\n\n"),
+        });
+      }
+
+      messages.push({ role: "user", content: message });
+
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "Execute the user's request clearly and professionally." },
-          { role: "user", content: message },
-        ],
-        temperature: 0.7,
+        messages,
+        temperature: 0.6,
       });
 
       return NextResponse.json({
         answer: response.choices[0].message.content,
-        source: "Command execution",
+        source: hasBrain ? "Dealership knowledge" : "Command execution",
       });
     }
 
-    /* ===== QUESTIONS ===== */
+    /* ===== QUESTIONS WITH BRAIN ===== */
 
-    let dealerKnowledge = [];
-    let usedBrain = false;
-
-    // Only embed if it looks like a real question
-    if (isSimpleQuestion(message) || message.length > 12) {
-      dealerKnowledge = await retrieveKnowledge(message, domain);
-      usedBrain = dealerKnowledge.length > 0;
-    }
-
-    /* ===== BRAIN HIT ===== */
-
-    if (usedBrain) {
-      const systemPrompt =
-        "You are a dealership-approved assistant.\n" +
-        "Answer ONLY using the provided dealership guidance.\n\n" +
-        dealerKnowledge.map(k => `- ${k}`).join("\n");
-
+    if (hasBrain) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: systemPrompt },
+          {
+            role: "system",
+            content:
+              "Answer ONLY using the following dealership-approved information:\n\n" +
+              dealerKnowledge.map(k => k).join("\n\n"),
+          },
           { role: "user", content: message },
         ],
         temperature: 0.4,
@@ -133,42 +129,52 @@ export async function POST(req) {
       });
     }
 
-    /* ===== NO BRAIN HIT ===== */
+    /* ===== NO BRAIN ===== */
 
-    // Explicit user search request (any role)
-    if (userRequestedSearch(message)) {
+    if (allowSearch || userRequestedSearch(message)) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Answer the question using general knowledge. Do not claim dealership authority.",
+              "Answer using general knowledge. Do not claim dealership authority.",
           },
           { role: "user", content: message },
         ],
         temperature: 0.7,
       });
 
+      if (role === "admin" || role === "manager") {
+        return NextResponse.json({
+          answer:
+            response.choices[0].message.content +
+            "\n\nShould I save this to the dealership brain?",
+          source: "External knowledge",
+          canSave: true,
+          savePayload: response.choices[0].message.content,
+        });
+      }
+
       return NextResponse.json({
         answer: response.choices[0].message.content,
-        source: "External knowledge (not stored)",
+        source: "External knowledge",
       });
     }
 
-    // Manager/Admin: offer search
+    /* ===== OFFER SEARCH ===== */
+
     if (role === "manager" || role === "admin") {
       return NextResponse.json({
         answer:
-          "This isn’t in the dealership knowledge base. Would you like me to search for the answer?",
+          "This is not in the dealership brain. Would you like me to search for it?",
         source: "Knowledge gap",
+        needsSearchApproval: true,
       });
     }
 
-    // Sales: stop here
     return NextResponse.json({
-      answer:
-        "I don’t have dealership-approved guidance on that yet.",
+      answer: "I don’t have dealership-approved guidance on that yet.",
       source: "No dealership data",
     });
 
