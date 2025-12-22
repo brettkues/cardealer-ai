@@ -7,12 +7,11 @@ export default function SalesAssistant() {
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  async function sendMessage() {
+  async function sendMessage({ allowSearch = false } = {}) {
     if (!msg || loading) return;
 
     const userMessage = { role: "user", content: msg };
 
-    // New messages go on top
     const newChat = [userMessage, ...chat];
     setChat(newChat);
     setMsg("");
@@ -24,13 +23,13 @@ export default function SalesAssistant() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage.content,
-          history: newChat, // 👈 PASS CONTEXT
+          history: newChat,
+          role: "manager", // adjust if needed
+          allowSearch,
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("Request failed");
-      }
+      if (!res.ok) throw new Error("Request failed");
 
       const data = await res.json();
 
@@ -38,11 +37,13 @@ export default function SalesAssistant() {
         role: "assistant",
         content: data.answer || "No response received.",
         source: data.source || null,
+        needsSearchApproval: data.needsSearchApproval,
+        canSave: data.canSave,
+        savePayload: data.savePayload,
       };
 
-      // AI reply goes directly under the user message
       setChat([aiMessage, ...newChat]);
-    } catch (err) {
+    } catch {
       setChat([
         {
           role: "assistant",
@@ -53,6 +54,19 @@ export default function SalesAssistant() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function saveToBrain(content) {
+    await fetch("/api/brain/admin/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content,
+        role: "manager", // admin / manager only
+      }),
+    });
+
+    alert("Saved to brain.");
   }
 
   function handleKeyDown(e) {
@@ -92,6 +106,24 @@ export default function SalesAssistant() {
               <div className="text-xs text-gray-500 mt-1">
                 {m.source}
               </div>
+            )}
+
+            {m.needsSearchApproval && (
+              <button
+                className="mt-2 text-blue-600 underline"
+                onClick={() => sendMessage({ allowSearch: true })}
+              >
+                Search for answer
+              </button>
+            )}
+
+            {m.canSave && (
+              <button
+                className="mt-2 ml-4 text-green-600 underline"
+                onClick={() => saveToBrain(m.savePayload)}
+              >
+                Save to brain
+              </button>
             )}
           </div>
         ))}
