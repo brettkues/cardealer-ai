@@ -7,6 +7,10 @@ const openai = new OpenAI({
 
 const DEALER_ID = process.env.DEALER_ID;
 
+// process-level caches (safe, non-persistent)
+const embeddingCache = new Map();
+const retrievalCache = new Map();
+
 export async function retrieveKnowledge(message, domain = "sales") {
   console.log("🚨 LIVE RETRIEVE CALLED:", message);
 
@@ -15,14 +19,29 @@ export async function retrieveKnowledge(message, domain = "sales") {
     return [];
   }
 
-  /* ===== 1️⃣ CREATE EMBEDDING ===== */
+  const normalized = message.toLowerCase().trim();
+  const cacheKey = `${DEALER_ID}:${domain}:${normalized}`;
 
-  const embeddingResponse = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: message,
-  });
+  // ===== FAST PATH: cached retrieval =====
+  if (retrievalCache.has(cacheKey)) {
+    return retrievalCache.get(cacheKey);
+  }
 
-  const queryEmbedding = embeddingResponse.data[0].embedding;
+  /* ===== 1️⃣ CREATE / REUSE EMBEDDING ===== */
+
+  let queryEmbedding;
+
+  if (embeddingCache.has(normalized)) {
+    queryEmbedding = embeddingCache.get(normalized);
+  } else {
+    const embeddingResponse = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: message,
+    });
+
+    queryEmbedding = embeddingResponse.data[0].embedding;
+    embeddingCache.set(normalized, queryEmbedding);
+  }
 
   /* ===== 2️⃣ VECTOR SEARCH ===== */
 
@@ -30,7 +49,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.01,
+      match_threshold: 0.15, // was 0.01 (too permissive)
       match_count: 6,
       dealer_id_param: DEALER_ID,
     }
@@ -46,13 +65,13 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
   if (vectorResults.length > 0) {
     console.log("✅ VECTOR MATCH HIT");
+    retrievalCache.set(cacheKey, vectorResults);
     return vectorResults;
   }
 
   /* ===== 3️⃣ KEYWORD FALLBACK (LEGAL / DEFINITIONS) ===== */
 
-  const keywords = message
-    .toLowerCase()
+  const keywords = normalized
     .replace(/[^a-z0-9 ]/g, "")
     .split(" ")
     .filter((w) => w.length > 4)
@@ -73,10 +92,16 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
     if (keywordHits && keywordHits.length > 0) {
       console.log("✅ KEYWORD FALLBACK HIT:", word);
-      return keywordHits.map((r) => r.content).filter(Boolean);
+      const results = keywordHits
+        .map((r) => r.content)
+        .filter(Boolean);
+
+      retrievalCache.set(cacheKey, results);
+      return results;
     }
   }
 
   console.log("❌ NO DEALER KNOWLEDGE FOUND");
+  retrievalCache.set(cacheKey, []);
   return [];
 }
