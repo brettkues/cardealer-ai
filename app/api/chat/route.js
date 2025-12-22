@@ -11,8 +11,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const MAX_TURNS = 6;
-
 /* ------------------ helpers ------------------ */
 
 function isCommand(text) {
@@ -37,7 +35,6 @@ export async function POST(req) {
   try {
     const {
       message,
-      history = [],
       userId = "default",
       role = "sales", // sales | manager | admin
       domain = "sales",
@@ -52,7 +49,7 @@ export async function POST(req) {
       const content = message.replace(/remember this[:]?/i, "").trim();
       await setPersonalMemory(userId, content);
       return NextResponse.json({
-        answer: "Saved. I’ll remember that.",
+        answer: "Saved.",
         source: "Personal memory",
       });
     }
@@ -60,7 +57,7 @@ export async function POST(req) {
     if (memoryIntent === "forget") {
       await clearPersonalMemory(userId);
       return NextResponse.json({
-        answer: "Done. I’ve forgotten that.",
+        answer: "Forgotten.",
         source: "Personal memory",
       });
     }
@@ -68,15 +65,15 @@ export async function POST(req) {
     if (memoryIntent === "recall") {
       const mem = await getPersonalMemory(userId);
       return NextResponse.json({
-        answer: mem || "I don’t have anything saved yet.",
+        answer: mem || "Nothing saved.",
         source: "Personal memory",
       });
     }
 
-    /* ===== ALWAYS CHECK BRAIN FIRST ===== */
+    /* ===== ALWAYS CHECK BRAIN ===== */
 
     const dealerKnowledge = await retrieveKnowledge(message, domain);
-    const hasBrain = dealerKnowledge && dealerKnowledge.length > 0;
+    const hasBrain = dealerKnowledge.length > 0;
 
     /* ===== COMMANDS ===== */
 
@@ -87,8 +84,9 @@ export async function POST(req) {
         messages.push({
           role: "system",
           content:
-            "Use the following dealership-approved guidance if relevant:\n\n" +
-            dealerKnowledge.map(k => k).join("\n\n"),
+            "You may use the following dealership guidance as factual input. " +
+            "Do NOT quote it verbatim. Paraphrase naturally and apply judgment.\n\n" +
+            dealerKnowledge.join("\n\n"),
         });
       }
 
@@ -97,7 +95,7 @@ export async function POST(req) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages,
-        temperature: 0.6,
+        temperature: 0.7,
       });
 
       return NextResponse.json({
@@ -115,12 +113,13 @@ export async function POST(req) {
           {
             role: "system",
             content:
-              "Answer ONLY using the following dealership-approved information:\n\n" +
-              dealerKnowledge.map(k => k).join("\n\n"),
+              "Use the following dealership knowledge as factual grounding. " +
+              "Explain it in your own words. Do not quote or copy text verbatim.\n\n" +
+              dealerKnowledge.join("\n\n"),
           },
           { role: "user", content: message },
         ],
-        temperature: 0.4,
+        temperature: 0.6,
       });
 
       return NextResponse.json({
@@ -138,7 +137,7 @@ export async function POST(req) {
           {
             role: "system",
             content:
-              "Answer using general knowledge. Do not claim dealership authority.",
+              "Answer using general knowledge. Do not imply dealership policy or authority.",
           },
           { role: "user", content: message },
         ],
@@ -149,7 +148,7 @@ export async function POST(req) {
         return NextResponse.json({
           answer:
             response.choices[0].message.content +
-            "\n\nShould I save this to the dealership brain?",
+            "\n\nSave this to the dealership brain?",
           source: "External knowledge",
           canSave: true,
           savePayload: response.choices[0].message.content,
@@ -162,26 +161,24 @@ export async function POST(req) {
       });
     }
 
-    /* ===== OFFER SEARCH ===== */
-
     if (role === "manager" || role === "admin") {
       return NextResponse.json({
         answer:
-          "This is not in the dealership brain. Would you like me to search for it?",
+          "Not found in dealership knowledge. Want me to search for it?",
         source: "Knowledge gap",
         needsSearchApproval: true,
       });
     }
 
     return NextResponse.json({
-      answer: "I don’t have dealership-approved guidance on that yet.",
+      answer: "No dealership guidance available.",
       source: "No dealership data",
     });
 
   } catch (err) {
     console.error(err);
     return NextResponse.json(
-      { answer: "AI failed to respond.", source: "System error" },
+      { answer: "AI failed.", source: "System error" },
       { status: 500 }
     );
   }
