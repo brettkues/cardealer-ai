@@ -40,7 +40,11 @@ export default function TrainPage() {
     async function fetchStatus() {
       const res = await fetch("/api/train/status");
       const data = await res.json();
-      if (data.ok) setJobs(data.jobs);
+
+      // ✅ NEW: route returns array directly
+      if (Array.isArray(data)) {
+        setJobs(data);
+      }
     }
 
     fetchStatus();
