@@ -6,12 +6,12 @@ export default function SalesAssistant() {
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [savedIds, setSavedIds] = useState(new Set()); // UI guard
 
   async function sendMessage({ allowSearch = false } = {}) {
     if (!msg || loading) return;
 
     const userMessage = { role: "user", content: msg };
-
     const newChat = [userMessage, ...chat];
     setChat(newChat);
     setMsg("");
@@ -24,13 +24,12 @@ export default function SalesAssistant() {
         body: JSON.stringify({
           message: userMessage.content,
           history: newChat,
-          role: "manager", // adjust if needed
+          role: "manager",
           allowSearch,
         }),
       });
 
       if (!res.ok) throw new Error("Request failed");
-
       const data = await res.json();
 
       const aiMessage = {
@@ -40,15 +39,13 @@ export default function SalesAssistant() {
         needsSearchApproval: data.needsSearchApproval,
         canSave: data.canSave,
         savePayload: data.savePayload,
+        _id: `${Date.now()}-${Math.random()}`, // local id
       };
 
       setChat([aiMessage, ...newChat]);
     } catch {
       setChat([
-        {
-          role: "assistant",
-          content: "Something went wrong. Please try again.",
-        },
+        { role: "assistant", content: "Something went wrong. Please try again." },
         ...newChat,
       ]);
     } finally {
@@ -56,17 +53,27 @@ export default function SalesAssistant() {
     }
   }
 
-  async function saveToBrain(content) {
-    await fetch("/api/brain/admin/save", {
+  async function saveToBrain(messageId, content) {
+    if (savedIds.has(messageId)) return;
+
+    // disable immediately (optimistic)
+    setSavedIds((s) => new Set([...s, messageId]));
+
+    const res = await fetch("/api/brain/admin/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content,
-        role: "manager", // admin / manager only
-      }),
+      body: JSON.stringify({ content, role: "manager" }),
     });
 
-    alert("Saved to brain.");
+    if (!res.ok) {
+      // rollback if save failed
+      setSavedIds((s) => {
+        const n = new Set(s);
+        n.delete(messageId);
+        return n;
+      });
+      alert("Save failed.");
+    }
   }
 
   function handleKeyDown(e) {
@@ -78,7 +85,6 @@ export default function SalesAssistant() {
 
   return (
     <div className="h-screen flex flex-col">
-      {/* INPUT AREA */}
       <div className="p-4 border-b bg-white">
         <h1 className="text-2xl font-bold">Sales Assistant</h1>
         <textarea
@@ -92,10 +98,9 @@ export default function SalesAssistant() {
         />
       </div>
 
-      {/* CHAT AREA */}
       <div className="flex-1 overflow-auto p-4 bg-gray-50">
         {chat.map((m, i) => (
-          <div key={i} className="mb-6">
+          <div key={m._id || i} className="mb-6">
             <div className="font-semibold">
               {m.role === "user" ? "You" : "AI"}
             </div>
@@ -103,9 +108,7 @@ export default function SalesAssistant() {
             <div className="whitespace-pre-wrap">{m.content}</div>
 
             {m.source && (
-              <div className="text-xs text-gray-500 mt-1">
-                {m.source}
-              </div>
+              <div className="text-xs text-gray-500 mt-1">{m.source}</div>
             )}
 
             {m.needsSearchApproval && (
@@ -119,18 +122,21 @@ export default function SalesAssistant() {
 
             {m.canSave && (
               <button
-                className="mt-2 ml-4 text-green-600 underline"
-                onClick={() => saveToBrain(m.savePayload)}
+                className="mt-2 ml-4 underline"
+                disabled={savedIds.has(m._id)}
+                onClick={() => saveToBrain(m._id, m.savePayload)}
+                style={{
+                  color: savedIds.has(m._id) ? "#6b7280" : "#16a34a",
+                  cursor: savedIds.has(m._id) ? "default" : "pointer",
+                }}
               >
-                Save to brain
+                {savedIds.has(m._id) ? "Saved" : "Save to brain"}
               </button>
             )}
           </div>
         ))}
 
-        {loading && (
-          <div className="text-sm text-gray-500">AI is typing…</div>
-        )}
+        {loading && <div className="text-sm text-gray-500">AI is typing…</div>}
       </div>
     </div>
   );
