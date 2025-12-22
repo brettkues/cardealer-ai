@@ -7,7 +7,7 @@ const openai = new OpenAI({
 });
 
 const DEALER_ID = process.env.DEALER_ID;
-const CHUNK_SIZE = 800; // characters
+const CHUNK_SIZE = 800;
 
 function chunkText(text, size) {
   const chunks = [];
@@ -19,9 +19,19 @@ function chunkText(text, size) {
   return chunks;
 }
 
+function makeSourceFile(label, content) {
+  const slug = content
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .split(" ")
+    .slice(0, 6)
+    .join("-");
+  return `${label}:${slug || "note"}`;
+}
+
 export async function POST(req) {
   try {
-    const { content, source_file = "admin-search", role } = await req.json();
+    const { content, role, source_file } = await req.json();
 
     if (role !== "admin" && role !== "manager") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -34,6 +44,9 @@ export async function POST(req) {
       );
     }
 
+    const finalSource =
+      source_file || makeSourceFile("admin-search", content);
+
     const chunks = chunkText(content, CHUNK_SIZE);
 
     const embeddings = await openai.embeddings.create({
@@ -43,7 +56,7 @@ export async function POST(req) {
 
     const rows = chunks.map((chunk, i) => ({
       dealer_id: DEALER_ID,
-      source_file,
+      source_file: finalSource,
       chunk_index: i,
       content: chunk,
       embedding: embeddings.data[i].embedding,
@@ -54,14 +67,15 @@ export async function POST(req) {
       .insert(rows);
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, chunks: rows.length });
-  } catch (err) {
+    return NextResponse.json({
+      success: true,
+      source_file: finalSource,
+      chunks: rows.length,
+    });
+  } catch {
     return NextResponse.json(
       { error: "Save failed" },
       { status: 500 }
