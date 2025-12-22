@@ -10,13 +10,17 @@ export const runtime = "nodejs";
  * - Return immediately
  */
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 export async function POST(req) {
   try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      throw new Error("Missing Supabase service configuration");
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey);
+
     const form = await req.formData();
     const files = form.getAll("files");
 
@@ -45,7 +49,7 @@ export async function POST(req) {
         continue;
       }
 
-      // 2️⃣ Register ingest job (SERVICE ROLE = no RLS block)
+      // 2️⃣ Register ingest job (service role bypasses RLS)
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
@@ -71,7 +75,7 @@ export async function POST(req) {
   } catch (err) {
     console.error("UPLOAD ROUTE ERROR:", err);
     return NextResponse.json(
-      { ok: false, error: String(err) },
+      { ok: false, error: String(err.message || err) },
       { status: 500 }
     );
   }
