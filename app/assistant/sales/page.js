@@ -8,7 +8,7 @@ export default function SalesAssistant() {
   const [loading, setLoading] = useState(false);
   const [savedIds, setSavedIds] = useState(new Set());
 
-  const role = "manager"; // change to "sales" to hide sources
+  const role = "manager"; // change to "sales" to hide admin features
 
   async function sendMessage({ allowSearch = false } = {}) {
     if (!msg || loading) return;
@@ -42,6 +42,13 @@ export default function SalesAssistant() {
         needsSearchApproval: data.needsSearchApproval,
         canSave: data.canSave,
         savePayload: data.savePayload,
+        saveSource:
+          userMessage.content
+            .toLowerCase()
+            .replace(/[^a-z0-9 ]/g, "")
+            .split(" ")
+            .slice(0, 6)
+            .join("-") || "admin-note",
         _id: `${Date.now()}-${Math.random()}`,
       };
 
@@ -56,14 +63,18 @@ export default function SalesAssistant() {
     }
   }
 
-  async function saveToBrain(messageId, content) {
+  async function saveToBrain(messageId, content, source) {
     if (savedIds.has(messageId)) return;
     setSavedIds((s) => new Set([...s, messageId]));
 
     const res = await fetch("/api/brain/admin/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, role }),
+      body: JSON.stringify({
+        content,
+        source_file: `admin-search:${source}`,
+        role,
+      }),
     });
 
     if (!res.ok) {
@@ -130,7 +141,9 @@ export default function SalesAssistant() {
               <button
                 className="mt-2 ml-4 underline"
                 disabled={savedIds.has(m._id)}
-                onClick={() => saveToBrain(m._id, m.savePayload)}
+                onClick={() =>
+                  saveToBrain(m._id, m.savePayload, m.saveSource)
+                }
                 style={{
                   color: savedIds.has(m._id) ? "#6b7280" : "#16a34a",
                   cursor: savedIds.has(m._id) ? "default" : "pointer",
