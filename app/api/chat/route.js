@@ -48,18 +48,12 @@ export async function POST(req) {
     if (memoryIntent === "remember") {
       const content = message.replace(/remember this[:]?/i, "").trim();
       await setPersonalMemory(userId, content);
-      return NextResponse.json({
-        answer: "Saved.",
-        source: "Personal memory",
-      });
+      return NextResponse.json({ answer: "Saved.", source: "Personal memory" });
     }
 
     if (memoryIntent === "forget") {
       await clearPersonalMemory(userId);
-      return NextResponse.json({
-        answer: "Forgotten.",
-        source: "Personal memory",
-      });
+      return NextResponse.json({ answer: "Forgotten.", source: "Personal memory" });
     }
 
     if (memoryIntent === "recall") {
@@ -70,10 +64,10 @@ export async function POST(req) {
       });
     }
 
-    /* ===== ALWAYS CHECK BRAIN ===== */
+    /* ===== BRAIN ===== */
 
-    const dealerKnowledge = await retrieveKnowledge(message, domain);
-    const hasBrain = dealerKnowledge.length > 0;
+    const hits = await retrieveKnowledge(message, domain);
+    const hasBrain = hits && hits.length > 0;
 
     /* ===== COMMANDS ===== */
 
@@ -84,9 +78,8 @@ export async function POST(req) {
         messages.push({
           role: "system",
           content:
-            "You may use the following dealership guidance as factual input. " +
-            "Do NOT quote it verbatim. Paraphrase naturally and apply judgment.\n\n" +
-            dealerKnowledge.join("\n\n"),
+            "Use the following dealership guidance as factual input. Paraphrase.\n\n" +
+            hits.map(h => h.content || h).join("\n\n"),
         });
       }
 
@@ -101,6 +94,10 @@ export async function POST(req) {
       return NextResponse.json({
         answer: response.choices[0].message.content,
         source: hasBrain ? "Dealership knowledge" : "Command execution",
+        source_files:
+          hasBrain && (role === "admin" || role === "manager")
+            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
+            : undefined,
       });
     }
 
@@ -113,9 +110,8 @@ export async function POST(req) {
           {
             role: "system",
             content:
-              "Use the following dealership knowledge as factual grounding. " +
-              "Explain it in your own words. Do not quote or copy text verbatim.\n\n" +
-              dealerKnowledge.join("\n\n"),
+              "Use the following dealership knowledge as grounding. Paraphrase.\n\n" +
+              hits.map(h => h.content || h).join("\n\n"),
           },
           { role: "user", content: message },
         ],
@@ -125,6 +121,10 @@ export async function POST(req) {
       return NextResponse.json({
         answer: response.choices[0].message.content,
         source: "Dealership knowledge",
+        source_files:
+          role === "admin" || role === "manager"
+            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
+            : undefined,
       });
     }
 
@@ -137,7 +137,7 @@ export async function POST(req) {
           {
             role: "system",
             content:
-              "Answer using general knowledge. Do not imply dealership policy or authority.",
+              "Answer using general knowledge. Do not imply dealership authority.",
           },
           { role: "user", content: message },
         ],
@@ -161,10 +161,9 @@ export async function POST(req) {
       });
     }
 
-    if (role === "manager" || role === "admin") {
+    if (role === "admin" || role === "manager") {
       return NextResponse.json({
-        answer:
-          "Not found in dealership knowledge. Want me to search for it?",
+        answer: "Not found in dealership knowledge. Want me to search for it?",
         source: "Knowledge gap",
         needsSearchApproval: true,
       });
@@ -174,7 +173,6 @@ export async function POST(req) {
       answer: "No dealership guidance available.",
       source: "No dealership data",
     });
-
   } catch (err) {
     console.error(err);
     return NextResponse.json(
