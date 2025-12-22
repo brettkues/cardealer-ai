@@ -7,17 +7,17 @@ const supabase = createClient(
 );
 
 export async function GET() {
-  const { data, error } = await supabase.rpc("sql", {
-    query: `
-      SELECT
+  const { data, error } = await supabase
+    .from("sales_training_vectors")
+    .select(
+      `
         source_file,
-        COUNT(*) AS chunk_count,
-        MIN(created_at) AS created_at
-      FROM sales_training_vectors
-      GROUP BY source_file
-      ORDER BY created_at DESC
-    `
-  });
+        chunk_count:count(),
+        created_at:min(created_at)
+      `
+    )
+    .group("source_file")
+    .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
