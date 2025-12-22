@@ -1,25 +1,26 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
-export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
-  try {
-    const { data, error } = await supabase
-      .from("ingest_jobs")
-      .select("id, original_name, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(25);
+  const { data, error } = await supabase
+    .from("ingest_jobs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
 
-    if (error) {
-      throw error;
-    }
-
-    return NextResponse.json({ ok: true, jobs: data });
-  } catch (err) {
+  if (error) {
     return NextResponse.json(
-      { ok: false, error: String(err) },
+      { error: error.message },
       { status: 500 }
     );
   }
+
+  return NextResponse.json(data, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+  });
 }
