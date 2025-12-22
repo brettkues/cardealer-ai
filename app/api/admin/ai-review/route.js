@@ -9,21 +9,31 @@ const supabase = createClient(
 export async function GET() {
   const { data, error } = await supabase
     .from("sales_training_vectors")
-    .select(
-      `
-        source_file,
-        chunk_count:count(),
-        created_at:min(created_at)
-      `
-    )
-    .group("source_file")
-    .order("created_at", { ascending: false });
+    .select("source_file, created_at")
+    .range(0, 20000); // remove 1k cap
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  const grouped = {};
+
+  for (const row of data) {
+    if (!grouped[row.source_file]) {
+      grouped[row.source_file] = {
+        source_file: row.source_file,
+        chunk_count: 0,
+        created_at: row.created_at,
+      };
+    }
+    grouped[row.source_file].chunk_count++;
+  }
+
+  return NextResponse.json(
+    Object.values(grouped).sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    )
+  );
 }
 
 export async function DELETE(req) {
