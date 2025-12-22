@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
@@ -8,11 +8,12 @@ export const runtime = "nodejs";
  * - Upload raw files to Supabase Storage
  * - Create pending ingest_jobs rows
  * - Return immediately
- *
- * NO parsing
- * NO chunking
- * NO embeddings
  */
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(req) {
   try {
@@ -29,11 +30,9 @@ export async function POST(req) {
     let uploaded = 0;
 
     for (const file of files) {
-      console.log("UPLOAD:", file.name, "SIZE:", file.size);
-
       const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-      // 1️⃣ Upload raw file to Supabase Storage
+      // 1️⃣ Upload raw file
       const { error: uploadError } = await supabase.storage
         .from("knowledge")
         .upload(filePath, file, {
@@ -42,11 +41,11 @@ export async function POST(req) {
         });
 
       if (uploadError) {
-        console.error("STORAGE UPLOAD ERROR:", uploadError);
+        console.error("STORAGE UPLOAD ERROR:", uploadError.message);
         continue;
       }
 
-      // 2️⃣ Create ingestion job
+      // 2️⃣ Register ingest job (SERVICE ROLE = no RLS block)
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
@@ -57,14 +56,13 @@ export async function POST(req) {
         });
 
       if (jobError) {
-        console.error("INGEST JOB ERROR:", jobError);
+        console.error("INGEST JOB ERROR:", jobError.message);
         continue;
       }
 
       uploaded++;
     }
 
-    // UI expects `stored`
     return NextResponse.json({
       ok: true,
       stored: uploaded,
