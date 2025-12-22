@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 export async function GET() {
   const { data, error } = await supabase
     .from("ingest_jobs")
@@ -18,9 +15,5 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json(data, {
-    headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate",
-    },
-  });
+  return NextResponse.json(data);
 }
