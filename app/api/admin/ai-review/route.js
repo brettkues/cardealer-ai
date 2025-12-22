@@ -7,18 +7,29 @@ const supabase = createClient(
 );
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from("sales_training_vectors")
-    .select("source_file, created_at")
-    .range(0, 20000); // remove 1k cap
+  let allRows = [];
+  let from = 0;
+  const PAGE_SIZE = 1000;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  while (true) {
+    const { data, error } = await supabase
+      .from("sales_training_vectors")
+      .select("source_file, created_at")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!data || data.length === 0) break;
+
+    allRows = allRows.concat(data);
+    from += PAGE_SIZE;
   }
 
   const grouped = {};
 
-  for (const row of data) {
+  for (const row of allRows) {
     if (!grouped[row.source_file]) {
       grouped[row.source_file] = {
         source_file: row.source_file,
