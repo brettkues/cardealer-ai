@@ -6,7 +6,9 @@ export default function SalesAssistant() {
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [savedIds, setSavedIds] = useState(new Set()); // UI guard
+  const [savedIds, setSavedIds] = useState(new Set());
+
+  const role = "manager"; // change to "sales" to hide sources
 
   async function sendMessage({ allowSearch = false } = {}) {
     if (!msg || loading) return;
@@ -24,7 +26,7 @@ export default function SalesAssistant() {
         body: JSON.stringify({
           message: userMessage.content,
           history: newChat,
-          role: "manager",
+          role,
           allowSearch,
         }),
       });
@@ -36,10 +38,11 @@ export default function SalesAssistant() {
         role: "assistant",
         content: data.answer || "No response received.",
         source: data.source || null,
+        source_files: data.source_files || [],
         needsSearchApproval: data.needsSearchApproval,
         canSave: data.canSave,
         savePayload: data.savePayload,
-        _id: `${Date.now()}-${Math.random()}`, // local id
+        _id: `${Date.now()}-${Math.random()}`,
       };
 
       setChat([aiMessage, ...newChat]);
@@ -55,18 +58,15 @@ export default function SalesAssistant() {
 
   async function saveToBrain(messageId, content) {
     if (savedIds.has(messageId)) return;
-
-    // disable immediately (optimistic)
     setSavedIds((s) => new Set([...s, messageId]));
 
     const res = await fetch("/api/brain/admin/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, role: "manager" }),
+      body: JSON.stringify({ content, role }),
     });
 
     if (!res.ok) {
-      // rollback if save failed
       setSavedIds((s) => {
         const n = new Set(s);
         n.delete(messageId);
@@ -109,6 +109,12 @@ export default function SalesAssistant() {
 
             {m.source && (
               <div className="text-xs text-gray-500 mt-1">{m.source}</div>
+            )}
+
+            {role !== "sales" && m.source_files?.length > 0 && (
+              <div className="text-xs text-gray-400 mt-1">
+                Sources: {m.source_files.join(", ")}
+              </div>
             )}
 
             {m.needsSearchApproval && (
