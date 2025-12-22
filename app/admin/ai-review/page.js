@@ -3,23 +3,20 @@
 import { useEffect, useState } from "react";
 
 export default function AIReviewPage() {
-  const [rows, setRows] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   async function loadBrain() {
-    setLoading(true);
-    setError("");
-
     try {
-      const res = await fetch("/api/admin/ai-review/list");
+      setLoading(true);
+      setError(null);
+
+      const res = await fetch("/api/admin/ai-review");
+      if (!res.ok) throw new Error("API error");
+
       const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error("Failed to load brain");
-      }
-
-      setRows(data.rows || []);
+      setFiles(data);
     } catch (err) {
       setError("Failed to load AI brain");
     } finally {
@@ -27,80 +24,51 @@ export default function AIReviewPage() {
     }
   }
 
-  async function deleteSource(sourceFile) {
-    if (!confirm(`Delete all AI knowledge from:\n\n${sourceFile}?`)) return;
-
-    const res = await fetch("/admin/ai-review/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source_file: sourceFile }),
-    });
-
-    const data = await res.json();
-
-    if (!data.ok) {
-      alert("Delete failed");
-      return;
-    }
-
-    loadBrain();
-  }
-
   useEffect(() => {
     loadBrain();
   }, []);
 
+  if (loading) {
+    return <div className="p-6">Loading AI brain…</div>;
+  }
+
+  if (error) {
+    return <div className="p-6 text-red-600">{error}</div>;
+  }
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">AI Training Review</h1>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">AI Training Review</h1>
 
-      {loading && <div>Loading brain…</div>}
-
-      {error && (
-        <div className="text-red-600 mb-4">
-          {error}
-        </div>
-      )}
-
-      {!loading && rows.length === 0 && (
-        <div>No training data found.</div>
-      )}
-
-      {!loading && rows.length > 0 && (
-        <div className="border rounded overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="text-left p-3">Source File</th>
-                <th className="text-left p-3">Chunks</th>
-                <th className="text-right p-3">Actions</th>
+      {files.length === 0 ? (
+        <div>No trained files found.</div>
+      ) : (
+        <table className="w-full border text-sm">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="border px-3 py-2 text-left">Source File</th>
+              <th className="border px-3 py-2">Chunks</th>
+              <th className="border px-3 py-2">Created</th>
+              <th className="border px-3 py-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {files.map((f) => (
+              <tr key={f.source_file}>
+                <td className="border px-3 py-2">{f.source_file}</td>
+                <td className="border px-3 py-2 text-center">
+                  {f.chunk_count}
+                </td>
+                <td className="border px-3 py-2">
+                  {new Date(f.created_at).toLocaleString()}
+                </td>
+                <td className="border px-3 py-2 text-center text-gray-400">
+                  delete (next)
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.source_file}
-                  className="border-t hover:bg-gray-50"
-                >
-                  <td className="p-3">
-                    {row.source_file}
-                  </td>
-                  <td className="p-3">
-                    {row.chunks}
-                  </td>
-                  <td className="p-3 text-right">
-                    <button
-                      onClick={() => deleteSource(row.source_file)}
-                      className="text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
