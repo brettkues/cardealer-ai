@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -34,7 +35,7 @@ export async function POST(req) {
     let uploaded = 0;
 
     for (const file of files) {
-      const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
+      const filePath = `sales-training/${randomUUID()}-${file.name}`;
 
       // 1️⃣ Upload raw file
       const { error: uploadError } = await supabase.storage
@@ -49,7 +50,7 @@ export async function POST(req) {
         continue;
       }
 
-      // 2️⃣ Register ingest job (service role bypasses RLS)
+      // 2️⃣ Register ingest job
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
