@@ -1,10 +1,7 @@
-// app/api/train/sales/route.js
-
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 /**
  * STEP 1 ONLY
@@ -12,22 +9,12 @@ export const dynamic = "force-dynamic";
  * - Create pending ingest_jobs rows
  * - Return immediately
  *
- * NO parsing
- * NO chunking
- * NO embeddings
+ * This MUST use the shared supabaseClient
+ * so env resolution stays consistent across the app.
  */
 
 export async function POST(req) {
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !serviceKey) {
-      throw new Error("Missing Supabase service configuration");
-    }
-
-    const supabase = createClient(supabaseUrl, serviceKey);
-
     const form = await req.formData();
     const files = form.getAll("files");
 
@@ -43,7 +30,7 @@ export async function POST(req) {
     for (const file of files) {
       const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-      // 1️⃣ Upload raw file to Supabase Storage
+      // 1️⃣ Upload raw file to Storage
       const { error: uploadError } = await supabase.storage
         .from("knowledge")
         .upload(filePath, file, {
@@ -56,7 +43,7 @@ export async function POST(req) {
         continue;
       }
 
-      // 2️⃣ Create ingest job row
+      // 2️⃣ Register ingestion job
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
@@ -82,7 +69,7 @@ export async function POST(req) {
   } catch (err) {
     console.error("UPLOAD ROUTE ERROR:", err);
     return NextResponse.json(
-      { ok: false, error: String(err.message || err) },
+      { ok: false, error: String(err) },
       { status: 500 }
     );
   }
