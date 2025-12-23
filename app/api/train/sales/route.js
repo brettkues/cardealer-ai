@@ -8,64 +8,60 @@ export async function POST(req) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    // 🔍 HARD PROOF LOGGING
+    console.log("SUPABASE_URL exists:", !!supabaseUrl);
+    console.log(
+      "SERVICE KEY prefix:",
+      serviceKey ? serviceKey.slice(0, 10) : "MISSING"
+    );
+
     if (!supabaseUrl || !serviceKey) {
       return NextResponse.json(
-        { ok: false, error: "Supabase env missing" },
+        { ok: false, error: "Missing Supabase env vars" },
         { status: 500 }
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false }
-    });
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     const form = await req.formData();
     const files = form.getAll("files");
 
-    if (!files.length) {
+    if (!files || files.length === 0) {
       return NextResponse.json(
-        { ok: false, error: "No files" },
+        { ok: false, error: "No files received" },
         { status: 400 }
       );
     }
 
-    let uploaded = 0;
-
     for (const file of files) {
-      const path = `sales-training/${crypto.randomUUID()}-${file.name}`;
+      const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error } = await supabase.storage
         .from("knowledge")
-        .upload(path, file, { upsert: false });
+        .upload(filePath, file, { upsert: false });
 
-      if (uploadError) {
-        console.error("UPLOAD ERROR:", uploadError.message);
-        continue;
+      if (error) {
+        console.error("UPLOAD ERROR:", error);
+        return NextResponse.json(
+          { ok: false, error: error.message },
+          { status: 403 }
+        );
       }
 
-      const { error: jobError } = await supabase
-        .from("ingest_jobs")
-        .insert({
-          file_path: path,
-          original_name: file.name,
-          source: "sales",
-          status: "pending",
-        });
-
-      if (jobError) {
-        console.error("JOB ERROR:", jobError.message);
-        continue;
-      }
-
-      uploaded++;
+      await supabase.from("ingest_jobs").insert({
+        file_path: filePath,
+        original_name: file.name,
+        source: "sales",
+        status: "pending",
+      });
     }
 
-    return NextResponse.json({ ok: true, stored: uploaded });
-
+    return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("TRAIN UPLOAD FAILED:", err);
+    console.error("ROUTE FAILURE:", err);
     return NextResponse.json(
-      { ok: false, error: "Upload failed" },
+      { ok: false, error: "Route crashed" },
       { status: 500 }
     );
   }
