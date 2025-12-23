@@ -1,14 +1,20 @@
+// app/api/train/sales/route.js
+
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * STEP 1 ONLY
  * - Upload raw files to Supabase Storage
  * - Create pending ingest_jobs rows
  * - Return immediately
+ *
+ * NO parsing
+ * NO chunking
+ * NO embeddings
  */
 
 export async function POST(req) {
@@ -35,9 +41,9 @@ export async function POST(req) {
     let uploaded = 0;
 
     for (const file of files) {
-      const filePath = `sales-training/${randomUUID()}-${file.name}`;
+      const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-      // 1️⃣ Upload raw file
+      // 1️⃣ Upload raw file to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from("knowledge")
         .upload(filePath, file, {
@@ -50,7 +56,7 @@ export async function POST(req) {
         continue;
       }
 
-      // 2️⃣ Register ingest job
+      // 2️⃣ Create ingest job row
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
