@@ -29,6 +29,23 @@ function detectMemoryIntent(text) {
   return null;
 }
 
+function detectBrainTrainingIntent(text) {
+  const patterns = [
+    /^add to brain:/i,
+    /^add to knowledge:/i,
+    /^train the ai with this:/i,
+    /^save to dealership brain:/i,
+  ];
+
+  for (const p of patterns) {
+    if (p.test(text)) {
+      return text.replace(p, "").trim();
+    }
+  }
+
+  return null;
+}
+
 /* ------------------ handler ------------------ */
 
 export async function POST(req) {
@@ -41,7 +58,45 @@ export async function POST(req) {
       allowSearch = false,
     } = await req.json();
 
-    /* ===== MEMORY ===== */
+    /* ===== EXPLICIT BRAIN TRAINING (MANAGER / ADMIN ONLY) ===== */
+
+    const brainContent = detectBrainTrainingIntent(message);
+
+    if (brainContent) {
+      if (role !== "admin" && role !== "manager") {
+        return NextResponse.json(
+          { answer: "Only managers or admins can train the AI.", source: "Permission denied" },
+          { status: 403 }
+        );
+      }
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/brain/admin/save`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: brainContent,
+            role,
+            source_file: `chat:${userId}:${new Date().toISOString().slice(0, 10)}`,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        return NextResponse.json(
+          { answer: "Failed to add content to the brain.", source: "System error" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        answer: "Added to dealership brain.",
+        source: "Brain training",
+      });
+    }
+
+    /* ===== PERSONAL MEMORY ===== */
 
     const memoryIntent = detectMemoryIntent(message);
 
@@ -64,7 +119,7 @@ export async function POST(req) {
       });
     }
 
-    /* ===== BRAIN ===== */
+    /* ===== BRAIN RETRIEVAL ===== */
 
     const hits = await retrieveKnowledge(message, domain);
     const hasBrain = hits && hits.length > 0;
