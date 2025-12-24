@@ -7,20 +7,17 @@ import {
   clearPersonalMemory,
 } from "@/lib/memory/personalStore";
 import { supabase } from "@/lib/supabaseClient";
-import OpenAIClient from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const embedClient = new OpenAIClient({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+/* ================= CONFIG ================= */
 
-/* ================= CONFIDENCE THRESHOLDS ================= */
-
+const DEALER_ID = process.env.DEALER_ID;
 const HIGH_CONFIDENCE = 0.85;
 const MIN_CONFIDENCE = 0.65;
+const CHUNK_SIZE = 800;
 
 /* ================= HELPERS ================= */
 
@@ -48,29 +45,31 @@ function detectBrainTrainingIntent(text) {
   return text.slice(match[0].length).trim();
 }
 
-/* ================= BRAIN SAVE (DIRECT, SAFE) ================= */
+function chunkText(text) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+    chunks.push(text.slice(i, i + CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+/* ================= BRAIN SAVE ================= */
 
 async function saveToBrain({ content, source_file }) {
-  const DEALER_ID = process.env.DEALER_ID;
-  const CHUNK_SIZE = 800;
-
-  if (!DEALER_ID || !content) {
-    throw new Error("Missing dealer or content");
+  if (!DEALER_ID || !content || !source_file) {
+    throw new Error("Missing dealer, content, or source_file");
   }
 
-  // HARD REPLACEMENT BY SOURCE
+  // HARD REPLACE BY dealer_id + source_file
   await supabase
     .from("sales_training_vectors")
     .delete()
     .eq("dealer_id", DEALER_ID)
     .eq("source_file", source_file);
 
-  const chunks = [];
-  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
-    chunks.push(content.slice(i, i + CHUNK_SIZE));
-  }
+  const chunks = chunkText(content);
 
-  const embeddings = await embedClient.embeddings.create({
+  const embeddings = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: chunks,
   });
@@ -114,11 +113,11 @@ export async function POST(req) {
         );
       }
 
-      const sourceFile = `chat:${userId}:${Date.now()}`;
+      const source_file = `chat:${userId}:${new Date().toISOString()}`;
 
       await saveToBrain({
         content: brainContent,
-        source_file: sourceFile,
+        source_file,
       });
 
       return NextResponse.json({
@@ -150,26 +149,41 @@ export async function POST(req) {
       });
     }
 
-    /* ===== KNOWLEDGE RETRIEVAL ===== */
+    /* ===== STEP 1: THINK FIRST ===== */
+
+    const baseResponse = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Answer naturally using general dealership reasoning. Do not claim dealership policy unless certain.",
+        },
+        { role: "user", content: message },
+      ],
+      temperature: 0.7,
+    });
+
+    let answer = baseResponse.choices[0].message.content;
+    let source = "General dealership reasoning";
+    let sourceFiles;
+
+    /* ===== STEP 2: CHECK BRAIN ===== */
 
     const hits = await retrieveKnowledge(message, domain);
     const topHit = hits?.[0];
     const topScore = topHit?.score ?? 0;
 
-    let truth = "none";
-    if (topScore >= HIGH_CONFIDENCE) truth = "confirmed";
-    else if (topScore >= MIN_CONFIDENCE) truth = "inferred";
+    /* ===== STEP 3: CONFIRM / CORRECT ===== */
 
-    /* ===== CONFIRMED POLICY ===== */
-
-    if (truth === "confirmed") {
-      const response = await openai.chat.completions.create({
+    if (topScore >= HIGH_CONFIDENCE) {
+      const policyResponse = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Answer ONLY using the dealership policy below. Do not infer or add anything.\n\n" +
+              "Use the following dealership policy to answer. Override prior reasoning if policy differs.\n\n" +
               hits.map(h => h.content).join("\n\n"),
           },
           { role: "user", content: message },
@@ -177,43 +191,24 @@ export async function POST(req) {
         temperature: 0.3,
       });
 
-      return NextResponse.json({
-        answer: response.choices[0].message.content,
-        source: "Dealer policy (documented)",
-        source_files:
-          role !== "sales"
-            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
-            : undefined,
-      });
+      answer = policyResponse.choices[0].message.content;
+      source = "Dealer policy (documented)";
+      sourceFiles =
+        role !== "sales"
+          ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
+          : undefined;
+    } else if (topScore >= MIN_CONFIDENCE) {
+      answer +=
+        "\n\n(Note: This reflects common dealership practice supported by internal guidance, but is not explicitly documented policy.)";
+      source = "Supported best practice";
     }
 
-    /* ===== INFERRED GUIDANCE ===== */
+    /* ===== STEP 4: SEARCH OPTION ===== */
 
-    if (truth === "inferred") {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Use dealership context if relevant. Clearly state if something is not explicitly documented.",
-          },
-          { role: "user", content: message },
-        ],
-        temperature: 0.6,
-      });
-
-      return NextResponse.json({
-        answer:
-          response.choices[0].message.content +
-          "\n\n(Note: This guidance is inferred, not explicitly documented.)",
-        source: "Inferred guidance",
-      });
-    }
-
-    /* ===== GENERAL KNOWLEDGE ===== */
-
-    if (allowSearch || userRequestedSearch(message)) {
+    if (
+      source === "General dealership reasoning" &&
+      (allowSearch || userRequestedSearch(message))
+    ) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -234,8 +229,9 @@ export async function POST(req) {
     }
 
     return NextResponse.json({
-      answer: "No dealership guidance exists for this question.",
-      source: "General industry guidance",
+      answer,
+      source,
+      source_files: sourceFiles,
     });
   } catch (err) {
     console.error(err);
