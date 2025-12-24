@@ -1,3 +1,5 @@
+// app/train/page.js
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,33 +20,45 @@ export default function TrainPage() {
     setStatus("Uploading files…");
 
     try {
-      const form = new FormData();
-      salesFiles.forEach(f => form.append("files", f));
+      for (const file of salesFiles) {
+        const res = await fetch("/api/train/sales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+          }),
+        });
 
-      await fetch("/api/train/sales", {
-        method: "POST",
-        body: form,
-      });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Failed to get upload URL");
+
+        const uploadRes = await fetch(data.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": data.contentType },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Direct upload failed");
+        }
+      }
 
       setStatus("Files uploaded. Processing in background.");
       setSalesFiles([]);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setStatus("Upload failed.");
     } finally {
       setLoading(false);
     }
   }
 
-  // 🔁 Poll ingest status
   useEffect(() => {
     async function fetchStatus() {
       const res = await fetch("/api/train/status");
       const data = await res.json();
-
-      // ✅ NEW: route returns array directly
-      if (Array.isArray(data)) {
-        setJobs(data);
-      }
+      if (data.ok) setJobs(data.jobs);
     }
 
     fetchStatus();
@@ -75,20 +89,15 @@ export default function TrainPage() {
         {status && <div className="text-sm text-gray-700">{status}</div>}
       </div>
 
-      {/* 📊 STATUS PANEL */}
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-2">Ingestion Status</h2>
 
         <div className="border rounded divide-y text-sm">
-          {jobs.map(job => (
-            <div
-              key={job.id}
-              className="flex justify-between p-2"
-            >
+          {jobs.map((job) => (
+            <div key={job.id} className="flex justify-between p-2">
               <span className="truncate max-w-[70%]">
                 {job.original_name}
               </span>
-
               <span
                 className={
                   job.status === "complete"
