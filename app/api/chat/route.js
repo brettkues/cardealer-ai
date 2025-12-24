@@ -1,6 +1,3 @@
-// app/api/chat/route.js
-// SINGLE-FILE REPLACEMENT
-
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
@@ -15,13 +12,24 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ================= CONFIG ================= */
-
 const DEALER_ID = process.env.DEALER_ID;
-const HIGH_CONFIDENCE = 0.85;
 const CHUNK_SIZE = 800;
 
-/* ================= HELPERS ================= */
+/* ===== COMPLIANCE TRIGGERS ===== */
+
+function hasRegulatedContent(text) {
+  return /(apr|interest rate|0%|payment|\$\/mo|monthly|lease|rebate|incentive|advertis|ad\b)/i.test(
+    text
+  );
+}
+
+function isDefinitionIntent(text) {
+  return /^(what is|what are|do i need|can i|legal|disclosure|comply)/i.test(
+    text.trim().toLowerCase()
+  );
+}
+
+/* ===== MEMORY ===== */
 
 function detectMemoryIntent(text) {
   const t = text.toLowerCase().trim();
@@ -39,34 +47,19 @@ function detectBrainTrainingIntent(text) {
   return text.slice(match[0].length).trim();
 }
 
-function isDefinitionQuestion(text) {
-  return /^(what is|what are|do i need|does|is|are)\b/i.test(
-    text.trim().toLowerCase()
-  );
-}
-
-function chunkText(text) {
-  const chunks = [];
-  for (let i = 0; i < text.length; i += CHUNK_SIZE) {
-    chunks.push(text.slice(i, i + CHUNK_SIZE));
-  }
-  return chunks;
-}
-
-/* ================= BRAIN SAVE ================= */
+/* ===== SAVE TO BRAIN ===== */
 
 async function saveToBrain({ content, source_file }) {
-  if (!DEALER_ID || !content || !source_file) {
-    throw new Error("Missing dealer, content, or source_file");
-  }
-
   await supabase
     .from("sales_training_vectors")
     .delete()
     .eq("dealer_id", DEALER_ID)
     .eq("source_file", source_file);
 
-  const chunks = chunkText(content);
+  const chunks = [];
+  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
+    chunks.push(content.slice(i, i + CHUNK_SIZE));
+  }
 
   const embeddings = await openai.embeddings.create({
     model: "text-embedding-3-small",
@@ -81,39 +74,28 @@ async function saveToBrain({ content, source_file }) {
     embedding: embeddings.data[i].embedding,
   }));
 
-  const { error } = await supabase
-    .from("sales_training_vectors")
-    .insert(rows);
-
-  if (error) throw error;
+  await supabase.from("sales_training_vectors").insert(rows);
 }
 
-/* ================= HANDLER ================= */
+/* ===== HANDLER ===== */
 
 export async function POST(req) {
   try {
-    const {
-      message,
-      userId = "default",
-      role = "sales",
-      domain = "sales",
-    } = await req.json();
+    const { message, userId = "default", role = "sales", domain = "sales" } =
+      await req.json();
 
-    /* ===== EXPLICIT BRAIN TRAINING ===== */
+    /* --- TRAINING --- */
 
     const brainContent = detectBrainTrainingIntent(message);
-
     if (brainContent) {
       if (role !== "admin" && role !== "manager") {
-        return NextResponse.json(
-          { answer: "Only managers or admins can train the AI.", source: "Permission denied" },
-          { status: 403 }
-        );
+        return NextResponse.json({ answer: "Unauthorized", source: "Denied" }, { status: 403 });
       }
 
-      const source_file = `chat:${userId}:${new Date().toISOString()}`;
-
-      await saveToBrain({ content: brainContent, source_file });
+      await saveToBrain({
+        content: brainContent,
+        source_file: `chat:${userId}:${Date.now()}`,
+      });
 
       return NextResponse.json({
         answer: "Added to dealership brain.",
@@ -121,13 +103,11 @@ export async function POST(req) {
       });
     }
 
-    /* ===== PERSONAL MEMORY ===== */
+    /* --- PERSONAL MEMORY --- */
 
     const memoryIntent = detectMemoryIntent(message);
-
     if (memoryIntent === "remember") {
-      const content = message.replace(/remember this[:]?/i, "").trim();
-      await setPersonalMemory(userId, content);
+      await setPersonalMemory(userId, message.replace(/remember this[:]?/i, ""));
       return NextResponse.json({ answer: "Saved.", source: "Personal memory" });
     }
 
@@ -138,50 +118,38 @@ export async function POST(req) {
 
     if (memoryIntent === "recall") {
       const mem = await getPersonalMemory(userId);
-      return NextResponse.json({
-        answer: mem || "Nothing saved.",
-        source: "Personal memory",
-      });
+      return NextResponse.json({ answer: mem || "Nothing saved.", source: "Personal memory" });
     }
 
-    /* ===== STEP 1: THINK FIRST ===== */
+    /* --- THINK FIRST --- */
 
-    const baseResponse = await openai.chat.completions.create({
+    const base = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content:
-            "Answer naturally using dealership reasoning. Do not cite policy unless confirmed.",
+          content: "Answer naturally as a dealership professional.",
         },
         { role: "user", content: message },
       ],
       temperature: 0.6,
     });
 
-    let answer = baseResponse.choices[0].message.content;
+    let answer = base.choices[0].message.content;
     let source = "General dealership reasoning";
     let sourceFiles;
 
-    /* ===== STEP 2: RETRIEVE ===== */
+    /* --- COMPLIANCE ENFORCEMENT --- */
 
     const hits = await retrieveKnowledge(message, domain);
-    const topScore = hits?.[0]?.score ?? 0;
-    const hasAnyHits = hits && hits.length > 0;
-
-    /* ===== STEP 3: FORCE POLICY FOR DEFINITIONS ===== */
-
-    if (
-      hasAnyHits &&
-      (topScore >= HIGH_CONFIDENCE || isDefinitionQuestion(message))
-    ) {
-      const policyResponse = await openai.chat.completions.create({
+    if (hasRegulatedContent(message) && hits?.length) {
+      const policy = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Answer using the following dealership policy. Override prior reasoning if needed.\n\n" +
+              "Generate a compliant response using the dealership policy below.\n\n" +
               hits.map(h => h.content).join("\n\n"),
           },
           { role: "user", content: message },
@@ -189,7 +157,13 @@ export async function POST(req) {
         temperature: 0.2,
       });
 
-      answer = policyResponse.choices[0].message.content;
+      answer = policy.choices[0].message.content;
+      source = "Dealer policy (documented)";
+      sourceFiles =
+        role !== "sales"
+          ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
+          : undefined;
+    } else if (isDefinitionIntent(message) && hits?.length) {
       source = "Dealer policy (documented)";
       sourceFiles =
         role !== "sales"
@@ -197,15 +171,12 @@ export async function POST(req) {
           : undefined;
     }
 
-    /* ===== FINAL ===== */
-
     return NextResponse.json({
       answer,
       source,
       source_files: sourceFiles,
     });
-  } catch (err) {
-    console.error(err);
+  } catch {
     return NextResponse.json(
       { answer: "AI failed.", source: "System error" },
       { status: 500 }
