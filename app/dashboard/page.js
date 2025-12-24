@@ -27,7 +27,6 @@ export default function DashboardPage() {
       <h1 className="text-3xl font-bold">Dashboard</h1>
 
       <div className="grid grid-cols-2 gap-4">
-
         <a href="/image-generator" className="p-4 bg-gray-100 rounded shadow text-center">
           Image Generator
         </a>
@@ -38,6 +37,10 @@ export default function DashboardPage() {
 
         <a href="/assistant/fi" className="p-4 bg-gray-100 rounded shadow text-center">
           F&I Assistant
+        </a>
+
+        <a href="/rules" className="p-4 bg-gray-100 rounded shadow text-center">
+          AI Rules & Compliance Logic
         </a>
 
         {(role === "admin" || role === "manager") && (
@@ -51,7 +54,6 @@ export default function DashboardPage() {
             </a>
           </>
         )}
-
       </div>
     </div>
   );
