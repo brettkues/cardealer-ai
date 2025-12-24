@@ -6,12 +6,23 @@ import {
   getPersonalMemory,
   clearPersonalMemory,
 } from "@/lib/memory/personalStore";
+import { supabase } from "@/lib/supabaseClient";
+import OpenAIClient from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ------------------ helpers ------------------ */
+const embedClient = new OpenAIClient({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+/* ================= CONFIDENCE THRESHOLDS ================= */
+
+const HIGH_CONFIDENCE = 0.85;
+const MIN_CONFIDENCE = 0.65;
+
+/* ================= HELPERS ================= */
 
 function isCommand(text) {
   return /^(write|draft|create|summarize|generate|email|text|list)\b/i.test(text);
@@ -30,35 +41,68 @@ function detectMemoryIntent(text) {
 }
 
 function detectBrainTrainingIntent(text) {
-  const patterns = [
-    /^add to brain:/i,
-    /^add to knowledge:/i,
-    /^train the ai with this:/i,
-    /^save to dealership brain:/i,
-  ];
-
-  for (const p of patterns) {
-    if (p.test(text)) {
-      return text.replace(p, "").trim();
-    }
-  }
-
-  return null;
+  const match = text.match(
+    /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
+  );
+  if (!match) return null;
+  return text.slice(match[0].length).trim();
 }
 
-/* ------------------ handler ------------------ */
+/* ================= BRAIN SAVE (DIRECT, SAFE) ================= */
+
+async function saveToBrain({ content, source_file }) {
+  const DEALER_ID = process.env.DEALER_ID;
+  const CHUNK_SIZE = 800;
+
+  if (!DEALER_ID || !content) {
+    throw new Error("Missing dealer or content");
+  }
+
+  // HARD REPLACEMENT BY SOURCE
+  await supabase
+    .from("sales_training_vectors")
+    .delete()
+    .eq("dealer_id", DEALER_ID)
+    .eq("source_file", source_file);
+
+  const chunks = [];
+  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
+    chunks.push(content.slice(i, i + CHUNK_SIZE));
+  }
+
+  const embeddings = await embedClient.embeddings.create({
+    model: "text-embedding-3-small",
+    input: chunks,
+  });
+
+  const rows = chunks.map((chunk, i) => ({
+    dealer_id: DEALER_ID,
+    source_file,
+    chunk_index: i,
+    content: chunk,
+    embedding: embeddings.data[i].embedding,
+  }));
+
+  const { error } = await supabase
+    .from("sales_training_vectors")
+    .insert(rows);
+
+  if (error) throw error;
+}
+
+/* ================= HANDLER ================= */
 
 export async function POST(req) {
   try {
     const {
       message,
       userId = "default",
-      role = "sales", // sales | manager | admin
+      role = "sales",
       domain = "sales",
       allowSearch = false,
     } = await req.json();
 
-    /* ===== EXPLICIT BRAIN TRAINING (MANAGER / ADMIN ONLY) ===== */
+    /* ===== EXPLICIT BRAIN TRAINING ===== */
 
     const brainContent = detectBrainTrainingIntent(message);
 
@@ -70,25 +114,12 @@ export async function POST(req) {
         );
       }
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/brain/admin/save`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: brainContent,
-            role,
-            source_file: `chat:${userId}:${new Date().toISOString().slice(0, 10)}`,
-          }),
-        }
-      );
+      const sourceFile = `chat:${userId}:${Date.now()}`;
 
-      if (!res.ok) {
-        return NextResponse.json(
-          { answer: "Failed to add content to the brain.", source: "System error" },
-          { status: 500 }
-        );
-      }
+      await saveToBrain({
+        content: brainContent,
+        source_file: sourceFile,
+      });
 
       return NextResponse.json({
         answer: "Added to dealership brain.",
@@ -119,54 +150,53 @@ export async function POST(req) {
       });
     }
 
-    /* ===== BRAIN RETRIEVAL ===== */
+    /* ===== KNOWLEDGE RETRIEVAL ===== */
 
     const hits = await retrieveKnowledge(message, domain);
-    const hasBrain = hits && hits.length > 0;
+    const topHit = hits?.[0];
+    const topScore = topHit?.score ?? 0;
 
-    /* ===== COMMANDS ===== */
+    let truth = "none";
+    if (topScore >= HIGH_CONFIDENCE) truth = "confirmed";
+    else if (topScore >= MIN_CONFIDENCE) truth = "inferred";
 
-    if (isCommand(message)) {
-      const messages = [];
+    /* ===== CONFIRMED POLICY ===== */
 
-      if (hasBrain) {
-        messages.push({
-          role: "system",
-          content:
-            "Use the following dealership guidance as factual input. Paraphrase.\n\n" +
-            hits.map(h => h.content || h).join("\n\n"),
-        });
-      }
-
-      messages.push({ role: "user", content: message });
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        temperature: 0.7,
-      });
-
-      return NextResponse.json({
-        answer: response.choices[0].message.content,
-        source: hasBrain ? "Dealership knowledge" : "Command execution",
-        source_files:
-          hasBrain && (role === "admin" || role === "manager")
-            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
-            : undefined,
-      });
-    }
-
-    /* ===== QUESTIONS WITH BRAIN ===== */
-
-    if (hasBrain) {
+    if (truth === "confirmed") {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Use the following dealership knowledge as grounding. Paraphrase.\n\n" +
-              hits.map(h => h.content || h).join("\n\n"),
+              "Answer ONLY using the dealership policy below. Do not infer or add anything.\n\n" +
+              hits.map(h => h.content).join("\n\n"),
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.3,
+      });
+
+      return NextResponse.json({
+        answer: response.choices[0].message.content,
+        source: "Dealer policy (documented)",
+        source_files:
+          role !== "sales"
+            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
+            : undefined,
+      });
+    }
+
+    /* ===== INFERRED GUIDANCE ===== */
+
+    if (truth === "inferred") {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Use dealership context if relevant. Clearly state if something is not explicitly documented.",
           },
           { role: "user", content: message },
         ],
@@ -174,16 +204,14 @@ export async function POST(req) {
       });
 
       return NextResponse.json({
-        answer: response.choices[0].message.content,
-        source: "Dealership knowledge",
-        source_files:
-          role === "admin" || role === "manager"
-            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
-            : undefined,
+        answer:
+          response.choices[0].message.content +
+          "\n\n(Note: This guidance is inferred, not explicitly documented.)",
+        source: "Inferred guidance",
       });
     }
 
-    /* ===== NO BRAIN ===== */
+    /* ===== GENERAL KNOWLEDGE ===== */
 
     if (allowSearch || userRequestedSearch(message)) {
       const response = await openai.chat.completions.create({
@@ -192,41 +220,22 @@ export async function POST(req) {
           {
             role: "system",
             content:
-              "Answer using general knowledge. Do not imply dealership authority.",
+              "Answer using general industry knowledge. Do not imply dealership policy.",
           },
           { role: "user", content: message },
         ],
         temperature: 0.7,
       });
 
-      if (role === "admin" || role === "manager") {
-        return NextResponse.json({
-          answer:
-            response.choices[0].message.content +
-            "\n\nSave this to the dealership brain?",
-          source: "External knowledge",
-          canSave: true,
-          savePayload: response.choices[0].message.content,
-        });
-      }
-
       return NextResponse.json({
         answer: response.choices[0].message.content,
-        source: "External knowledge",
-      });
-    }
-
-    if (role === "admin" || role === "manager") {
-      return NextResponse.json({
-        answer: "Not found in dealership knowledge. Want me to search for it?",
-        source: "Knowledge gap",
-        needsSearchApproval: true,
+        source: "General industry guidance",
       });
     }
 
     return NextResponse.json({
-      answer: "No dealership guidance available.",
-      source: "No dealership data",
+      answer: "No dealership guidance exists for this question.",
+      source: "General industry guidance",
     });
   } catch (err) {
     console.error(err);
