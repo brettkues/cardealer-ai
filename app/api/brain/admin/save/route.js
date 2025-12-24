@@ -9,6 +9,8 @@ const openai = new OpenAI({
 const DEALER_ID = process.env.DEALER_ID;
 const CHUNK_SIZE = 800;
 
+/* ------------------ helpers ------------------ */
+
 function chunkText(text, size) {
   const chunks = [];
   let i = 0;
@@ -19,6 +21,12 @@ function chunkText(text, size) {
   return chunks;
 }
 
+/*
+  IMPORTANT:
+  source_file is the replacement key.
+  It MUST be stable across versions (e.g. "ultra-rate-sheet").
+  Do NOT derive this from content for versioned material.
+*/
 function makeSourceFile(label, content) {
   const slug = content
     .toLowerCase()
@@ -28,6 +36,8 @@ function makeSourceFile(label, content) {
     .join("-");
   return `${label}:${slug || "note"}`;
 }
+
+/* ------------------ handler ------------------ */
 
 export async function POST(req) {
   try {
@@ -45,7 +55,31 @@ export async function POST(req) {
     }
 
     const finalSource =
-      source_file || makeSourceFile("admin-search", content);
+      source_file || makeSourceFile("admin-save", content);
+
+    /* ======================================================
+       HARD REPLACEMENT (SAFE)
+       ------------------------------------------------------
+       This deletes ONLY:
+       - this dealer's data
+       - for this exact source_file
+       Nothing else can be touched.
+    ====================================================== */
+
+    const { error: deleteError } = await supabase
+      .from("sales_training_vectors")
+      .delete()
+      .eq("dealer_id", DEALER_ID)
+      .eq("source_file", finalSource);
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 500 }
+      );
+    }
+
+    /* ------------------ embed + insert new version ------------------ */
 
     const chunks = chunkText(content, CHUNK_SIZE);
 
@@ -62,20 +96,24 @@ export async function POST(req) {
       embedding: embeddings.data[i].embedding,
     }));
 
-    const { error } = await supabase
+    const { error: insertError } = await supabase
       .from("sales_training_vectors")
       .insert(rows);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (insertError) {
+      return NextResponse.json(
+        { error: insertError.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
+      replaced: true,
       source_file: finalSource,
       chunks: rows.length,
     });
-  } catch {
+  } catch (err) {
     return NextResponse.json(
       { error: "Save failed" },
       { status: 500 }
