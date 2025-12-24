@@ -5,13 +5,13 @@
 import { useEffect, useState } from "react";
 
 export default function TrainPage() {
-  const [salesFiles, setSalesFiles] = useState([]);
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [jobs, setJobs] = useState([]);
 
-  async function uploadSalesFiles() {
-    if (!salesFiles.length) {
+  async function uploadFiles() {
+    if (!files.length) {
       alert("No files selected");
       return;
     }
@@ -20,7 +20,7 @@ export default function TrainPage() {
     setStatus("Uploading files…");
 
     try {
-      for (const file of salesFiles) {
+      for (const file of files) {
         const res = await fetch("/api/train/sales", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -31,7 +31,7 @@ export default function TrainPage() {
         });
 
         const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Failed to get upload URL");
+        if (!data.ok) throw new Error(data.error || "Upload init failed");
 
         const uploadRes = await fetch(data.uploadUrl, {
           method: "PUT",
@@ -45,7 +45,7 @@ export default function TrainPage() {
       }
 
       setStatus("Files uploaded. Processing in background.");
-      setSalesFiles([]);
+      setFiles([]);
     } catch (err) {
       console.error(err);
       setStatus("Upload failed.");
@@ -54,13 +54,13 @@ export default function TrainPage() {
     }
   }
 
-  useEffect(() => {
-    async function fetchStatus() {
-      const res = await fetch("/api/train/status");
-      const data = await res.json();
-      if (data.ok) setJobs(data.jobs);
-    }
+  async function fetchStatus() {
+    const res = await fetch("/api/train/status", { cache: "no-store" });
+    const data = await res.json();
+    if (data.ok) setJobs(data.jobs);
+  }
 
+  useEffect(() => {
     fetchStatus();
     const id = setInterval(fetchStatus, 5000);
     return () => clearInterval(id);
@@ -68,25 +68,24 @@ export default function TrainPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Train Sales AI</h1>
+      <h1 className="text-3xl font-bold mb-6">Train AI</h1>
 
       <div className="border rounded p-4 space-y-4">
         <input
           type="file"
           multiple
-          onChange={(e) => setSalesFiles(Array.from(e.target.files))}
+          onChange={(e) => setFiles(Array.from(e.target.files))}
         />
 
         <button
-          type="button"
-          onClick={uploadSalesFiles}
+          onClick={uploadFiles}
           disabled={loading}
           className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
         >
-          {loading ? "Uploading…" : "Upload Sales Files"}
+          {loading ? "Uploading…" : "Upload Files"}
         </button>
 
-        {status && <div className="text-sm text-gray-700">{status}</div>}
+        {status && <div className="text-sm">{status}</div>}
       </div>
 
       <div className="mt-8">
