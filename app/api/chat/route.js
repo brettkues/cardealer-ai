@@ -198,10 +198,15 @@ export async function POST(req) {
         });
       }
 
-      if (
-        message.toLowerCase().includes("what's next") ||
-        message.toLowerCase().includes("what is next")
-      ) {
+      const normalized = message
+  .toLowerCase()
+  .replace(/[’']/g, "'");
+
+if (
+  normalized.includes("what's next") ||
+  normalized.includes("what is next")
+) {
+
         const nextStep = state.step;
 
         return NextResponse.json({
