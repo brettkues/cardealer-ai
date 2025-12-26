@@ -198,22 +198,32 @@ export async function POST(req) {
         });
       }
 
-      const normalized = message
+     const normalized = message
   .toLowerCase()
-  .replace(/[’']/g, "'");
+  .replace(/[’']/g, "")
+  .trim();
 
-if (
-  normalized.includes("what's next") ||
-  normalized.includes("what is next")
-) {
+const guidedDealTriggers = [
+  "whats next",
+  "what is next",
+  "what do i do",
+  "what do i do first",
+  "start a deal",
+  "start deal",
+  "take me through",
+  "walk me through",
+  "begin f&i",
+  "begin fi",
+];
 
-        const nextStep = state.step;
+if (guidedDealTriggers.some(t => normalized.includes(t))) {
+  const nextStep = state.step;
 
-        return NextResponse.json({
-          answer: `Next step: ${FI_STEPS[nextStep]}.`,
-          source: "Guided deal mode",
-        });
-      }
+  return NextResponse.json({
+    answer: `Next step: ${FI_STEPS[nextStep]}.`,
+    source: "Guided deal mode",
+  });
+}
     }
 
     /* ========================================================
