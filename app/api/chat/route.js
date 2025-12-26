@@ -200,6 +200,7 @@ export async function POST(req) {
     /* ================= F&I DOMAIN (STATEFUL) ================= */
 
     if (domain === "fi") {
+      console.log("FI DEBUG", { domain, sessionId, userId, message });
       if (!sessionId) {
         return NextResponse.json({
           answer: "Session error. Please refresh and try again.",
