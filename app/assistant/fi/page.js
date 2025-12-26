@@ -31,9 +31,9 @@ export default function FIAssistant() {
   message: userMessage.content,
   role,
   domain: "fi",
-  userId: "fi-session",
-}),
-
+  userId: auth.currentUser?.uid || "fi-user",
+  sessionId: sessionId,
+})
       });
 
       if (!res.ok) throw new Error("Request failed");
