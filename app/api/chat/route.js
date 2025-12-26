@@ -8,10 +8,16 @@ import {
   getPersonalMemory,
   clearPersonalMemory,
 } from "@/lib/memory/personalStore";
+import { supabase } from "@/lib/supabaseClient";
+import OpenAIClient from "openai";
 
 /* ================= OPENAI ================= */
 
 const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const embedClient = new OpenAIClient({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -22,14 +28,24 @@ const openai = new OpenAI({
      started: boolean,
      dealType: "cash" | "finance" | "lease" | null
    }
+   NOTE: ephemeral by design
 ============================================================== */
 
 const fiSessions = new Map();
 
+/* ================= CONFIDENCE ================= */
+
+const HIGH_CONFIDENCE = 0.85;
+const MIN_CONFIDENCE = 0.65;
+
 /* ================= HELPERS ================= */
 
 function normalize(text) {
-  return text.toLowerCase().replace(/[^\w\s]/g, "").trim();
+  return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
+}
+
+function userRequestedSearch(text) {
+  return /(search|look up|google|find online|research)/i.test(text);
 }
 
 function detectMemoryIntent(text) {
@@ -40,26 +56,76 @@ function detectMemoryIntent(text) {
   return null;
 }
 
-/* ================= F&I STEP PROMPTS ================= */
+function detectBrainTrainingIntent(text) {
+  const match = text.match(
+    /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
+  );
+  if (!match) return null;
+  return text.slice(match[0].length).trim();
+}
+
+/* ================= BRAIN SAVE ================= */
+
+async function saveToBrain({ content, source_file }) {
+  const DEALER_ID = process.env.DEALER_ID;
+  const CHUNK_SIZE = 800;
+
+  if (!DEALER_ID || !content) {
+    throw new Error("Missing dealer or content");
+  }
+
+  // Hard replace by source_file (monthly rate sheets, etc.)
+  await supabase
+    .from("sales_training_vectors")
+    .delete()
+    .eq("dealer_id", DEALER_ID)
+    .eq("source_file", source_file);
+
+  const chunks = [];
+  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
+    chunks.push(content.slice(i, i + CHUNK_SIZE));
+  }
+
+  const embeddings = await embedClient.embeddings.create({
+    model: "text-embedding-3-small",
+    input: chunks,
+  });
+
+  const rows = chunks.map((chunk, i) => ({
+    dealer_id: DEALER_ID,
+    source_file,
+    chunk_index: i,
+    content: chunk,
+    embedding: embeddings.data[i].embedding,
+  }));
+
+  const { error } = await supabase
+    .from("sales_training_vectors")
+    .insert(rows);
+
+  if (error) throw error;
+}
+
+/* ================= F&I STEP CONTENT ================= */
 
 function getFiStepPrompt(step, dealType) {
   switch (step) {
     case 1:
       return "Step 1: Identify the deal type. Reply with: cash, finance, or lease.";
     case 2:
-      return `Step 2: Enter the ${dealType.toUpperCase()} deal into the DMS. Verify customer, vehicle, taxes, and fees. When complete, type \`next\`.`;
+      return "Step 2: Enter the deal into the DMS. Verify customer, vehicle, taxes, and fees. When complete, type `next`.";
     case 3:
-      return "Step 3: Review approvals, stips, and backend eligibility. When complete, type `next`.";
+      return "Step 3: Review approvals, stips, backend eligibility, and rate markup limits. When complete, type `next`.";
     case 4:
       return "Step 4: Build and present the F&I menu with approved products. When complete, type `next`.";
     case 5:
-      return "Step 5: Build the contract. When complete, type `next`.";
+      return "Step 5: Build the contract based on selected terms and products. When complete, type `next`.";
     case 6:
-      return "Step 6: Confirm all required compliance documents. When complete, type `next`.";
+      return "Step 6: Confirm all required compliance documents are present and completed. When complete, type `next`.";
     case 7:
       return "Step 7: Add sold products into the DMS and rebuild the contract. When complete, type `next`.";
     case 8:
-      return "Step 8: Obtain all required signatures. When complete, type `next`.";
+      return "Step 8: Obtain all required customer signatures. When complete, type `next`.";
     case 9:
       return "Step 9: Process DMV paperwork. When complete, type `next`.";
     case 10:
@@ -78,10 +144,36 @@ export async function POST(req) {
       userId = "default",
       role = "sales",
       domain = "sales",
+      allowSearch = false,
       sessionId,
     } = await req.json();
 
-    const text = normalize(message || "");
+    const text = normalize(message);
+
+    /* ===== EXPLICIT BRAIN TRAINING (ANY DOMAIN) ===== */
+
+    const brainContent = detectBrainTrainingIntent(message);
+
+    if (brainContent) {
+      if (role !== "admin" && role !== "manager") {
+        return NextResponse.json(
+          { answer: "Only managers or admins can train the AI.", source: "Permission denied" },
+          { status: 403 }
+        );
+      }
+
+      const sourceFile = `chat:${userId}:${Date.now()}`;
+
+      await saveToBrain({
+        content: brainContent,
+        source_file: sourceFile,
+      });
+
+      return NextResponse.json({
+        answer: "Added to dealership brain.",
+        source: "Brain training",
+      });
+    }
 
     /* ===== PERSONAL MEMORY ===== */
 
@@ -129,15 +221,30 @@ export async function POST(req) {
         });
       }
 
+      // NO ACTIVE DEAL → OPEN MODE (ALLOW CHAT + TRAINING)
       if (!state || !state.started) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an F&I assistant. Answer questions, explain procedures, and provide guidance. Do not assume an active deal unless one is started.",
+            },
+            { role: "user", content: message },
+          ],
+          temperature: 0.5,
+        });
+
         return NextResponse.json({
-          answer: "No active deal. Type `start a deal` to begin.",
-          source: "F&I process",
+          answer:
+            response.choices[0].message.content +
+            "\n\n(Start a deal anytime by typing `start a deal`.)",
+          source: "F&I assistant",
         });
       }
 
-      /* ===== STEP 1: DEAL TYPE (AUTO-ADVANCE) ===== */
-
+      // STEP 1: DEAL TYPE (NO `next` REQUIRED)
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
           state.dealType = text;
@@ -145,9 +252,7 @@ export async function POST(req) {
           fiSessions.set(sessionId, state);
 
           return NextResponse.json({
-            answer:
-              `Deal type set to ${text.toUpperCase()}.\n\n` +
-              getFiStepPrompt(2, state.dealType),
+            answer: `Deal type set to ${text.toUpperCase()}.\n\n${getFiStepPrompt(2)}`,
             source: "F&I process",
           });
         }
@@ -158,8 +263,7 @@ export async function POST(req) {
         });
       }
 
-      /* ===== ADVANCE ONLY ON 'next' (STEP 2+) ===== */
-
+      // ADVANCE STEP
       if (text === "next") {
         state.step += 1;
         fiSessions.set(sessionId, state);
@@ -170,15 +274,14 @@ export async function POST(req) {
         });
       }
 
-      /* ===== QUESTIONS DURING A STEP ===== */
-
+      // QUESTIONS DURING A STEP (DO NOT ADVANCE)
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              `You are assisting with F&I process Step ${state.step} for a ${state.dealType.toUpperCase()} deal. Answer the question in this context. Do not advance steps.`,
+              `You are assisting with F&I process Step ${state.step} (${state.dealType}). Answer in context. Do NOT advance steps.`,
           },
           { role: "user", content: message },
         ],
@@ -196,25 +299,51 @@ export async function POST(req) {
     /* ================= SALES / GENERAL ================= */
 
     const hits = await retrieveKnowledge(message, domain);
+    const topHit = hits?.[0];
+    const topScore = topHit?.score ?? 0;
 
-    if (hits && hits.length) {
+    let truth = "none";
+    if (topScore >= HIGH_CONFIDENCE) truth = "confirmed";
+    else if (topScore >= MIN_CONFIDENCE) truth = "inferred";
+
+    if (truth === "confirmed") {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Answer ONLY using the dealership knowledge below.\n\n" +
+              "Answer ONLY using the dealership policy below.\n\n" +
               hits.map(h => h.content).join("\n\n"),
           },
           { role: "user", content: message },
         ],
-        temperature: 0.5,
+        temperature: 0.3,
       });
 
       return NextResponse.json({
         answer: response.choices[0].message.content,
         source: "Dealer policy (documented)",
+      });
+    }
+
+    if (allowSearch || userRequestedSearch(message)) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Answer using general industry knowledge. Do not imply dealership policy.",
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.7,
+      });
+
+      return NextResponse.json({
+        answer: response.choices[0].message.content,
+        source: "General industry guidance",
       });
     }
 
