@@ -42,12 +42,12 @@ function detectMemoryIntent(text) {
 
 /* ================= F&I STEP PROMPTS ================= */
 
-function getFiStepPrompt(step) {
+function getFiStepPrompt(step, dealType) {
   switch (step) {
     case 1:
       return "Step 1: Identify the deal type. Reply with: cash, finance, or lease.";
     case 2:
-      return "Step 2: Enter the deal into the DMS. Verify customer, vehicle, taxes, and fees. When complete, type `next`.";
+      return `Step 2: Enter the ${dealType.toUpperCase()} deal into the DMS. Verify customer, vehicle, taxes, and fees. When complete, type \`next\`.`;
     case 3:
       return "Step 3: Review approvals, stips, and backend eligibility. When complete, type `next`.";
     case 4:
@@ -118,6 +118,7 @@ export async function POST(req) {
 
       let state = fiSessions.get(sessionId);
 
+      // START DEAL
       if (text === "start a deal") {
         state = { step: 1, started: true, dealType: null };
         fiSessions.set(sessionId, state);
@@ -135,14 +136,18 @@ export async function POST(req) {
         });
       }
 
-      // STEP 1: DEAL TYPE REQUIRED
+      /* ===== STEP 1: DEAL TYPE (AUTO-ADVANCE) ===== */
+
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
           state.dealType = text;
+          state.step = 2;
           fiSessions.set(sessionId, state);
 
           return NextResponse.json({
-            answer: `Deal type set to ${text.toUpperCase()}. When ready, type \`next\` to continue.`,
+            answer:
+              `Deal type set to ${text.toUpperCase()}.\n\n` +
+              getFiStepPrompt(2, state.dealType),
             source: "F&I process",
           });
         }
@@ -153,25 +158,27 @@ export async function POST(req) {
         });
       }
 
-      // ADVANCE ONLY ON 'next'
+      /* ===== ADVANCE ONLY ON 'next' (STEP 2+) ===== */
+
       if (text === "next") {
         state.step += 1;
         fiSessions.set(sessionId, state);
 
         return NextResponse.json({
-          answer: getFiStepPrompt(state.step),
+          answer: getFiStepPrompt(state.step, state.dealType),
           source: "F&I process",
         });
       }
 
-      // QUESTIONS DURING A STEP
+      /* ===== QUESTIONS DURING A STEP ===== */
+
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              `You are assisting with F&I process Step ${state.step}. Answer the question in this context. Do not advance steps.`,
+              `You are assisting with F&I process Step ${state.step} for a ${state.dealType.toUpperCase()} deal. Answer the question in this context. Do not advance steps.`,
           },
           { role: "user", content: message },
         ],
