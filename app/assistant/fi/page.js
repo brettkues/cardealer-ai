@@ -28,10 +28,12 @@ export default function FIAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMessage.content,
-          role,
-          domain: "fi",
-        }),
+  message: userMessage.content,
+  role,
+  domain: "fi",
+  userId: "fi-session",
+}),
+
       });
 
       if (!res.ok) throw new Error("Request failed");
