@@ -174,89 +174,56 @@ export async function POST(req) {
     }
 
     /* ========================================================
-       F&I DEAL STATE LOGIC
-    ======================================================== */
+   F&I DEAL STATE LOGIC (MUST RUN BEFORE RETRIEVAL)
+======================================================== */
 
-    if (domain === "fi") {
-      const key = getDealKey(userId, domain);
-      let state = dealStateStore.get(key);
+if (domain === "fi") {
+  const key = getDealKey(userId, domain);
+  let state = dealStateStore.get(key);
 
-      if (!state) {
-        state = getInitialDealState();
-        dealStateStore.set(key, state);
-      }
+  if (!state) {
+    state = getInitialDealState();
+    dealStateStore.set(key, state);
+  }
 
-      const completedStep = detectFiStepCompletion(message);
+  const normalized = message
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .trim();
 
-      if (completedStep) {
-        state.completed.add(completedStep);
-        state.step = Math.max(state.step, completedStep + 1);
+  // Explicit step completion (only exact actions)
+  const completedStep = detectFiStepCompletion(message);
+  if (completedStep) {
+    state.completed.add(completedStep);
+    state.step = Math.max(state.step, completedStep + 1);
 
-        return NextResponse.json({
-          answer: `Step ${completedStep} marked complete: ${FI_STEPS[completedStep]}.`,
-          source: "Deal progress",
-        });
-      }
+    return NextResponse.json({
+      answer: `Step ${completedStep} marked complete: ${FI_STEPS[completedStep]}.`,
+      source: "Deal progress",
+    });
+  }
 
-     const normalized = message
-  .toLowerCase()
-  .replace(/[’']/g, "")
-  .trim();
+  // Guided Deal Mode triggers
+  const guidedDealTriggers = [
+    "whats next",
+    "what is next",
+    "what do i do",
+    "what do i do first",
+    "start a deal",
+    "start deal",
+    "begin fi",
+    "begin f&i",
+    "take me through",
+    "walk me through",
+  ];
 
-const guidedDealTriggers = [
-  "whats next",
-  "what is next",
-  "what do i do",
-  "what do i do first",
-  "start a deal",
-  "start deal",
-  "take me through",
-  "walk me through",
-  "begin f&i",
-  "begin fi",
-];
-
-if (guidedDealTriggers.some(t => normalized.includes(t))) {
-  const nextStep = state.step;
-
-  return NextResponse.json({
-    answer: `Next step: ${FI_STEPS[nextStep]}.`,
-    source: "Guided deal mode",
-  });
+  if (guidedDealTriggers.some(t => normalized.includes(t))) {
+    return NextResponse.json({
+      answer: `Next step: ${FI_STEPS[state.step]}.`,
+      source: "Guided deal mode",
+    });
+  }
 }
-    }
-
-    /* ========================================================
-       KNOWLEDGE RETRIEVAL
-    ======================================================== */
-
-    const hits = await retrieveKnowledge(message, domain);
-    const hasBrain = hits && hits.length > 0;
-
-    if (hasBrain) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Answer using documented dealership knowledge only. Do not invent or assume.\n\n" +
-              hits.map(h => h.content).join("\n\n"),
-          },
-          { role: "user", content: message },
-        ],
-        temperature: 0.3,
-      });
-
-      return NextResponse.json({
-        answer: response.choices[0].message.content,
-        source: "Dealer policy (documented)",
-        source_files:
-          role === "admin" || role === "manager"
-            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
-            : undefined,
-      });
-    }
 
     /* ========================================================
        GENERAL KNOWLEDGE
