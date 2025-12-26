@@ -36,7 +36,9 @@ export default function FIAssistant() {
         role: "assistant",
         content: data.answer || "No response.",
         source: data.source || null,
-        source_files: data.source_files || [],
+        source_files: Array.isArray(data.source_files)
+          ? data.source_files
+          : [],
         _id: `${Date.now()}-${Math.random()}`,
       };
 
@@ -68,13 +70,14 @@ export default function FIAssistant() {
           <strong>How this assistant works:</strong>
           <ul className="list-disc ml-5 mt-1 space-y-1">
             <li>
-              Ask questions like <em>“What’s next?”</em> or <em>“What forms do I need?”</em>
+              Ask questions like <em>“What’s next?”</em> or{" "}
+              <em>“What forms do I need?”</em>
             </li>
             <li>
-              For compliance questions, answers are based on documented dealership policy.
+              Compliance answers come only from documented dealership policy.
             </li>
             <li>
-              To train the AI, managers/admins must explicitly type:
+              To train the AI, managers/admins must type:
               <br />
               <code className="bg-gray-100 px-1 py-0.5 rounded">
                 add to brain:
