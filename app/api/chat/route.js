@@ -8,28 +8,52 @@ import {
 } from "@/lib/memory/personalStore";
 import { supabase } from "@/lib/supabaseClient";
 
+/* ============================================================
+   OPENAI
+============================================================ */
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const DEALER_ID = process.env.DEALER_ID;
-const CHUNK_SIZE = 800;
+/* ============================================================
+   IN-MEMORY DEAL STATE (F&I ONLY)
+   NOTE: Vercel serverless = best-effort session memory.
+   This is intentional for v1.
+============================================================ */
 
-/* ===== COMPLIANCE TRIGGERS ===== */
+const dealStateStore = new Map();
 
-function hasRegulatedContent(text) {
-  return /(apr|interest rate|0%|payment|\$\/mo|monthly|lease|rebate|incentive|advertis|ad\b)/i.test(
-    text
-  );
+/*
+Deal state shape:
+{
+  step: number,
+  completed: Set<number>
+}
+*/
+
+function getDealKey(userId, domain) {
+  return `${userId}:${domain}`;
 }
 
-function isDefinitionIntent(text) {
-  return /^(what is|what are|do i need|can i|legal|disclosure|comply)/i.test(
-    text.trim().toLowerCase()
-  );
+function getInitialDealState() {
+  return {
+    step: 1,
+    completed: new Set(),
+  };
 }
 
-/* ===== MEMORY ===== */
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function isCommand(text) {
+  return /^(write|draft|create|summarize|generate|email|text|list)\b/i.test(text);
+}
+
+function userRequestedSearch(text) {
+  return /(search|look up|google|find online|research)/i.test(text);
+}
 
 function detectMemoryIntent(text) {
   const t = text.toLowerCase().trim();
@@ -40,62 +64,83 @@ function detectMemoryIntent(text) {
 }
 
 function detectBrainTrainingIntent(text) {
-  const match = text.match(
-    /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
-  );
+  const match = text.match(/^add to brain:\s*/i);
   if (!match) return null;
   return text.slice(match[0].length).trim();
 }
 
-/* ===== SAVE TO BRAIN ===== */
+/* ============================================================
+   F&I STEP DETECTION (EXPLICIT ONLY)
+============================================================ */
 
-async function saveToBrain({ content, source_file }) {
-  await supabase
-    .from("sales_training_vectors")
-    .delete()
-    .eq("dealer_id", DEALER_ID)
-    .eq("source_file", source_file);
+function detectFiStepCompletion(text) {
+  const t = text.toLowerCase();
 
-  const chunks = [];
-  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
-    chunks.push(content.slice(i, i + CHUNK_SIZE));
-  }
+  if (t.includes("deal type identified")) return 1;
+  if (t.includes("entered the deal")) return 2;
+  if (t.includes("approval reviewed")) return 3;
+  if (t.includes("menu built")) return 4;
+  if (t.includes("contract built")) return 5;
+  if (t.includes("compliance documents reviewed")) return 6;
+  if (t.includes("products added to dms")) return 7;
+  if (t.includes("contract rebuilt")) return 8;
+  if (t.includes("signatures collected")) return 9;
+  if (t.includes("dmv submitted")) return 10;
+  if (t.includes("funding submitted")) return 11;
 
-  const embeddings = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: chunks,
-  });
-
-  const rows = chunks.map((chunk, i) => ({
-    dealer_id: DEALER_ID,
-    source_file,
-    chunk_index: i,
-    content: chunk,
-    embedding: embeddings.data[i].embedding,
-  }));
-
-  await supabase.from("sales_training_vectors").insert(rows);
+  return null;
 }
 
-/* ===== HANDLER ===== */
+/* ============================================================
+   STEP DESCRIPTIONS
+============================================================ */
+
+const FI_STEPS = {
+  1: "Identify deal type",
+  2: "Enter deal in DMS",
+  3: "Check approval, stips, and backend allowed",
+  4: "Build F&I menu",
+  5: "Build initial contract",
+  6: "Ensure compliance documents",
+  7: "Add products to DMS",
+  8: "Rebuild contract",
+  9: "Gather signatures",
+  10: "DMV processing",
+  11: "Funding",
+};
+
+/* ============================================================
+   HANDLER
+============================================================ */
 
 export async function POST(req) {
   try {
-    const { message, userId = "default", role = "sales", domain = "sales" } =
-      await req.json();
+    const {
+      message,
+      userId = "default",
+      role = "sales",
+      domain = "sales",
+      allowSearch = false,
+    } = await req.json();
 
-    /* --- TRAINING --- */
+    /* ========================================================
+       TRAINING MODE
+    ======================================================== */
 
     const brainContent = detectBrainTrainingIntent(message);
+
     if (brainContent) {
       if (role !== "admin" && role !== "manager") {
-        return NextResponse.json({ answer: "Unauthorized", source: "Denied" }, { status: 403 });
+        return NextResponse.json(
+          { answer: "Only managers or admins can train the AI.", source: "Permission denied" },
+          { status: 403 }
+        );
       }
 
-      await saveToBrain({
-        content: brainContent,
-        source_file: `chat:${userId}:${Date.now()}`,
-      });
+      const sourceFile = `chat:${userId}:${Date.now()}`;
+
+      await supabase.from("sales_training_vectors").delete()
+        .eq("source_file", sourceFile);
 
       return NextResponse.json({
         answer: "Added to dealership brain.",
@@ -103,11 +148,15 @@ export async function POST(req) {
       });
     }
 
-    /* --- PERSONAL MEMORY --- */
+    /* ========================================================
+       PERSONAL MEMORY
+    ======================================================== */
 
     const memoryIntent = detectMemoryIntent(message);
+
     if (memoryIntent === "remember") {
-      await setPersonalMemory(userId, message.replace(/remember this[:]?/i, ""));
+      const content = message.replace(/remember this[:]?/i, "").trim();
+      await setPersonalMemory(userId, content);
       return NextResponse.json({ answer: "Saved.", source: "Personal memory" });
     }
 
@@ -118,65 +167,112 @@ export async function POST(req) {
 
     if (memoryIntent === "recall") {
       const mem = await getPersonalMemory(userId);
-      return NextResponse.json({ answer: mem || "Nothing saved.", source: "Personal memory" });
+      return NextResponse.json({
+        answer: mem || "Nothing saved.",
+        source: "Personal memory",
+      });
     }
 
-    /* --- THINK FIRST --- */
+    /* ========================================================
+       F&I DEAL STATE LOGIC
+    ======================================================== */
 
-    const base = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Answer naturally as a dealership professional.",
-        },
-        { role: "user", content: message },
-      ],
-      temperature: 0.6,
-    });
+    if (domain === "fi") {
+      const key = getDealKey(userId, domain);
+      let state = dealStateStore.get(key);
 
-    let answer = base.choices[0].message.content;
-    let source = "General dealership reasoning";
-    let sourceFiles;
+      if (!state) {
+        state = getInitialDealState();
+        dealStateStore.set(key, state);
+      }
 
-    /* --- COMPLIANCE ENFORCEMENT --- */
+      const completedStep = detectFiStepCompletion(message);
+
+      if (completedStep) {
+        state.completed.add(completedStep);
+        state.step = Math.max(state.step, completedStep + 1);
+
+        return NextResponse.json({
+          answer: `Step ${completedStep} marked complete: ${FI_STEPS[completedStep]}.`,
+          source: "Deal progress",
+        });
+      }
+
+      if (
+        message.toLowerCase().includes("what's next") ||
+        message.toLowerCase().includes("what is next")
+      ) {
+        const nextStep = state.step;
+
+        return NextResponse.json({
+          answer: `Next step: ${FI_STEPS[nextStep]}.`,
+          source: "Guided deal mode",
+        });
+      }
+    }
+
+    /* ========================================================
+       KNOWLEDGE RETRIEVAL
+    ======================================================== */
 
     const hits = await retrieveKnowledge(message, domain);
-    if (hasRegulatedContent(message) && hits?.length) {
-      const policy = await openai.chat.completions.create({
+    const hasBrain = hits && hits.length > 0;
+
+    if (hasBrain) {
+      const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Generate a compliant response using the dealership policy below.\n\n" +
+              "Answer using documented dealership knowledge only. Do not invent or assume.\n\n" +
               hits.map(h => h.content).join("\n\n"),
           },
           { role: "user", content: message },
         ],
-        temperature: 0.2,
+        temperature: 0.3,
       });
 
-      answer = policy.choices[0].message.content;
-      source = "Dealer policy (documented)";
-      sourceFiles =
-        role !== "sales"
-          ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
-          : undefined;
-    } else if (isDefinitionIntent(message) && hits?.length) {
-      source = "Dealer policy (documented)";
-      sourceFiles =
-        role !== "sales"
-          ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
-          : undefined;
+      return NextResponse.json({
+        answer: response.choices[0].message.content,
+        source: "Dealer policy (documented)",
+        source_files:
+          role === "admin" || role === "manager"
+            ? Array.from(new Set(hits.map(h => h.source_file).filter(Boolean)))
+            : undefined,
+      });
+    }
+
+    /* ========================================================
+       GENERAL KNOWLEDGE
+    ======================================================== */
+
+    if (allowSearch || userRequestedSearch(message)) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Answer using general industry knowledge. Do not imply dealership policy.",
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.7,
+      });
+
+      return NextResponse.json({
+        answer: response.choices[0].message.content,
+        source: "General industry guidance",
+      });
     }
 
     return NextResponse.json({
-      answer,
-      source,
-      source_files: sourceFiles,
+      answer: "No dealership guidance exists for this question.",
+      source: "General industry guidance",
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json(
       { answer: "AI failed.", source: "System error" },
       { status: 500 }
