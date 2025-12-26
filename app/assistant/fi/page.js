@@ -12,7 +12,12 @@ export default function FIAssistant() {
   async function sendMessage() {
     if (!msg || loading) return;
 
-    const userMessage = { role: "user", content: msg };
+    const userMessage = {
+      role: "user",
+      content: msg,
+      _id: `${Date.now()}-user`,
+    };
+
     const newChat = [userMessage, ...chat];
     setChat(newChat);
     setMsg("");
@@ -39,13 +44,18 @@ export default function FIAssistant() {
         source_files: Array.isArray(data.source_files)
           ? data.source_files
           : [],
-        _id: `${Date.now()}-${Math.random()}`,
+        _id: `${Date.now()}-ai`,
       };
 
       setChat([aiMessage, ...newChat]);
     } catch {
       setChat([
-        { role: "assistant", content: "Something went wrong." },
+        {
+          role: "assistant",
+          content: "Something went wrong.",
+          source_files: [],
+          _id: `${Date.now()}-error`,
+        },
         ...newChat,
       ]);
     } finally {
@@ -116,11 +126,13 @@ export default function FIAssistant() {
               </div>
             )}
 
-            {role !== "sales" && m.source_files.length > 0 && (
-              <div className="text-xs text-gray-400 mt-1">
-                Sources: {m.source_files.join(", ")}
-              </div>
-            )}
+            {role !== "sales" &&
+              Array.isArray(m.source_files) &&
+              m.source_files.length > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Sources: {m.source_files.join(", ")}
+                </div>
+              )}
           </div>
         ))}
 
