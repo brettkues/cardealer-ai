@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { auth } from "@/lib/firebaseClient";
 
 export default function FIAssistant() {
@@ -10,18 +10,17 @@ export default function FIAssistant() {
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔒 STABLE SESSION ID (created once per page load)
   const sessionIdRef = useRef(
     `fi-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
 
-  const role = "manager"; // or "admin" / "sales"
+  const role = "manager";
 
   async function sendMessage() {
     if (!msg || loading) return;
 
     const userMessage = { role: "user", content: msg };
-    setChat((c) => [...c, userMessage]);
+    setChat((c) => [userMessage, ...c]);
     setMsg("");
     setLoading(true);
 
@@ -38,25 +37,20 @@ export default function FIAssistant() {
         }),
       });
 
-      if (!res.ok) throw new Error("Request failed");
-
       const data = await res.json();
 
       setChat((c) => [
-        ...c,
         {
           role: "assistant",
           content: data.answer || "No response.",
           source: data.source || null,
         },
+        ...c,
       ]);
     } catch {
       setChat((c) => [
+        { role: "assistant", content: "Something went wrong." },
         ...c,
-        {
-          role: "assistant",
-          content: "Something went wrong. Please try again.",
-        },
       ]);
     } finally {
       setLoading(false);
