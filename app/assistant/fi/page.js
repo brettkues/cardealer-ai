@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { auth } from "@/lib/firebaseClient";
 
 export default function FIAssistant() {
@@ -10,19 +10,16 @@ export default function FIAssistant() {
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
-  const bottomRef = useRef(null);
 
   const role = "manager"; // sales | manager | admin
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat, loading]);
 
   async function sendMessage() {
     if (!msg.trim() || loading) return;
 
     const userMessage = { role: "user", content: msg };
-    setChat((c) => [...c, userMessage]);
+
+    // NEWEST ON TOP
+    setChat((c) => [userMessage, ...c]);
     setMsg("");
     setLoading(true);
 
@@ -44,20 +41,20 @@ export default function FIAssistant() {
       const data = await res.json();
 
       setChat((c) => [
-        ...c,
         {
           role: "assistant",
           content: data.answer,
           source: data.source,
         },
+        ...c,
       ]);
     } catch {
       setChat((c) => [
-        ...c,
         {
           role: "assistant",
           content: "Something went wrong. Please try again.",
         },
+        ...c,
       ]);
     } finally {
       setLoading(false);
@@ -79,27 +76,30 @@ export default function FIAssistant() {
 
         <div className="text-sm text-gray-700 space-y-1">
           <p>
-            • To begin a deal-guided workflow, type <b>start a deal</b>
+            • Start a guided deal by typing <b>start a deal</b>
           </p>
           <p>
-            • Follow each step and type <b>next</b> when the step is complete
+            • Complete each step, then type <b>next</b>
           </p>
           <p>
-            • You may ask questions at any step (the process will not advance)
+            • To go back one step, type <b>back</b>
           </p>
           <p>
-            • Managers/Admins can train the brain using:
+            • Ask questions anytime (steps will not advance)
+          </p>
+          <p>
+            • Managers/Admins can train the system using:
             <br />
-            <b>ADD TO BRAIN: [your instruction]</b>
+            <b>ADD TO BRAIN: [instruction]</b>
           </p>
           <p>
-            • “Remember this” saves personal notes only (not dealership policy)
+            • “Remember this” saves personal notes only
           </p>
         </div>
 
         <textarea
           className="w-full p-3 border rounded mt-2"
-          placeholder="Type a question, ADD TO BRAIN:, or start a deal…"
+          placeholder="Ask a question, ADD TO BRAIN:, or type start a deal…"
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -108,10 +108,14 @@ export default function FIAssistant() {
         />
       </div>
 
-      {/* CHAT */}
+      {/* CHAT (NEWEST FIRST) */}
       <div className="flex-1 overflow-auto p-4 bg-gray-50">
+        {loading && (
+          <div className="text-sm text-gray-500 mb-4">AI is typing…</div>
+        )}
+
         {chat.map((m, i) => (
-          <div key={i} className="mb-5">
+          <div key={i} className="mb-6">
             <div className="font-semibold">
               {m.role === "user" ? "You" : "F&I Assistant"}
             </div>
@@ -123,12 +127,6 @@ export default function FIAssistant() {
             )}
           </div>
         ))}
-
-        {loading && (
-          <div className="text-sm text-gray-500">AI is typing…</div>
-        )}
-
-        <div ref={bottomRef} />
       </div>
     </div>
   );
