@@ -74,7 +74,6 @@ async function saveToBrain({ content, source_file }) {
     throw new Error("Missing dealer or content");
   }
 
-  // Hard replace by source_file (monthly rate sheets, etc.)
   await supabase
     .from("sales_training_vectors")
     .delete()
@@ -150,7 +149,7 @@ export async function POST(req) {
 
     const text = normalize(message);
 
-    /* ===== EXPLICIT BRAIN TRAINING (ANY DOMAIN) ===== */
+    /* ===== EXPLICIT BRAIN TRAINING ===== */
 
     const brainContent = detectBrainTrainingIntent(message);
 
@@ -210,7 +209,7 @@ export async function POST(req) {
 
       let state = fiSessions.get(sessionId);
 
-      // START DEAL
+      /* ---- START DEAL ---- */
       if (text === "start a deal") {
         state = { step: 1, started: true, dealType: null };
         fiSessions.set(sessionId, state);
@@ -221,7 +220,7 @@ export async function POST(req) {
         });
       }
 
-      // NO ACTIVE DEAL → OPEN MODE (ALLOW CHAT + TRAINING)
+      /* ---- OPEN CHAT MODE (NO ACTIVE DEAL) ---- */
       if (!state || !state.started) {
         const response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
@@ -229,7 +228,7 @@ export async function POST(req) {
             {
               role: "system",
               content:
-                "You are an F&I assistant. Answer questions, explain procedures, and provide guidance. Do not assume an active deal unless one is started.",
+                "You are an F&I assistant. Answer questions, explain procedures, and accept training. Do not assume an active deal unless one is started.",
             },
             { role: "user", content: message },
           ],
@@ -239,12 +238,12 @@ export async function POST(req) {
         return NextResponse.json({
           answer:
             response.choices[0].message.content +
-            "\n\n(Start a deal anytime by typing `start a deal`.)",
+            "\n\n(Type `start a deal` to begin a guided process.)",
           source: "F&I assistant",
         });
       }
 
-      // STEP 1: DEAL TYPE (NO `next` REQUIRED)
+      /* ---- STEP 1: DEAL TYPE (AUTO-ADVANCE) ---- */
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
           state.dealType = text;
@@ -263,7 +262,25 @@ export async function POST(req) {
         });
       }
 
-      // ADVANCE STEP
+      /* ---- BACK NAVIGATION ---- */
+      if (text === "back") {
+        if (state.step > 1) {
+          state.step -= 1;
+          fiSessions.set(sessionId, state);
+
+          return NextResponse.json({
+            answer: getFiStepPrompt(state.step, state.dealType),
+            source: "F&I process",
+          });
+        }
+
+        return NextResponse.json({
+          answer: "You are already at Step 1.",
+          source: "F&I process",
+        });
+      }
+
+      /* ---- NEXT STEP ---- */
       if (text === "next") {
         state.step += 1;
         fiSessions.set(sessionId, state);
@@ -274,14 +291,13 @@ export async function POST(req) {
         });
       }
 
-      // QUESTIONS DURING A STEP (DO NOT ADVANCE)
+      /* ---- QUESTIONS WITHIN A STEP ---- */
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content:
-              `You are assisting with F&I process Step ${state.step} (${state.dealType}). Answer in context. Do NOT advance steps.`,
+            content: `You are assisting with F&I Step ${state.step} (${state.dealType}). Answer in context. Do NOT advance steps.`,
           },
           { role: "user", content: message },
         ],
@@ -291,7 +307,7 @@ export async function POST(req) {
       return NextResponse.json({
         answer:
           response.choices[0].message.content +
-          "\n\nWhen complete, type `next`.",
+          "\n\nWhen complete, type `next` or `back`.",
         source: "F&I process",
       });
     }
