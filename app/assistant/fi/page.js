@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { auth } from "@/lib/firebaseClient";
+
+/* ================= F&I STEP DEFINITIONS ================= */
+
 const FI_STEPS = [
   {
     step: 1,
@@ -11,69 +14,55 @@ const FI_STEPS = [
 • Identify whether the deal is Cash, Finance, or Lease.
 • This determines downstream compliance, DMV handling, lender steps, and documents.
 • User must explicitly select one before proceeding.
-`
+`,
   },
   {
     step: 2,
     title: "Enter Deal into DMS",
     summary: "Customer, vehicle, taxes, fees",
     content: `
-To enter a deal into the DMS:
-
 • Search for the deal by stock number
   OR
 • Use Function 20 (lower-left) and search by customer name
 • Select the correct customer and vehicle
 
 Taxes:
-• Click Tax Group
-• Click Select
-• Scroll until the correct county is found
-• Confirm the selection
+• Click Tax Group → Select
+• Scroll to correct county → Confirm
 
-Rebates (new vehicles):
+Rebates:
 • Click Rebate
 • Enter rebate code and amount
-• Repeat for additional rebates
+• Repeat as needed
 
 Fees:
 • Click Fees / Lender
-• Select required fees
-• Wheelage tax applies ONLY to new registrations
-• Electric vehicle fee: $175
-• Hybrid fee: $75
-• Click OK when complete
+• Wheelage tax ONLY for new registrations
+• EV fee: $175 | Hybrid: $75
 
 AMO:
-• Click AMO
-• Select the package chosen by the customer
+• Click AMO → Select package
 
 GAP:
-• Click Insurance
-• Select GAP
-• Enter price and cost
-• Mark selected and click OK
+• Insurance → GAP → Enter price & cost → Select → OK
 
 Accessories:
-• Click Accessories
-• Select listed accessories OR use Accessories 1 if not listed
-• Enter retail amount on next screen
+• Accessories → Select OR Accessories 1
+• Enter retail amount
 
 Service Contracts:
 • Select Service Contracts
-• Enter “2” (change) next to desired contract
-• Complete required information
-• Verify sale and delivery date = today
+• Enter “2” (change)
+• Verify sale & delivery date = today
 
-Payment:
-• First payment should be 45 days
-• May extend slightly if day 45 lands on 29–31
+Payments:
+• First payment = 45 days (avoid 29–31)
 
 Lender:
-• Select lender from list
-• APR must be buy rate + 2% or less
-• If less, Fair Credit Participation form must document why
-`
+• Select lender
+• APR ≤ buy rate + 2%
+• Document exceptions
+`,
   },
   {
     step: 3,
@@ -81,171 +70,146 @@ Lender:
     summary: "Approval, stips, backend eligibility",
     content: `
 • Review lender approval in DealerTrack
-• Confirm all stipulations are satisfied
-• Verify backend products allowed by lender
+• Confirm all stips satisfied
+• Verify backend product eligibility
 • Confirm rate markup limits
-• Ensure approval matches deal structure before proceeding
-`
+`,
   },
   {
     step: 4,
     title: "Build F&I Menu",
     summary: "MenuSys, products, pricing",
     content: `
-MenuSys Process:
+• Login MenuSys → Dealer code WI3000
+• Sales → New → DMS Import
+• Enter stock # → Next
+• Verify deal → Next
 
-• Log into MenuSys
-• Dealer code: WI3000
-• Sales tab → New → DMS Import
-• Enter stock number → Next
-• Verify deal data → Next
-
-• Enter fees and taxes (right side)
-• Enter payment terms (bottom left)
-• Verify days to first payment = 45
-• Verify deal matches DMS → Next
+• Fees & taxes (right)
+• Payment terms (bottom left)
+• Days to first payment = 45
 
 Product Ratings:
-• Ensure one checkmark in each rating column (AUL, Century, ClassicTrac)
-• Verify vehicle data → Next
-• Close “rates retrieved” popup
+• One check per provider (AUL, Century, ClassicTrac)
 
-Menu Build:
-• Select 3 service contracts:
-  1) Max coverage matching term & miles
-  2) Same coverage, reduced term/miles
-  3) Same term/miles, reduced coverage
-• Save after each selection
-
-• Add GAP and other products
-• GAP typically safe under $1,000 (lender dependent)
-
+Menu:
+• 3 service contracts (max → mid → lower)
+• Save after each
+• GAP typically under $1,000
 • Every customer gets 4 oil changes
-• Add to maintenance log after deal
-
-• Arrange menu presentation order
-• Preferred = maximum protection
 • Print menu
-• DO NOT CLOSE MENUSYS — return later
-`
+• DO NOT CLOSE MENUSYS
+`,
   },
   {
     step: 5,
     title: "Build Contract",
     summary: "DealerTrack contracting",
     content: `
-• In DealerTrack F&I screen, select correct approval
-• Click Start Contracting
+• DealerTrack F&I → correct approval
+• Start Contracting
 
-Verification:
-• Verify names, middle names, addresses match driver’s license
-• Correct or document differences
-• Verify VIN (CRITICAL)
+Verify:
+• Names & address match ID
+• VIN (critical)
 
-Finance Deals:
-• Enter rate, finance charge, amount financed, total of payments from DMS disclosure
+Finance:
+• Enter disclosure data exactly
 
-Lease Deals:
-• WI: Capitalized cost reduction tax
-• MN: Upfront sales tax
-• These may be capitalized
+Lease:
+• WI → CCR tax
+• MN → upfront tax
 
 Fees:
-• Service / Document fee → Add Other Fees
-  - Charge to: Cash Price Other
-  - Paid to: Dealer
+• Service fee → Cash Price Other → Paid to Dealer
 • Lien fee → Paid to State
 
-• Save
-• Resolve errors if prompted
-• Submit for verification
-`
+• Save → Submit
+`,
   },
   {
     step: 6,
     title: "Compliance Documents",
     summary: "Required forms & waivers",
     content: `
-Required on ALL deals:
-• Agreement to Provide Insurance OR Public Liability Notice (cash)
-• MV-11 Title Application
+ALL deals:
+• Insurance agreement or public liability notice
+• MV-11
 
-Finance deals additionally require:
-• Signed credit application
-• Bank approval
-• All stips satisfied
-• Invoice or JD Power book-out
-• Product contracts or signed waivers
+Finance:
+• Credit app
+• Approval
+• Stips
+• Invoice or JD Power
+• Product contracts OR waivers
 
-MenuSys Documents:
-• If product sold → Print contract
-• If declined → Print waiver
-• Print TWO copies of everything
-• Never disclose filing of IRS 8300
-`
+• Print 2 copies
+• Never disclose IRS 8300
+`,
   },
   {
     step: 7,
     title: "Add Products to DMS",
     summary: "Rebuild contract",
     content: `
-• Add sold products into DMS
+• Add sold products
 • Rebuild contract
-• Ensure all backend products reflect menu selections
-`
+• Match menu selections
+`,
   },
   {
     step: 8,
     title: "Signatures",
     summary: "Customer signatures",
     content: `
-• Obtain all required customer signatures
-• Verify completeness before proceeding
-`
+• Obtain all required signatures
+• Verify completeness
+`,
   },
   {
     step: 9,
     title: "DMV Processing",
     summary: "Title, plates, temp tags",
     content: `
-Out-of-State:
-• Cash deal → Temp tag only
-• Outside finance → Title only, then create temp tag
+Out of State:
+• Cash → Temp tag only
+• Outside finance → Title only + temp tag
 
-• Verify issued plate matches inventory plate
-• Write plate number on MV-11
-• Personalized plates require manual processing
-`
+• Plate must match inventory
+• Write plate on MV-11
+• Personalized plates = manual
+`,
   },
   {
     step: 10,
     title: "Funding",
     summary: "Submit & fund deal",
     content: `
-• Submit deal for funding
-• Track lender funding confirmation
-`
+• Submit for funding
+• Track confirmation
+`,
   },
   {
     step: 11,
     title: "Deal Recap & Close",
     summary: "Commission, recap, NVDR",
     content: `
-• Enter salesperson commission (Commissions tab)
+• Enter commission
 • Recap:
-  - Function 6 → Enter buy rate
-  - If reserve fails → Function 7 → Enter manual reserve
-• Accessories → Function 1
-• We Owe → Function 2
-• Function 24 → Accept
-• Function 90 → Recap
+  - F6 buy rate
+  - F7 manual reserve if needed
+• Accessories → F1
+• We Owe → F2
+• F24 accept → F90 recap
 • Print 2 recaps
-• Print NVDR (new vehicles)
-• Print rebate sheet
+• Print NVDR & rebate sheet
 • Print sale label
-`
-  }
+`,
+  },
 ];
+
+/* ================= COMPONENT ================= */
+
 export default function FIAssistant() {
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState([]);
@@ -264,17 +228,16 @@ export default function FIAssistant() {
 `ADD TO BRAIN:
 F&I STEP X – [Title]
 
-• Action-by-action instructions
-• Exact buttons, fields, menus
-• One instruction per line`
+• One action per line
+• Exact buttons / menus
+• No filler`
     );
   }
 
   async function sendMessage() {
     if (!msg.trim() || loading) return;
 
-    const userMessage = { role: "user", content: msg };
-    setChat((c) => [userMessage, ...c]);
+    setChat((c) => [{ role: "user", content: msg }, ...c]);
     setMsg("");
     setLoading(true);
 
@@ -283,7 +246,7 @@ F&I STEP X – [Title]
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMessage.content,
+          message: msg,
           role,
           domain: "fi",
           userId: auth.currentUser?.uid || "fi-user",
@@ -294,16 +257,7 @@ F&I STEP X – [Title]
       const data = await res.json();
 
       setChat((c) => [
-        {
-          role: "assistant",
-          content: data.answer,
-          source: data.source,
-        },
-        ...c,
-      ]);
-    } catch {
-      setChat((c) => [
-        { role: "assistant", content: "Something went wrong." },
+        { role: "assistant", content: data.answer, source: data.source },
         ...c,
       ]);
     } finally {
@@ -321,11 +275,11 @@ F&I STEP X – [Title]
   return (
     <div className="h-screen flex flex-col bg-gray-100">
 
-      {/* ===== TOP 4-COLUMN HEADER ===== */}
+      {/* TOP GRID */}
       <div className="grid grid-cols-4 gap-4 p-4 bg-white border-b">
 
         {/* NAV */}
-        <div className="border-r pr-3">
+        <div>
           <h2 className="font-bold mb-2">Navigation</h2>
           <ul className="text-sm space-y-1">
             <li><b>start a deal</b></li>
@@ -335,7 +289,7 @@ F&I STEP X – [Title]
         </div>
 
         {/* TRAINING */}
-        <div className="border-r pr-3">
+        <div>
           <h2 className="font-bold mb-2">Training</h2>
           <button
             onClick={insertTrainingTemplate}
@@ -344,25 +298,25 @@ F&I STEP X – [Title]
             Insert Training Template
           </button>
           <p className="text-xs text-gray-600">
-            Managers/Admins only.  
             Use <b>ADD TO BRAIN:</b> to store dealership process.
           </p>
         </div>
 
         {/* STEPS 1–5 */}
-        <div className="border-r pr-3">
+        <div>
           <h2 className="font-bold mb-2">F&I Steps</h2>
-          {[1,2,3,4,5].map((s) => (
-            <div key={s} className="mb-1">
+          {FI_STEPS.filter(s => s.step <= 5).map(s => (
+            <div key={s.step} className="mb-2">
               <button
-                onClick={() => toggleStep(s)}
+                onClick={() => toggleStep(s.step)}
                 className="text-sm font-semibold underline"
               >
-                Step {s}
+                Step {s.step}: {s.title}
               </button>
-              {openSteps[s] && (
-                <div className="text-xs text-gray-700 mt-1">
-                  Detailed guidance available in assistant.
+              {openSteps[s.step] && (
+                <div className="text-xs whitespace-pre-wrap mt-1">
+                  <b>{s.summary}</b>
+                  <div>{s.content}</div>
                 </div>
               )}
             </div>
@@ -371,18 +325,18 @@ F&I STEP X – [Title]
 
         {/* STEPS 6–11 */}
         <div>
-          <h2 className="font-bold mb-2">&nbsp;</h2>
-          {[6,7,8,9,10,11].map((s) => (
-            <div key={s} className="mb-1">
+          {FI_STEPS.filter(s => s.step > 5).map(s => (
+            <div key={s.step} className="mb-2">
               <button
-                onClick={() => toggleStep(s)}
+                onClick={() => toggleStep(s.step)}
                 className="text-sm font-semibold underline"
               >
-                Step {s}
+                Step {s.step}: {s.title}
               </button>
-              {openSteps[s] && (
-                <div className="text-xs text-gray-700 mt-1">
-                  Detailed guidance available in assistant.
+              {openSteps[s.step] && (
+                <div className="text-xs whitespace-pre-wrap mt-1">
+                  <b>{s.summary}</b>
+                  <div>{s.content}</div>
                 </div>
               )}
             </div>
@@ -390,7 +344,7 @@ F&I STEP X – [Title]
         </div>
       </div>
 
-      {/* ===== CHAT INPUT (ALWAYS VISIBLE) ===== */}
+      {/* CHAT INPUT */}
       <div className="bg-white border-b p-4 flex gap-2">
         <textarea
           className="flex-1 p-3 border rounded"
@@ -403,14 +357,13 @@ F&I STEP X – [Title]
         />
         <button
           onClick={sendMessage}
-          disabled={loading}
           className="px-5 py-2 bg-blue-600 text-white rounded"
         >
           Send
         </button>
       </div>
 
-      {/* ===== CHAT HISTORY ===== */}
+      {/* CHAT HISTORY */}
       <div className="flex-1 overflow-auto p-4">
         {chat.map((m, i) => (
           <div key={i} className="mb-4">
