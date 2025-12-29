@@ -1,38 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { auth } from "@/lib/firebaseClient";
-
-const FI_STEPS = [
-  { step: 1, title: "Identify Deal Type", summary: "Cash, Finance, or Lease." },
-  { step: 2, title: "Enter Deal into DMS", summary: "Customer, vehicle, taxes, fees." },
-  { step: 3, title: "Approvals & Stips", summary: "Approval, stips, backend eligibility." },
-  { step: 4, title: "Build F&I Menu", summary: "MenuSys, products, pricing, save menu." },
-  { step: 5, title: "Build Contract", summary: "DealerTrack contract creation." },
-  { step: 6, title: "Compliance Documents", summary: "All required forms & waivers." },
-  { step: 7, title: "Add Products to DMS", summary: "Rebuild contract with products." },
-  { step: 8, title: "Signatures", summary: "Customer signatures complete." },
-  { step: 9, title: "DMV Processing", summary: "Title, plates, temp tags." },
-  { step: 10, title: "Funding", summary: "Submit & fund deal." },
-  { step: 11, title: "Deal Recap & Close", summary: "Commission, recap, NVDR, label." },
-];
 
 export default function FIAssistant() {
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
-  const [openSteps, setOpenSteps] = useState([]);
+  const bottomRef = useRef(null);
 
   const role = "manager";
 
-  function toggleStep(step) {
-    setOpenSteps((prev) =>
-      prev.includes(step)
-        ? prev.filter((s) => s !== step)
-        : [...prev, step]
-    );
-  }
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chat, loading]);
 
   async function sendMessage() {
     if (!msg.trim() || loading) return;
@@ -55,15 +37,24 @@ export default function FIAssistant() {
         }),
       });
 
+      if (!res.ok) throw new Error("Chat failed");
+
       const data = await res.json();
 
       setChat((c) => [
-        { role: "assistant", content: data.answer, source: data.source },
+        {
+          role: "assistant",
+          content: data.answer,
+          source: data.source,
+        },
         ...c,
       ]);
     } catch {
       setChat((c) => [
-        { role: "assistant", content: "Something went wrong." },
+        {
+          role: "assistant",
+          content: "Something went wrong. Try again.",
+        },
         ...c,
       ]);
     } finally {
@@ -78,107 +69,114 @@ export default function FIAssistant() {
     }
   }
 
-  function insertTrainingTemplate() {
-    setMsg(
-`TRAINING TEMPLATE
-
-F&I STEP #:
-Title:
-Applies To:
-System:
-
-Objective:
-Exact Steps:
-Warnings / Critical Notes:
-Completion Check:
-`
-    );
-  }
-
   return (
     <div className="h-screen flex flex-col">
       {/* HEADER */}
-      <div className="p-4 border-b bg-white space-y-4">
+      <div className="p-4 border-b bg-white">
         <h1 className="text-2xl font-bold">F&I Assistant</h1>
+        <p className="text-sm text-gray-600">
+          Guided F&I workflow + dealership brain
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-700">
-          {/* GUIDED MODE */}
-          <div>
-            <h2 className="font-semibold mb-2">Guided Deal Mode</h2>
-            <ul className="list-disc list-inside space-y-1">
-              <li><b>start a deal</b> to begin</li>
-              <li><b>next</b> advances step</li>
-              <li><b>back</b> returns to prior step</li>
-              <li>Ask about any step anytime</li>
-            </ul>
-          </div>
+      {/* FOUR COLUMN GRID */}
+      <div className="grid grid-cols-4 flex-1 overflow-hidden">
 
-          {/* TRAINING */}
-          <div>
-            <h2 className="font-semibold mb-2">Training</h2>
-            <ul className="list-disc list-inside space-y-1">
-              <li><b>ADD TO BRAIN:</b> saves training</li>
-              <li>Assistant can write training</li>
-              <li>Use template for consistency</li>
-            </ul>
-
-            <button
-              onClick={insertTrainingTemplate}
-              className="mt-3 px-3 py-2 text-sm bg-blue-600 text-white rounded"
-            >
-              Insert Training Template
-            </button>
-          </div>
-
-          {/* STEP SUMMARY */}
-          <div>
-            <h2 className="font-semibold mb-2">F&I Steps</h2>
-            <div className="space-y-1">
-              {FI_STEPS.map((s) => (
-                <div key={s.step} className="border rounded">
-                  <button
-                    onClick={() => toggleStep(s.step)}
-                    className="w-full text-left px-3 py-2 bg-gray-100 hover:bg-gray-200 font-medium"
-                  >
-                    Step {s.step}: {s.title}
-                  </button>
-                  {openSteps.includes(s.step) && (
-                    <div className="px-3 py-2 text-xs text-gray-600 bg-white">
-                      {s.summary}
-                    </div>
-                  )}
+        {/* COLUMN 1 – CHAT */}
+        <div className="col-span-1 flex flex-col border-r bg-gray-50">
+          <div className="flex-1 overflow-auto p-3">
+            {chat.map((m, i) => (
+              <div key={i} className="mb-4">
+                <div className="font-semibold">
+                  {m.role === "user" ? "You" : "F&I Assistant"}
                 </div>
-              ))}
-            </div>
+                <div className="whitespace-pre-wrap">{m.content}</div>
+                {m.source && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {m.source}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+
+          <div className="border-t p-3 bg-white">
+            <textarea
+              className="w-full p-2 border rounded"
+              placeholder="Ask, ADD TO BRAIN:, or start a deal…"
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
+              disabled={loading}
+            />
+            {loading && (
+              <div className="text-xs text-gray-500 mt-1">
+                AI is typing…
+              </div>
+            )}
           </div>
         </div>
 
-        <textarea
-          className="w-full p-3 border rounded"
-          placeholder="Ask a question, start a deal, or add training…"
-          value={msg}
-          onChange={(e) => setMsg(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={3}
-          disabled={loading}
-        />
-      </div>
+        {/* COLUMN 2 – TRAINING */}
+        <div className="col-span-1 border-r bg-white p-4 overflow-auto">
+          <h2 className="font-semibold mb-3">Training</h2>
 
-      {/* CHAT */}
-      <div className="flex-1 overflow-auto p-4 bg-gray-50">
-        {loading && <div className="text-sm text-gray-500">AI is typing…</div>}
+          <details open className="mb-4">
+            <summary className="cursor-pointer font-medium">
+              How to Train the Brain
+            </summary>
+            <pre className="bg-gray-100 p-2 rounded text-xs mt-2">
+ADD TO BRAIN:
+F&I STEP X – [Step name]
 
-        {chat.map((m, i) => (
-          <div key={i} className="mb-6">
-            <div className="font-semibold">
-              {m.role === "user" ? "You" : "F&I Assistant"}
-            </div>
-            <div className="whitespace-pre-wrap">{m.content}</div>
-            {m.source && (
-              <div className="text-xs text-gray-500">{m.source}</div>
-            )}
-          </div>
-        ))}
+• Clear, procedural steps
+• One action per line
+• This becomes dealership policy
+            </pre>
+          </details>
+
+          <details className="mb-4">
+            <summary className="cursor-pointer font-medium">
+              Memory Rules
+            </summary>
+            <ul className="text-sm mt-2 space-y-1">
+              <li>• ADD TO BRAIN = dealership knowledge</li>
+              <li>• Remember this = personal notes only</li>
+            </ul>
+          </details>
+        </div>
+
+        {/* COLUMN 3 – STEP OVERVIEW */}
+        <div className="col-span-1 border-r bg-gray-50 p-4 overflow-auto">
+          <h2 className="font-semibold mb-3">F&I Steps</h2>
+          <ol className="text-sm space-y-1 list-decimal ml-4">
+            <li>Identify deal type</li>
+            <li>Enter deal into DMS</li>
+            <li>Approvals & stips</li>
+            <li>Build F&I menu</li>
+            <li>Build contract</li>
+            <li>Compliance docs</li>
+            <li>Add products / rebuild</li>
+            <li>Signatures</li>
+            <li>DMV</li>
+            <li>Funding</li>
+            <li>Deal recap & cap</li>
+          </ol>
+        </div>
+
+        {/* COLUMN 4 – ACTIVE STEP GUIDANCE */}
+        <div className="col-span-1 bg-white p-4 overflow-auto">
+          <h2 className="font-semibold mb-3">Navigation</h2>
+          <ul className="text-sm space-y-2">
+            <li>• <b>start a deal</b> — begin workflow</li>
+            <li>• Step 1 auto-advances after deal type</li>
+            <li>• <b>next</b> — move forward</li>
+            <li>• <b>back</b> — return to prior step</li>
+            <li>• Ask questions anytime</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
