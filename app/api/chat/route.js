@@ -52,9 +52,6 @@ function detectBrainTrainingIntent(text) {
   return text.slice(match[0].length).trim();
 }
 
-/* ================= NEW: TRAINING AUTHORING INTENT ================= */
-/* This is the missing capability you asked for */
-
 function detectTrainingAuthoringRequest(text) {
   return /(write|draft|help me add|create).*(training|process|step)/i.test(text);
 }
@@ -144,7 +141,7 @@ export async function POST(req) {
 
     const text = normalize(message);
 
-    /* ===== TRAINING AUTHORING MODE (NEW) ===== */
+    /* ===== TRAINING AUTHORING MODE ===== */
 
     if (
       (role === "admin" || role === "manager") &&
@@ -158,20 +155,13 @@ export async function POST(req) {
             content: `
 You are writing OFFICIAL dealership training content.
 
-RULES:
-- Use clear headers
-- Use step-based formatting
-- Be precise and procedural
-- Do NOT save anything
-- Output must be ready to copy/paste into the system using ADD TO BRAIN:
-
-FORMAT EXACTLY LIKE THIS:
+FORMAT EXACTLY:
 
 F&I PROCESS – STEP X – TITLE
 
-Instructional text.
-
-Bullet steps where applicable.
+Clear procedural instructions.
+Bulleted steps where applicable.
+No filler. No assumptions.
 `,
           },
           { role: "user", content: message },
@@ -182,7 +172,7 @@ Bullet steps where applicable.
       return NextResponse.json({
         answer:
           response.choices[0].message.content +
-          "\n\nIf this looks correct, copy and paste it back using:\nADD TO BRAIN:",
+          "\n\nIf correct, copy & paste back using:\nADD TO BRAIN:",
         source: "Training authoring mode",
       });
     }
@@ -235,7 +225,7 @@ Bullet steps where applicable.
       });
     }
 
-    /* ================= F&I DOMAIN ================= */
+    /* ================= F&I DOMAIN (STEP-AWARE RETRIEVAL) ================= */
 
     if (domain === "fi") {
       if (!sessionId) {
@@ -258,27 +248,38 @@ Bullet steps where applicable.
       }
 
       if (!state || !state.started) {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are an F&I assistant. Answer questions and explain procedures. Do not assume an active deal.",
-            },
-            { role: "user", content: message },
-          ],
-          temperature: 0.5,
-        });
+        // OPEN MODE: retrieval without step bias
+        const hits = await retrieveKnowledge(message, "fi");
+
+        if (hits?.length) {
+          const response = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Answer ONLY using the dealership knowledge below.\n\n" +
+                  hits.map(h => h.content).join("\n\n"),
+              },
+              { role: "user", content: message },
+            ],
+            temperature: 0.4,
+          });
+
+          return NextResponse.json({
+            answer: response.choices[0].message.content,
+            source: "Dealer policy (documented)",
+          });
+        }
 
         return NextResponse.json({
           answer:
-            response.choices[0].message.content +
-            "\n\n(Start a deal anytime by typing `start a deal`.)",
+            "No active deal. Ask a question or type `start a deal` to begin.",
           source: "F&I assistant",
         });
       }
 
+      // STEP 1: deal type → auto-advance
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
           state.dealType = text;
@@ -307,12 +308,41 @@ Bullet steps where applicable.
         });
       }
 
+      // STEP-BIASED RETRIEVAL (THIS IS THE FIX)
+      const stepQuery = `[F&I STEP ${state.step}] ${message}`;
+      const hits = await retrieveKnowledge(stepQuery, "fi");
+
+      if (hits?.length) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content:
+                "Answer ONLY using the dealership training for this step.\n\n" +
+                hits.map(h => h.content).join("\n\n"),
+            },
+            { role: "user", content: message },
+          ],
+          temperature: 0.3,
+        });
+
+        return NextResponse.json({
+          answer:
+            response.choices[0].message.content +
+            "\n\nType `next` when complete.",
+          source: "F&I process",
+        });
+      }
+
+      // fallback (no training yet)
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `You are assisting with F&I Step ${state.step}. Answer precisely. Do not advance steps.`,
+            content:
+              `You are assisting with F&I Step ${state.step}. Answer carefully. Do not advance steps.`,
           },
           { role: "user", content: message },
         ],
@@ -322,7 +352,7 @@ Bullet steps where applicable.
       return NextResponse.json({
         answer:
           response.choices[0].message.content +
-          "\n\nType `next` when complete or continue asking questions.",
+          "\n\nType `next` when complete.",
         source: "F&I process",
       });
     }
