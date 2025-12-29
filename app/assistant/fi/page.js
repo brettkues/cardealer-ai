@@ -210,39 +210,48 @@ How the user knows this step is complete.
             onClick={() => setShowHowTo(v => !v)}
             className="text-sm underline block mb-2"
           >
-            {showHowTo ? "Hide" : "How to add training"}
+            {showHowTo ? "Hide" : "How to Add Training"}
           </button>
 
           {showHowTo && (
             <div className="text-xs whitespace-pre-wrap text-gray-700 border p-2 rounded bg-gray-50">
-{`1. Click "Insert Training Template"
-2. Fill in ONE step only
-3. Be exact: buttons, screens, functions
-4. Start with "ADD TO BRAIN:"
-5. Press Enter to submit
-6. AI will confirm when saved
+{`You can TRAIN this assistant — safely and intentionally.
 
-Example:
+HOW IT WORKS:
+• You may ask the assistant to HELP WRITE training
+  (example: "help me add training for step 3")
+• The assistant will DRAFT training text for you
+• NOTHING is saved automatically
+
+ONLY messages that START WITH:
+ADD TO BRAIN:
+
+will be saved to the dealership brain.
+
+RECOMMENDED FLOW:
+1. Ask the assistant to help write training
+2. Review and edit the draft
+3. Copy & paste it back using ADD TO BRAIN:
+
+EXAMPLE OF A PROPER TRAINING ENTRY:
 
 ADD TO BRAIN:
-F&I STEP 3
-Title: Deal Screen Location
-Applies To: all
-System: DealerTrack DMS
+F&I PROCESS – STEP 3 – Deal Screen Location
 
-Objective:
-Explain how to access the deal screen.
+PURPOSE:
+Explain how to access the correct deal screen in DealerTrack.
 
-Exact Steps:
+PROCEDURE:
 - Open DealerTrack DMS
 - Search by stock number OR Function 20
-- Select correct customer and vehicle
+- Select the correct customer and vehicle
 
-Warnings / Critical Notes:
-- Do not proceed if VIN is incorrect
+WARNINGS / COMMON ERRORS:
+- Do not proceed if VIN does not match the vehicle
+- Incorrect deal selection causes funding delays
 
-Completion Check:
-Deal screen matches vehicle and customer.`}
+COMPLETION CHECK:
+Deal screen matches customer, vehicle, and lender approval.`}
             </div>
           )}
         </div>
