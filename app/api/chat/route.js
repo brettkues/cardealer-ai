@@ -21,14 +21,7 @@ const embedClient = new OpenAIClient({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ================= IN-MEMORY F&I DEAL STATE =================
-   key: sessionId
-   value: {
-     step: number,
-     started: boolean,
-     dealType: "cash" | "finance" | "lease" | null
-   }
-============================================================== */
+/* ================= F&I SESSION STATE ================= */
 
 const fiSessions = new Map();
 
@@ -41,10 +34,6 @@ const MIN_CONFIDENCE = 0.65;
 
 function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
-}
-
-function userRequestedSearch(text) {
-  return /(search|look up|google|find online|research)/i.test(text);
 }
 
 function detectMemoryIntent(text) {
@@ -61,6 +50,13 @@ function detectBrainTrainingIntent(text) {
   );
   if (!match) return null;
   return text.slice(match[0].length).trim();
+}
+
+/* ================= NEW: TRAINING AUTHORING INTENT ================= */
+/* This is the missing capability you asked for */
+
+function detectTrainingAuthoringRequest(text) {
+  return /(write|draft|help me add|create).*(training|process|step)/i.test(text);
 }
 
 /* ================= BRAIN SAVE ================= */
@@ -111,25 +107,23 @@ function getFiStepPrompt(step) {
     case 1:
       return "Step 1: Identify the deal type. Reply with: cash, finance, or lease.";
     case 2:
-      return "Step 2: Enter the deal into the DMS. When complete, type `next`.";
+      return "Step 2: Enter the deal into the DMS. Type `next` when complete or ask questions.";
     case 3:
-      return "Step 3: Review approvals, stips, and backend eligibility. Type `next` when complete.";
+      return "Step 3: Review approvals, stips, backend eligibility, and rate limits. Type `next` when complete.";
     case 4:
       return "Step 4: Build and present the F&I menu. Type `next` when complete.";
     case 5:
       return "Step 5: Build the contract. Type `next` when complete.";
     case 6:
-      return "Step 6: Confirm all compliance documents. Type `next` when complete.";
+      return "Step 6: Confirm compliance documents. Type `next` when complete.";
     case 7:
-      return "Step 7: Add products into DMS and rebuild the contract. Type `next` when complete.";
+      return "Step 7: Add products and rebuild contract. Type `next` when complete.";
     case 8:
-      return "Step 8: Obtain all required signatures. Type `next` when complete.";
+      return "Step 8: Obtain signatures. Type `next` when complete.";
     case 9:
-      return "Step 9: Process DMV paperwork. Type `next` when complete.";
+      return "Step 9: DMV processing. Type `next` when complete.";
     case 10:
-      return "Step 10: Funding and deal completion.";
-    case 11:
-      return "Step 11: Deal recap, commissions, NVDR, and final paperwork.";
+      return "Step 10: Funding and close.";
     default:
       return "F&I process complete.";
   }
@@ -150,7 +144,50 @@ export async function POST(req) {
 
     const text = normalize(message);
 
-    /* ===== ADD TO BRAIN ===== */
+    /* ===== TRAINING AUTHORING MODE (NEW) ===== */
+
+    if (
+      (role === "admin" || role === "manager") &&
+      detectTrainingAuthoringRequest(message)
+    ) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are writing OFFICIAL dealership training content.
+
+RULES:
+- Use clear headers
+- Use step-based formatting
+- Be precise and procedural
+- Do NOT save anything
+- Output must be ready to copy/paste into the system using ADD TO BRAIN:
+
+FORMAT EXACTLY LIKE THIS:
+
+F&I PROCESS – STEP X – TITLE
+
+Instructional text.
+
+Bullet steps where applicable.
+`,
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.3,
+      });
+
+      return NextResponse.json({
+        answer:
+          response.choices[0].message.content +
+          "\n\nIf this looks correct, copy and paste it back using:\nADD TO BRAIN:",
+        source: "Training authoring mode",
+      });
+    }
+
+    /* ===== EXPLICIT BRAIN TRAINING ===== */
 
     const brainContent = detectBrainTrainingIntent(message);
 
@@ -203,14 +240,12 @@ export async function POST(req) {
     if (domain === "fi") {
       if (!sessionId) {
         return NextResponse.json({
-          answer: "Session error. Please refresh and try again.",
+          answer: "Session error. Refresh and retry.",
           source: "System error",
         });
       }
 
       let state = fiSessions.get(sessionId);
-
-      /* ---- START DEAL ---- */
 
       if (text === "start a deal") {
         state = { step: 1, started: true, dealType: null };
@@ -222,21 +257,17 @@ export async function POST(req) {
         });
       }
 
-      /* ---- OPEN MODE (NO DEAL) ---- */
-
       if (!state || !state.started) {
-        const hits = await retrieveKnowledge(message, "fi");
-
-        if (hits?.length) {
-          return NextResponse.json({
-            answer: hits.map(h => h.content).join("\n\n"),
-            source: "Dealer policy (documented)",
-          });
-        }
-
         const response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
-          messages: [{ role: "user", content: message }],
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an F&I assistant. Answer questions and explain procedures. Do not assume an active deal.",
+            },
+            { role: "user", content: message },
+          ],
           temperature: 0.5,
         });
 
@@ -247,8 +278,6 @@ export async function POST(req) {
           source: "F&I assistant",
         });
       }
-
-      /* ---- STEP 1 DEAL TYPE (AUTO ADVANCE) ---- */
 
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
@@ -268,20 +297,6 @@ export async function POST(req) {
         });
       }
 
-      /* ---- BACK ---- */
-
-      if (text === "back") {
-        state.step = Math.max(1, state.step - 1);
-        fiSessions.set(sessionId, state);
-
-        return NextResponse.json({
-          answer: getFiStepPrompt(state.step),
-          source: "F&I process",
-        });
-      }
-
-      /* ---- NEXT ---- */
-
       if (text === "next") {
         state.step += 1;
         fiSessions.set(sessionId, state);
@@ -292,28 +307,12 @@ export async function POST(req) {
         });
       }
 
-      /* ---- STEP QUESTION (RETRIEVAL FIRST) ---- */
-
-      const stepHits = await retrieveKnowledge(
-        `[F&I STEP ${state.step}] ${message}`,
-        "fi"
-      );
-
-      if (stepHits?.length) {
-        return NextResponse.json({
-          answer:
-            stepHits.map(h => h.content).join("\n\n") +
-            "\n\n(Type `next` when complete or `back` to review.)",
-          source: "Dealer policy (documented)",
-        });
-      }
-
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `You are assisting with F&I Step ${state.step}. Answer accurately. Do not advance steps.`,
+            content: `You are assisting with F&I Step ${state.step}. Answer precisely. Do not advance steps.`,
           },
           { role: "user", content: message },
         ],
@@ -323,7 +322,7 @@ export async function POST(req) {
       return NextResponse.json({
         answer:
           response.choices[0].message.content +
-          "\n\n(Type `next` when complete or `back` to review.)",
+          "\n\nType `next` when complete or continue asking questions.",
         source: "F&I process",
       });
     }
@@ -332,19 +331,19 @@ export async function POST(req) {
 
     const hits = await retrieveKnowledge(message, domain);
 
-    if (hits?.length) {
+    if (hits && hits.length) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Answer ONLY using dealership policy below.\n\n" +
+              "Answer ONLY using the dealership policy below.\n\n" +
               hits.map(h => h.content).join("\n\n"),
           },
           { role: "user", content: message },
         ],
-        temperature: 0.3,
+        temperature: 0.4,
       });
 
       return NextResponse.json({
