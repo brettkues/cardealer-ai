@@ -225,12 +225,28 @@ export default function FIAssistant() {
 
   function insertTrainingTemplate() {
     setMsg(
-`ADD TO BRAIN:
-F&I STEP X – [Title]
+`TRAINING TEMPLATE (fill this in, then send):
 
-• One action per line
-• Exact buttons / menus
-• No filler`
+F&I STEP #: 
+Title:
+Applies To: (cash / finance / lease / all)
+System: (DealerTrack DMS, MenuSys, DMV, etc.)
+
+Objective:
+Explain what this step accomplishes.
+
+Exact Steps:
+- Click / Action
+- Click / Action
+- Verification step
+
+Warnings / Critical Notes:
+- What must never be missed
+- Common mistakes
+
+Completion Check:
+How the user knows this step is complete.
+`
     );
   }
 
