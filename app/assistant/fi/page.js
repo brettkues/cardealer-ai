@@ -1,6 +1,8 @@
+// app/assistant/fi/page.js
+
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebaseClient";
 
 export default function FIAssistant() {
@@ -8,19 +10,15 @@ export default function FIAssistant() {
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
-  const topRef = useRef(null);
 
   const role = "manager"; // sales | manager | admin
-
-  // Scroll newest messages to top (Sales-style behavior)
-  useEffect(() => {
-    topRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat, loading]);
 
   async function sendMessage() {
     if (!msg.trim() || loading) return;
 
     const userMessage = { role: "user", content: msg };
+
+    // NEWEST AT TOP
     setChat((c) => [userMessage, ...c]);
     setMsg("");
     setLoading(true);
@@ -73,43 +71,68 @@ export default function FIAssistant() {
   return (
     <div className="h-screen flex flex-col">
       {/* HEADER / DIRECTIONS */}
-      <div className="p-4 border-b bg-white space-y-2">
-        <h1 className="text-2xl font-bold">F&I Assistant</h1>
+      <div className="p-4 border-b bg-white">
+        <h1 className="text-2xl font-bold mb-3">F&I Assistant</h1>
 
-        <div className="text-sm text-gray-700 space-y-1">
-          <p><b>GUIDED DEAL MODE</b></p>
-          <p>• Type <b>start a deal</b> to begin the F&I workflow</p>
-          <p>• Answer prompts as requested (ex: cash / finance / lease)</p>
-          <p>• Type <b>next</b> when a step is complete</p>
-          <p>• Type <b>back</b> to return to the previous step</p>
-          <p>• You may ask questions at any step without advancing</p>
+        {/* TWO COLUMN INSTRUCTIONS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-700">
+          {/* LEFT COLUMN */}
+          <div>
+            <h2 className="font-semibold mb-2">Guided Deal Mode</h2>
+            <ul className="space-y-1 list-disc list-inside">
+              <li>
+                Type <b>start a deal</b> to begin a guided F&amp;I workflow
+              </li>
+              <li>
+                Step 1 will ask for deal type (<b>cash</b>, <b>finance</b>,{" "}
+                <b>lease</b>)
+              </li>
+              <li>
+                After each step, type <b>next</b> when complete
+              </li>
+              <li>
+                Ask questions anytime — steps will <b>not</b> advance
+              </li>
+              <li>
+                You may type <b>back</b> to review the previous step
+              </li>
+            </ul>
+          </div>
 
-          <hr className="my-2" />
-
-          <p><b>TRAINING THE BRAIN</b> (Managers/Admins)</p>
-          <p>
-            • To add dealership policy or process:<br />
-            <b>ADD TO BRAIN: [training content]</b>
-          </p>
-          <p>
-            • To have the assistant WRITE training for you:<br />
-            <b>Write training for F&amp;I Step X about [topic]</b>
-          </p>
-          <p>
-            • Review the output, then copy &amp; paste it back using
-            <br />
-            <b>ADD TO BRAIN:</b>
-          </p>
-
-          <hr className="my-2" />
-
-          <p><b>PERSONAL NOTES</b></p>
-          <p>• <b>Remember this:</b> saves a personal note (not dealership policy)</p>
+          {/* RIGHT COLUMN */}
+          <div>
+            <h2 className="font-semibold mb-2">Training & Brain Management</h2>
+            <ul className="space-y-1 list-disc list-inside">
+              <li>
+                Managers/Admins can train using:
+                <br />
+                <b>ADD TO BRAIN:</b> followed by formatted instructions
+              </li>
+              <li>
+                You may ask the assistant to <b>write training for you</b>, e.g.:
+                <br />
+                <i>
+                  “Write training for F&amp;I Step 3 about entering a cash deal
+                  in DMS”
+                </i>
+              </li>
+              <li>
+                The assistant will return copy-ready training text
+              </li>
+              <li>
+                Paste it back using <b>ADD TO BRAIN:</b> to store it
+              </li>
+              <li>
+                “Remember this” saves <b>personal notes only</b>
+              </li>
+            </ul>
+          </div>
         </div>
 
+        {/* INPUT */}
         <textarea
-          className="w-full p-3 border rounded mt-2"
-          placeholder="Ask a question, start a deal, or ADD TO BRAIN…"
+          className="w-full p-3 border rounded mt-4"
+          placeholder="Ask a question, write training, ADD TO BRAIN, or start a deal…"
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -120,8 +143,6 @@ export default function FIAssistant() {
 
       {/* CHAT */}
       <div className="flex-1 overflow-auto p-4 bg-gray-50">
-        <div ref={topRef} />
-
         {loading && (
           <div className="text-sm text-gray-500 mb-4">AI is typing…</div>
         )}
