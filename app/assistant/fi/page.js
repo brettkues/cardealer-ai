@@ -1,8 +1,6 @@
-// app/assistant/fi/page.js
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { auth } from "@/lib/firebaseClient";
 
 export default function FIAssistant() {
@@ -18,7 +16,7 @@ export default function FIAssistant() {
 
     const userMessage = { role: "user", content: msg };
 
-    // NEWEST AT TOP
+    // newest on top (Sales-style)
     setChat((c) => [userMessage, ...c]);
     setMsg("");
     setLoading(true);
@@ -35,8 +33,6 @@ export default function FIAssistant() {
           sessionId,
         }),
       });
-
-      if (!res.ok) throw new Error("Chat request failed");
 
       const data = await res.json();
 
@@ -68,75 +64,86 @@ export default function FIAssistant() {
     }
   }
 
+  function insertTrainingTemplate() {
+    setMsg(
+`TRAINING TEMPLATE (fill this in, then send):
+
+F&I STEP #: 
+Title:
+Applies To: (cash / finance / lease / all)
+System: (DealerTrack DMS, MenuSys, DMV, etc.)
+
+Objective:
+Explain what this step accomplishes.
+
+Exact Steps:
+- Click / Action
+- Click / Action
+- Verification step
+
+Warnings / Critical Notes:
+- What must never be missed
+- Common mistakes
+
+Completion Check:
+How the user knows this step is complete.
+`
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col">
-      {/* HEADER / DIRECTIONS */}
+      {/* HEADER */}
       <div className="p-4 border-b bg-white">
         <h1 className="text-2xl font-bold mb-3">F&I Assistant</h1>
 
-        {/* TWO COLUMN INSTRUCTIONS */}
+        {/* TWO COLUMN HELP */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-700">
-          {/* LEFT COLUMN */}
+          {/* LEFT */}
           <div>
             <h2 className="font-semibold mb-2">Guided Deal Mode</h2>
-            <ul className="space-y-1 list-disc list-inside">
+            <ul className="list-disc list-inside space-y-1">
+              <li>Type <b>start a deal</b> to begin</li>
+              <li>Step 1 sets deal type (cash / finance / lease)</li>
+              <li>Type <b>next</b> when a step is complete</li>
+              <li>Type <b>back</b> to return to the previous step</li>
               <li>
-                Type <b>start a deal</b> to begin a guided F&amp;I workflow
-              </li>
-              <li>
-                Step 1 will ask for deal type (<b>cash</b>, <b>finance</b>,{" "}
-                <b>lease</b>)
-              </li>
-              <li>
-                After each step, type <b>next</b> when complete
-              </li>
-              <li>
-                Ask questions anytime — steps will <b>not</b> advance
-              </li>
-              <li>
-                You may type <b>back</b> to review the previous step
+                You may ask questions about <b>any step</b> at any time
+                <br />
+                <span className="text-xs text-gray-500">
+                  (Example: “How do I do Step 3 tax selection?”)
+                </span>
               </li>
             </ul>
           </div>
 
-          {/* RIGHT COLUMN */}
+          {/* RIGHT */}
           <div>
-            <h2 className="font-semibold mb-2">Training & Brain Management</h2>
-            <ul className="space-y-1 list-disc list-inside">
-              <li>
-                Managers/Admins can train using:
-                <br />
-                <b>ADD TO BRAIN:</b> followed by formatted instructions
-              </li>
-              <li>
-                You may ask the assistant to <b>write training for you</b>, e.g.:
-                <br />
-                <i>
-                  “Write training for F&amp;I Step 3 about entering a cash deal
-                  in DMS”
-                </i>
-              </li>
-              <li>
-                The assistant will return copy-ready training text
-              </li>
-              <li>
-                Paste it back using <b>ADD TO BRAIN:</b> to store it
-              </li>
-              <li>
-                “Remember this” saves <b>personal notes only</b>
-              </li>
+            <h2 className="font-semibold mb-2">Training the Brain</h2>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Use <b>ADD TO BRAIN:</b> to store dealership training</li>
+              <li>The assistant can write training for you</li>
+              <li>Use the template button below to stay consistent</li>
+              <li>Paste finalized text back with <b>ADD TO BRAIN:</b></li>
             </ul>
+
+            <button
+              onClick={insertTrainingTemplate}
+              className="mt-3 px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Insert Training Template
+            </button>
           </div>
         </div>
 
         {/* INPUT */}
         <textarea
           className="w-full p-3 border rounded mt-4"
-          placeholder="Ask a question, write training, ADD TO BRAIN, or start a deal…"
+          placeholder="Ask a question, start a deal, or add training…"
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={2}
+          rows={3}
           disabled={loading}
         />
       </div>
