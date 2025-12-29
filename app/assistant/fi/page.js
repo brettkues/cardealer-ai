@@ -1,8 +1,6 @@
-// app/assistant/fi/page.js
-
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { auth } from "@/lib/firebaseClient";
 
 export default function FIAssistant() {
@@ -17,9 +15,7 @@ export default function FIAssistant() {
     if (!msg.trim() || loading) return;
 
     const userMessage = { role: "user", content: msg };
-
-    // NEWEST ON TOP
-    setChat((c) => [userMessage, ...c]);
+    setChat((c) => [userMessage, ...c]); // newest at top
     setMsg("");
     setLoading(true);
 
@@ -71,29 +67,70 @@ export default function FIAssistant() {
   return (
     <div className="h-screen flex flex-col">
       {/* HEADER / DIRECTIONS */}
-      <div className="p-4 border-b bg-white space-y-2">
-        <h1 className="text-2xl font-bold">F&I Assistant</h1>
+      <div className="p-4 border-b bg-white space-y-3">
+        <h1 className="text-2xl font-bold">F&amp;I Assistant</h1>
 
-        <div className="text-sm text-gray-700 space-y-1">
+        <div className="text-sm text-gray-700 space-y-2 leading-relaxed">
+          <p className="font-semibold">How to use this assistant:</p>
+
           <p>
-            • Start a guided deal by typing <b>start a deal</b>
+            • To run a guided F&amp;I workflow, type <b>start a deal</b>
           </p>
           <p>
-            • Complete each step, then type <b>next</b>
+            • Step 1 will ask for the deal type (cash / finance / lease)
           </p>
           <p>
-            • To go back one step, type <b>back</b>
-          </p>
-          <p>
-            • Ask questions anytime (steps will not advance)
-          </p>
-          <p>
-            • Managers/Admins can train the system using:
+            • Each step will either:
             <br />
-            <b>ADD TO BRAIN: [instruction]</b>
+            &nbsp;&nbsp;– ask for details, or<br />
+            &nbsp;&nbsp;– instruct you to type <b>next</b> when complete
           </p>
           <p>
-            • “Remember this” saves personal notes only
+            • You may type <b>back</b> to return to the previous step
+          </p>
+
+          <hr />
+
+          <p className="font-semibold">How to train the F&amp;I brain:</p>
+
+          <p>
+            • To add permanent dealership knowledge, use:
+            <br />
+            <b>ADD TO BRAIN:</b> followed by the instruction
+          </p>
+
+          <p>
+            • To train a <b>specific step</b>, always include the step label:
+            <br />
+            <b>ADD TO BRAIN: F&amp;I STEP 3 – Entering a cash deal into the DMS…</b>
+          </p>
+
+          <p>
+            • Step-based training is available:
+            <br />
+            – During an active deal<br />
+            – Outside a deal (lookup mode)
+          </p>
+
+          <p>
+            • Questions like:
+            <br />
+            <i>“How do I change the tax county?”</i><br />
+            will pull the exact step training if it exists
+          </p>
+
+          <hr />
+
+          <p className="font-semibold">Important notes:</p>
+
+          <p>
+            • “Remember this” saves <u>personal notes only</u>
+          </p>
+          <p>
+            • Only <b>ADD TO BRAIN</b> updates dealership policy
+          </p>
+          <p>
+            • This assistant will never advance steps unless you type <b>next</b>
           </p>
         </div>
 
@@ -108,12 +145,8 @@ export default function FIAssistant() {
         />
       </div>
 
-      {/* CHAT (NEWEST FIRST) */}
+      {/* CHAT */}
       <div className="flex-1 overflow-auto p-4 bg-gray-50">
-        {loading && (
-          <div className="text-sm text-gray-500 mb-4">AI is typing…</div>
-        )}
-
         {chat.map((m, i) => (
           <div key={i} className="mb-6">
             <div className="font-semibold">
@@ -127,6 +160,10 @@ export default function FIAssistant() {
             )}
           </div>
         ))}
+
+        {loading && (
+          <div className="text-sm text-gray-500">AI is typing…</div>
+        )}
       </div>
     </div>
   );
