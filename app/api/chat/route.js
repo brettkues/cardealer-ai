@@ -28,7 +28,6 @@ const embedClient = new OpenAIClient({
      started: boolean,
      dealType: "cash" | "finance" | "lease" | null
    }
-   NOTE: ephemeral by design
 ============================================================== */
 
 const fiSessions = new Map();
@@ -105,30 +104,32 @@ async function saveToBrain({ content, source_file }) {
   if (error) throw error;
 }
 
-/* ================= F&I STEP CONTENT ================= */
+/* ================= F&I STEP PROMPTS ================= */
 
-function getFiStepPrompt(step, dealType) {
+function getFiStepPrompt(step) {
   switch (step) {
     case 1:
       return "Step 1: Identify the deal type. Reply with: cash, finance, or lease.";
     case 2:
-      return "Step 2: Enter the deal into the DMS. Verify customer, vehicle, taxes, and fees.\nType `next` when complete or `back` to return.";
+      return "Step 2: Enter the deal into the DMS. When complete, type `next`.";
     case 3:
-      return "Step 3: Review approvals, stips, backend eligibility, and rate markup limits.\nType `next` when complete or `back` to return.";
+      return "Step 3: Review approvals, stips, and backend eligibility. Type `next` when complete.";
     case 4:
-      return "Step 4: Build and present the F&I menu with approved products.\nType `next` when complete or `back` to return.";
+      return "Step 4: Build and present the F&I menu. Type `next` when complete.";
     case 5:
-      return "Step 5: Build the contract based on selected terms and products.\nType `next` when complete or `back` to return.";
+      return "Step 5: Build the contract. Type `next` when complete.";
     case 6:
-      return "Step 6: Confirm all required compliance documents are present and completed.\nType `next` when complete or `back` to return.";
+      return "Step 6: Confirm all compliance documents. Type `next` when complete.";
     case 7:
-      return "Step 7: Add sold products into the DMS and rebuild the contract.\nType `next` when complete or `back` to return.";
+      return "Step 7: Add products into DMS and rebuild the contract. Type `next` when complete.";
     case 8:
-      return "Step 8: Obtain all required customer signatures.\nType `next` when complete or `back` to return.";
+      return "Step 8: Obtain all required signatures. Type `next` when complete.";
     case 9:
-      return "Step 9: Process DMV paperwork.\nType `next` when complete or `back` to return.";
+      return "Step 9: Process DMV paperwork. Type `next` when complete.";
     case 10:
-      return "Step 10: Finalize funding and cap the deal. Print recap, NVDR (if new), sale label.\nDeal complete.";
+      return "Step 10: Funding and deal completion.";
+    case 11:
+      return "Step 11: Deal recap, commissions, NVDR, and final paperwork.";
     default:
       return "F&I process complete.";
   }
@@ -149,7 +150,7 @@ export async function POST(req) {
 
     const text = normalize(message);
 
-    /* ===== EXPLICIT BRAIN TRAINING ===== */
+    /* ===== ADD TO BRAIN ===== */
 
     const brainContent = detectBrainTrainingIntent(message);
 
@@ -209,7 +210,8 @@ export async function POST(req) {
 
       let state = fiSessions.get(sessionId);
 
-      // START DEAL
+      /* ---- START DEAL ---- */
+
       if (text === "start a deal") {
         state = { step: 1, started: true, dealType: null };
         fiSessions.set(sessionId, state);
@@ -220,49 +222,34 @@ export async function POST(req) {
         });
       }
 
-      // NO ACTIVE DEAL → OPEN MODE
+      /* ---- OPEN MODE (NO DEAL) ---- */
+
       if (!state || !state.started) {
+        const hits = await retrieveKnowledge(message, "fi");
+
+        if (hits?.length) {
+          return NextResponse.json({
+            answer: hits.map(h => h.content).join("\n\n"),
+            source: "Dealer policy (documented)",
+          });
+        }
+
         const response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are an F&I assistant. Answer questions and explain procedures. Do not assume an active deal unless one is started.",
-            },
-            { role: "user", content: message },
-          ],
+          messages: [{ role: "user", content: message }],
           temperature: 0.5,
         });
 
         return NextResponse.json({
           answer:
             response.choices[0].message.content +
-            "\n\n(Type `start a deal` to begin a guided workflow.)",
+            "\n\n(Start a deal anytime by typing `start a deal`.)",
           source: "F&I assistant",
         });
       }
 
-      // WHERE AM I
-      if (text === "where am i") {
-        return NextResponse.json({
-          answer: getFiStepPrompt(state.step, state.dealType),
-          source: "F&I process",
-        });
-      }
+      /* ---- STEP 1 DEAL TYPE (AUTO ADVANCE) ---- */
 
-      // BACK
-      if (text === "back") {
-        state.step = Math.max(1, state.step - 1);
-        fiSessions.set(sessionId, state);
-
-        return NextResponse.json({
-          answer: getFiStepPrompt(state.step, state.dealType),
-          source: "F&I process",
-        });
-      }
-
-      // STEP 1: DEAL TYPE
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
           state.dealType = text;
@@ -270,36 +257,63 @@ export async function POST(req) {
           fiSessions.set(sessionId, state);
 
           return NextResponse.json({
-            answer: `Deal type set to ${text.toUpperCase()}.\n\n${getFiStepPrompt(2, text)}`,
+            answer: `Deal type set to ${text.toUpperCase()}.\n\n${getFiStepPrompt(2)}`,
             source: "F&I process",
           });
         }
 
         return NextResponse.json({
-          answer: "Please reply with: cash, finance, or lease.",
+          answer: "Reply with: cash, finance, or lease.",
           source: "F&I process",
         });
       }
 
-      // NEXT
-      if (text === "next") {
-        state.step = Math.min(10, state.step + 1);
+      /* ---- BACK ---- */
+
+      if (text === "back") {
+        state.step = Math.max(1, state.step - 1);
         fiSessions.set(sessionId, state);
 
         return NextResponse.json({
-          answer: getFiStepPrompt(state.step, state.dealType),
+          answer: getFiStepPrompt(state.step),
           source: "F&I process",
         });
       }
 
-      // QUESTIONS DURING STEP
+      /* ---- NEXT ---- */
+
+      if (text === "next") {
+        state.step += 1;
+        fiSessions.set(sessionId, state);
+
+        return NextResponse.json({
+          answer: getFiStepPrompt(state.step),
+          source: "F&I process",
+        });
+      }
+
+      /* ---- STEP QUESTION (RETRIEVAL FIRST) ---- */
+
+      const stepHits = await retrieveKnowledge(
+        `[F&I STEP ${state.step}] ${message}`,
+        "fi"
+      );
+
+      if (stepHits?.length) {
+        return NextResponse.json({
+          answer:
+            stepHits.map(h => h.content).join("\n\n") +
+            "\n\n(Type `next` when complete or `back` to review.)",
+          source: "Dealer policy (documented)",
+        });
+      }
+
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content:
-              `You are assisting with F&I Step ${state.step} (${state.dealType}). Answer the question. Do NOT advance steps.`,
+            content: `You are assisting with F&I Step ${state.step}. Answer accurately. Do not advance steps.`,
           },
           { role: "user", content: message },
         ],
@@ -317,21 +331,15 @@ export async function POST(req) {
     /* ================= SALES / GENERAL ================= */
 
     const hits = await retrieveKnowledge(message, domain);
-    const topHit = hits?.[0];
-    const topScore = topHit?.score ?? 0;
 
-    let truth = "none";
-    if (topScore >= HIGH_CONFIDENCE) truth = "confirmed";
-    else if (topScore >= MIN_CONFIDENCE) truth = "inferred";
-
-    if (truth === "confirmed") {
+    if (hits?.length) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "Answer ONLY using the dealership policy below.\n\n" +
+              "Answer ONLY using dealership policy below.\n\n" +
               hits.map(h => h.content).join("\n\n"),
           },
           { role: "user", content: message },
@@ -342,26 +350,6 @@ export async function POST(req) {
       return NextResponse.json({
         answer: response.choices[0].message.content,
         source: "Dealer policy (documented)",
-      });
-    }
-
-    if (allowSearch || userRequestedSearch(message)) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Answer using general industry knowledge. Do not imply dealership policy.",
-          },
-          { role: "user", content: message },
-        ],
-        temperature: 0.7,
-      });
-
-      return NextResponse.json({
-        answer: response.choices[0].message.content,
-        source: "General industry guidance",
       });
     }
 
