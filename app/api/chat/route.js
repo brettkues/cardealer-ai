@@ -52,8 +52,16 @@ function detectBrainTrainingIntent(text) {
   return text.slice(match[0].length).trim();
 }
 
+/*
+ TRAINING AUTHORING INTENT
+ - Explicitly excludes actual ADD TO BRAIN saves
+ - Triggers on requests to WRITE / DRAFT training
+*/
 function detectTrainingAuthoringRequest(text) {
-  return /(write|draft|help me add|create).*(training|process|step)/i.test(text);
+  if (/^(add to brain|add to knowledge)/i.test(text)) return false;
+  return /(^|\b)(help me add training|write training|draft training|create training|add training for step)/i.test(
+    text
+  );
 }
 
 /* ================= BRAIN SAVE ================= */
@@ -141,7 +149,7 @@ export async function POST(req) {
 
     const text = normalize(message);
 
-    /* ===== TRAINING AUTHORING MODE ===== */
+    /* ===== TRAINING AUTHORING MODE (DRAFT ONLY) ===== */
 
     if (
       (role === "admin" || role === "manager") &&
@@ -153,26 +161,43 @@ export async function POST(req) {
           {
             role: "system",
             content: `
-You are writing OFFICIAL dealership training content.
+You are drafting OFFICIAL dealership training content.
 
-FORMAT EXACTLY:
+OUTPUT RULES (STRICT):
+- Output TRAINING CONTENT ONLY
+- Do NOT save anything
+- Do NOT mention systems, AI, or explanations
+- Follow the template EXACTLY
+
+TEMPLATE:
 
 F&I PROCESS – STEP X – TITLE
 
-Clear procedural instructions.
-Bulleted steps where applicable.
-No filler. No assumptions.
+PURPOSE:
+One clear sentence describing why this step exists.
+
+PROCEDURE:
+- Step-by-step bullet instructions
+- Exact systems, screens, or actions used
+
+WARNINGS / COMMON ERRORS:
+- Compliance risks
+- Common mistakes
+- What must NEVER be skipped
+
+COMPLETION CHECK:
+- Clear criteria that confirms the step is done correctly
 `,
           },
           { role: "user", content: message },
         ],
-        temperature: 0.3,
+        temperature: 0.2,
       });
 
       return NextResponse.json({
         answer:
           response.choices[0].message.content +
-          "\n\nIf correct, copy & paste back using:\nADD TO BRAIN:",
+          "\n\nCOPY & PASTE USING:\nADD TO BRAIN:",
         source: "Training authoring mode",
       });
     }
@@ -184,7 +209,10 @@ No filler. No assumptions.
     if (brainContent) {
       if (role !== "admin" && role !== "manager") {
         return NextResponse.json(
-          { answer: "Only managers or admins can train the AI.", source: "Permission denied" },
+          {
+            answer: "Only managers or admins can train the AI.",
+            source: "Permission denied",
+          },
           { status: 403 }
         );
       }
@@ -248,7 +276,6 @@ No filler. No assumptions.
       }
 
       if (!state || !state.started) {
-        // OPEN MODE: retrieval without step bias
         const hits = await retrieveKnowledge(message, "fi");
 
         if (hits?.length) {
@@ -259,7 +286,7 @@ No filler. No assumptions.
                 role: "system",
                 content:
                   "Answer ONLY using the dealership knowledge below.\n\n" +
-                  hits.map(h => h.content).join("\n\n"),
+                  hits.map((h) => h.content).join("\n\n"),
               },
               { role: "user", content: message },
             ],
@@ -279,7 +306,6 @@ No filler. No assumptions.
         });
       }
 
-      // STEP 1: deal type → auto-advance
       if (state.step === 1 && !state.dealType) {
         if (["cash", "finance", "lease"].includes(text)) {
           state.dealType = text;
@@ -287,7 +313,9 @@ No filler. No assumptions.
           fiSessions.set(sessionId, state);
 
           return NextResponse.json({
-            answer: `Deal type set to ${text.toUpperCase()}.\n\n${getFiStepPrompt(2)}`,
+            answer: `Deal type set to ${text.toUpperCase()}.\n\n${getFiStepPrompt(
+              2
+            )}`,
             source: "F&I process",
           });
         }
@@ -308,7 +336,6 @@ No filler. No assumptions.
         });
       }
 
-      // STEP-BIASED RETRIEVAL (THIS IS THE FIX)
       const stepQuery = `[F&I STEP ${state.step}] ${message}`;
       const hits = await retrieveKnowledge(stepQuery, "fi");
 
@@ -320,7 +347,7 @@ No filler. No assumptions.
               role: "system",
               content:
                 "Answer ONLY using the dealership training for this step.\n\n" +
-                hits.map(h => h.content).join("\n\n"),
+                hits.map((h) => h.content).join("\n\n"),
             },
             { role: "user", content: message },
           ],
@@ -335,14 +362,12 @@ No filler. No assumptions.
         });
       }
 
-      // fallback (no training yet)
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content:
-              `You are assisting with F&I Step ${state.step}. Answer carefully. Do not advance steps.`,
+            content: `You are assisting with F&I Step ${state.step}. Answer carefully. Do not advance steps.`,
           },
           { role: "user", content: message },
         ],
@@ -369,7 +394,7 @@ No filler. No assumptions.
             role: "system",
             content:
               "Answer ONLY using the dealership policy below.\n\n" +
-              hits.map(h => h.content).join("\n\n"),
+              hits.map((h) => h.content).join("\n\n"),
           },
           { role: "user", content: message },
         ],
