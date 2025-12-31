@@ -71,6 +71,19 @@ function trainingPrompt(role) {
   return "";
 }
 
+function fiContinuation(sessionId) {
+  const state = fiSessions.get(sessionId);
+  if (!state || !state.started) return "";
+  return (
+    `\n\n—\nF&I Deal Status: STEP ${state.step}\n` +
+    "Commands:\n" +
+    "- next\n" +
+    "- resume deal\n" +
+    "- go to step X\n" +
+    "- restart deal"
+  );
+}
+
 /* ================= BRAIN SAVE ================= */
 
 async function saveToBrain({ content, source_file }) {
@@ -126,6 +139,48 @@ export async function POST(req) {
 
     const text = normalize(message);
     const rateIntent = isRateQuestion(text);
+
+    /* ================= F&I DEAL COMMANDS ================= */
+
+    if (domain === "fi" && sessionId) {
+      let state = fiSessions.get(sessionId);
+
+      if (text === "start a deal") {
+        state = { started: true, step: 1 };
+        fiSessions.set(sessionId, state);
+        return NextResponse.json({
+          answer: "F&I deal started. You are on STEP 1.",
+          source: "F&I process",
+        });
+      }
+
+      if (state?.started && text === "restart deal") {
+        fiSessions.set(sessionId, { started: true, step: 1 });
+        return NextResponse.json({
+          answer: "Deal restarted. Back to STEP 1.",
+          source: "F&I process",
+        });
+      }
+
+      if (state?.started && text === "next") {
+        state.step += 1;
+        fiSessions.set(sessionId, state);
+        return NextResponse.json({
+          answer: `Advanced to STEP ${state.step}.`,
+          source: "F&I process",
+        });
+      }
+
+      const stepMatch = text.match(/go to step (\d+)/);
+      if (state?.started && stepMatch) {
+        state.step = Number(stepMatch[1]);
+        fiSessions.set(sessionId, state);
+        return NextResponse.json({
+          answer: `Moved to STEP ${state.step}.`,
+          source: "F&I process",
+        });
+      }
+    }
 
     /* ===== TRAINING AUTHORING MODE ===== */
 
@@ -224,7 +279,9 @@ export async function POST(req) {
         });
 
         return NextResponse.json({
-          answer: response.choices[0].message.content,
+          answer:
+            response.choices[0].message.content +
+            fiContinuation(sessionId),
           source: "Rate sheet (active)",
         });
       }
@@ -250,7 +307,9 @@ export async function POST(req) {
       });
 
       return NextResponse.json({
-        answer: response.choices[0].message.content,
+        answer:
+          response.choices[0].message.content +
+          fiContinuation(sessionId),
         source: "Dealer policy (documented)",
       });
     }
@@ -264,7 +323,10 @@ export async function POST(req) {
     });
 
     return NextResponse.json({
-      answer: response.choices[0].message.content + trainingPrompt(role),
+      answer:
+        response.choices[0].message.content +
+        trainingPrompt(role) +
+        fiContinuation(sessionId),
       source: "General industry guidance",
     });
   } catch (err) {
