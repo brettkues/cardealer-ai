@@ -225,13 +225,21 @@ export async function POST(req) {
 
     const hits = await retrieveKnowledge(framedQuestion, domain);
 
-if (hits?.length) {
+// 🔴 HARD STOP: no dealer knowledge exists → go web
+if (hits === null) {
+  // do nothing here, fall through to web search
+}
+
+// 🟢 Dealer knowledge exists → check relevance
+else if (Array.isArray(hits) && hits.length > 0) {
   const combinedTraining = hits.join("\n\n");
+
   const relevant = await trainingIsRelevant(
     framedQuestion,
     combinedTraining
   );
 
+  // 🟢 Training actually answers the question
   if (relevant) {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -246,6 +254,16 @@ if (hits?.length) {
         { role: "user", content: framedQuestion },
       ],
     });
+
+    return NextResponse.json({
+      answer:
+        response.choices[0].message.content +
+        fiContinuation(sessionId),
+      source: "Dealer policy (documented)",
+    });
+  }
+}
+// 🔵 If we get here → training exists but is NOT relevant → web
 
         return NextResponse.json({
           answer:
