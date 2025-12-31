@@ -63,9 +63,9 @@ function detectTrainingAuthoringRequest(text) {
 function trainingPrompt(role) {
   if (role === "admin" || role === "manager") {
     return (
-      "\n\n—\nThis answer was based on general knowledge, not dealership training.\n" +
-      "If you want to save this for future use, copy it and send:\n" +
-      "ADD TO BRAIN:"
+      "\n\n—\nThis answer was based on general industry knowledge, not dealership training.\n" +
+      "Would you like to add this to training?\n\n" +
+      "If yes, copy and send:\nADD TO BRAIN:"
     );
   }
   return "";
@@ -112,35 +112,6 @@ async function saveToBrain({ content, source_file }) {
   if (error) throw error;
 }
 
-/* ================= F&I STEP PROMPTS ================= */
-
-function getFiStepPrompt(step) {
-  switch (step) {
-    case 1:
-      return "Step 1: Identify the deal type. Reply with: cash, finance, or lease.";
-    case 2:
-      return "Step 2: Enter the deal into the DMS. Type `next` when complete or ask questions.";
-    case 3:
-      return "Step 3: Review approvals, stips, backend eligibility, and rate limits. Type `next` when complete.";
-    case 4:
-      return "Step 4: Build and present the F&I menu. Type `next` when complete.";
-    case 5:
-      return "Step 5: Build the contract. Type `next` when complete.";
-    case 6:
-      return "Step 6: Confirm compliance documents. Type `next` when complete.";
-    case 7:
-      return "Step 7: Add products and rebuild contract. Type `next` when complete.";
-    case 8:
-      return "Step 8: Obtain signatures. Type `next` when complete.";
-    case 9:
-      return "Step 9: DMV processing. Type `next` when complete.";
-    case 10:
-      return "Step 10: Funding and close.";
-    default:
-      return "F&I process complete.";
-  }
-}
-
 /* ================= HANDLER ================= */
 
 export async function POST(req) {
@@ -167,7 +138,8 @@ export async function POST(req) {
         messages: [
           {
             role: "system",
-            content: `You are drafting OFFICIAL dealership training content.`,
+            content:
+              "You are drafting OFFICIAL dealership training content. Output training only.",
           },
           { role: "user", content: message },
         ],
@@ -228,7 +200,7 @@ export async function POST(req) {
       });
     }
 
-    /* ================= RATE-PRIORITY RETRIEVAL ================= */
+    /* ================= RATE-FIRST RETRIEVAL ================= */
 
     if (rateIntent) {
       const rateHits = await retrieveKnowledge(
@@ -258,7 +230,7 @@ export async function POST(req) {
       }
     }
 
-    /* ================= NORMAL RETRIEVAL ================= */
+    /* ================= DEALER TRAINING ================= */
 
     const hits = await retrieveKnowledge(message, domain);
 
@@ -269,7 +241,7 @@ export async function POST(req) {
           {
             role: "system",
             content:
-              "Answer ONLY using the dealership policy below.\n\n" +
+              "Answer ONLY using the dealership training below.\n\n" +
               hits.join("\n\n"),
           },
           { role: "user", content: message },
