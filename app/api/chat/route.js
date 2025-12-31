@@ -1,5 +1,5 @@
 // app/api/chat/route.js
-// FULL DROP-IN REPLACEMENT — TRAINING → RELEVANCE CHECK → WEB → ASK TO SAVE
+// FULL DROP-IN REPLACEMENT — TRAINING → FRAMING → RELEVANCE → WEB → ASK TO SAVE
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -38,6 +38,28 @@ function isRateQuestion(text) {
   );
 }
 
+/* ================= QUESTION FRAMING ================= */
+
+async function frameQuestion(originalQuestion) {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an intent interpreter for an automotive sales and F&I assistant. " +
+          "Rewrite the user's question into a clear, explicit internal question that removes ambiguity, " +
+          "clarifies comparisons, and preserves important qualifiers. " +
+          "Do NOT answer the question. Output ONLY the rewritten question.",
+      },
+      { role: "user", content: originalQuestion },
+    ],
+  });
+
+  return response.choices[0].message.content.trim();
+}
+
 /* ================= F&I STEP GUIDANCE ================= */
 
 function getFiStepPrompt(step) {
@@ -45,7 +67,7 @@ function getFiStepPrompt(step) {
     case 1:
       return "STEP 1: Identify the deal type (cash, finance, or lease).";
     case 2:
-      return "STEP 2: Enter the deal into the DMS accurately.";
+      return "STEP 2: Enter the deal accurately into the DMS.";
     case 3:
       return "STEP 3: Review approvals, stips, backend eligibility, and rate limits.";
     case 4:
@@ -55,7 +77,7 @@ function getFiStepPrompt(step) {
     case 6:
       return "STEP 6: Confirm compliance documents.";
     case 7:
-      return "STEP 7: Add products and rebuild the contract if needed.";
+      return "STEP 7: Add products and rebuild contract if needed.";
     case 8:
       return "STEP 8: Obtain customer signatures.";
     case 9:
@@ -110,15 +132,10 @@ async function trainingIsRelevant(question, trainingText) {
     temperature: 0,
     messages: [
       {
-  role: "system",
-  content:
-    "You are a senior automotive sales and F&I expert. " +
-    "Answer the customer's question as if speaking directly to a customer in the showroom. " +
-    "Explain WHY the choice matters, WHAT risks or advantages are involved, and " +
-    "focus on accountability, long-term impact, and real-world consequences. " +
-    "Avoid generic summaries, marketing language, or vague statements. " +
-    "Be practical, specific, and persuasive."
-},
+        role: "system",
+        content:
+          "Answer ONLY yes or no. Does the training content directly answer the user's question?",
+      },
       {
         role: "user",
         content: `QUESTION:\n${question}\n\nTRAINING:\n${trainingText}`,
@@ -126,9 +143,7 @@ async function trainingIsRelevant(question, trainingText) {
     ],
   });
 
-  return check.choices[0].message.content
-    .toLowerCase()
-    .includes("yes");
+  return check.choices[0].message.content.toLowerCase().includes("yes");
 }
 
 /* ================= BRAIN SAVE ================= */
@@ -168,15 +183,13 @@ async function saveToBrain({ content, source_file }) {
 
 export async function POST(req) {
   try {
-    const {
-      message,
-      userId = "default",
-      role = "sales",
-      domain = "sales",
-      sessionId,
-    } = await req.json();
+    const { message, role = "sales", domain = "sales", sessionId } =
+      await req.json();
 
     const text = normalize(message);
+
+    // ✅ STEP 2 + 3: FRAME QUESTION ONCE
+    const framedQuestion = await frameQuestion(message);
 
     /* ================= F&I COMMANDS ================= */
 
@@ -195,16 +208,6 @@ export async function POST(req) {
         });
       }
 
-      if (state?.started && text === "resume deal") {
-        return NextResponse.json({
-          answer:
-            `Resuming deal at STEP ${state.step}.\n\n` +
-            getFiStepPrompt(state.step) +
-            fiContinuation(sessionId),
-          source: "F&I process",
-        });
-      }
-
       if (state?.started && text === "next") {
         state.step += 1;
         fiSessions.set(sessionId, state);
@@ -216,28 +219,18 @@ export async function POST(req) {
           source: "F&I process",
         });
       }
-
-      const stepMatch = text.match(/go to step (\d+)/);
-      if (state?.started && stepMatch) {
-        state.step = Number(stepMatch[1]);
-        fiSessions.set(sessionId, state);
-        return NextResponse.json({
-          answer:
-            `Moved to STEP ${state.step}.\n\n` +
-            getFiStepPrompt(state.step) +
-            fiContinuation(sessionId),
-          source: "F&I process",
-        });
-      }
     }
 
     /* ================= DEALER TRAINING ================= */
 
-    const hits = await retrieveKnowledge(message, domain);
+    const hits = await retrieveKnowledge(framedQuestion, domain);
 
     if (hits?.length) {
       const combinedTraining = hits.join("\n\n");
-      const relevant = await trainingIsRelevant(message, combinedTraining);
+      const relevant = await trainingIsRelevant(
+        framedQuestion,
+        combinedTraining
+      );
 
       if (relevant) {
         const response = await openai.chat.completions.create({
@@ -250,7 +243,7 @@ export async function POST(req) {
                 "Answer ONLY using the dealership training below.\n\n" +
                 combinedTraining,
             },
-            { role: "user", content: message },
+            { role: "user", content: framedQuestion },
           ],
         });
 
@@ -265,16 +258,7 @@ export async function POST(req) {
 
     /* ================= LIVE WEB FALLBACK ================= */
 
-    const webAnswer = await searchWeb(message);
-
-    if (!webAnswer) {
-      return NextResponse.json({
-        answer:
-          "No internal or external information found." +
-          fiContinuation(sessionId),
-        source: "No results",
-      });
-    }
+    const webAnswer = await searchWeb(framedQuestion);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -283,9 +267,12 @@ export async function POST(req) {
         {
           role: "system",
           content:
-            "Answer clearly using the external information below.",
+            "You are a senior automotive sales and F&I expert. " +
+            "Answer directly, practically, and persuasively. " +
+            "Explain WHY it matters, WHAT risks or advantages exist, and " +
+            "avoid generic or vague language.",
         },
-        { role: "user", content: webAnswer },
+        { role: "user", content: webAnswer || framedQuestion },
       ],
     });
 
