@@ -110,10 +110,13 @@ async function trainingIsRelevant(question, trainingText) {
     temperature: 0,
     messages: [
       {
-        role: "system",
-        content:
-          "Answer ONLY yes or no. Does the training content directly answer the user's question?",
-      },
+  role: "system",
+  content:
+    "You are a senior automotive sales and F&I expert. " +
+    "Answer the customer's question directly, practically, and clearly. " +
+    "Focus on real-world impact, risks, and decision-making factors relevant to the vehicle, customer, or situation. " +
+    "Be specific when possible. Avoid generic, promotional, or corporate filler language."
+},
       {
         role: "user",
         content: `QUESTION:\n${question}\n\nTRAINING:\n${trainingText}`,
