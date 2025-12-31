@@ -1,4 +1,5 @@
 // app/api/chat/route.js
+// DROP-IN REPLACEMENT — USE THIS FILE
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -63,7 +64,7 @@ function detectTrainingAuthoringRequest(text) {
 function trainingPrompt(role) {
   if (role === "admin" || role === "manager") {
     return (
-      "\n\n—\nThis answer was based on general industry knowledge, not dealership training.\n" +
+      "\n\n—\nThis answer was based on external information, not dealership training.\n" +
       "Would you like to add this to training?\n\n" +
       "If yes, copy and send:\nADD TO BRAIN:"
     );
@@ -321,20 +322,23 @@ export async function POST(req) {
       });
     }
 
-    /* ================= FALLBACK ================= */
+    /* ================= LIVE WEB SEARCH (NEW) ================= */
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: message }],
-      temperature: 0.4,
+    const webResponse = await openai.responses.create({
+      model: "gpt-4.1",
+      tools: [{ type: "web_search" }],
+      input: message,
     });
+
+    const webAnswer =
+      webResponse.output_text || "No external information found.";
 
     return NextResponse.json({
       answer:
-        response.choices[0].message.content +
+        webAnswer +
         trainingPrompt(role) +
         fiContinuation(sessionId),
-      source: "General industry guidance",
+      source: "External web guidance",
     });
   } catch (err) {
     console.error(err);
