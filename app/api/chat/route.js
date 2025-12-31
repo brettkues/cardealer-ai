@@ -31,6 +31,12 @@ function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
 
+function isRateQuestion(text) {
+  return /\b(rate|rates|term|months|72|84|96|max gap|gap|max backend|advance|ltv|year)\b/i.test(
+    text
+  );
+}
+
 function detectMemoryIntent(text) {
   const t = normalize(text);
   if (t.startsWith("remember this")) return "remember";
@@ -148,8 +154,9 @@ export async function POST(req) {
     } = await req.json();
 
     const text = normalize(message);
+    const rateIntent = isRateQuestion(text);
 
-    /* ===== TRAINING AUTHORING MODE (DRAFT ONLY) ===== */
+    /* ===== TRAINING AUTHORING MODE ===== */
 
     if (
       (role === "admin" || role === "manager") &&
@@ -160,33 +167,7 @@ export async function POST(req) {
         messages: [
           {
             role: "system",
-            content: `
-You are drafting OFFICIAL dealership training content.
-
-OUTPUT RULES (STRICT):
-- Output TRAINING CONTENT ONLY
-- Do NOT save anything
-- Follow the template EXACTLY
-
-TEMPLATE:
-
-F&I PROCESS – STEP X – TITLE
-
-PURPOSE:
-One clear sentence describing why this step exists.
-
-PROCEDURE:
-- Step-by-step bullet instructions
-- Exact systems, screens, or actions used
-
-WARNINGS / COMMON ERRORS:
-- Compliance risks
-- Common mistakes
-- What must NEVER be skipped
-
-COMPLETION CHECK:
-- Clear criteria that confirms the step is done correctly
-`,
+            content: `You are drafting OFFICIAL dealership training content.`,
           },
           { role: "user", content: message },
         ],
@@ -208,19 +189,14 @@ COMPLETION CHECK:
     if (brainContent) {
       if (role !== "admin" && role !== "manager") {
         return NextResponse.json(
-          {
-            answer: "Only managers or admins can train the AI.",
-            source: "Permission denied",
-          },
+          { answer: "Only managers or admins can train the AI." },
           { status: 403 }
         );
       }
 
-      const sourceFile = `chat:${userId}:${Date.now()}`;
-
       await saveToBrain({
         content: brainContent,
-        source_file: sourceFile,
+        source_file: `chat:${userId}:${Date.now()}`,
       });
 
       return NextResponse.json({
@@ -234,160 +210,59 @@ COMPLETION CHECK:
     const memoryIntent = detectMemoryIntent(message);
 
     if (memoryIntent === "remember") {
-      const content = message.replace(/remember this[:]?/i, "").trim();
-      await setPersonalMemory(userId, content);
-      return NextResponse.json({ answer: "Saved.", source: "Personal memory" });
+      await setPersonalMemory(
+        userId,
+        message.replace(/remember this[:]?/i, "").trim()
+      );
+      return NextResponse.json({ answer: "Saved." });
     }
 
     if (memoryIntent === "forget") {
       await clearPersonalMemory(userId);
-      return NextResponse.json({ answer: "Forgotten.", source: "Personal memory" });
+      return NextResponse.json({ answer: "Forgotten." });
     }
 
     if (memoryIntent === "recall") {
-      const mem = await getPersonalMemory(userId);
       return NextResponse.json({
-        answer: mem || "Nothing saved.",
-        source: "Personal memory",
+        answer: (await getPersonalMemory(userId)) || "Nothing saved.",
       });
     }
 
-    /* ================= F&I DOMAIN ================= */
+    /* ================= RATE-PRIORITY RETRIEVAL ================= */
 
-    if (domain === "fi") {
-      if (!sessionId) {
-        return NextResponse.json({
-          answer: "Session error. Refresh and retry.",
-          source: "System error",
-        });
-      }
+    if (rateIntent) {
+      const rateHits = await retrieveKnowledge(
+        `RATE_SHEET ${message}`,
+        domain
+      );
 
-      let state = fiSessions.get(sessionId);
-
-      if (text === "start a deal") {
-        state = { step: 1, started: true, dealType: null };
-        fiSessions.set(sessionId, state);
-
-        return NextResponse.json({
-          answer: getFiStepPrompt(1),
-          source: "F&I process",
-        });
-      }
-
-      if (!state || !state.started) {
-        const hits = await retrieveKnowledge(message, "fi");
-
-        if (hits?.length) {
-          const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Answer ONLY using the dealership knowledge below.\n\n" +
-                  hits.join("\n\n"),
-              },
-              { role: "user", content: message },
-            ],
-            temperature: 0.4,
-          });
-
-          return NextResponse.json({
-            answer: response.choices[0].message.content,
-            source: "Dealer policy (documented)",
-          });
-        }
-
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: message }],
-          temperature: 0.4,
-        });
-
-        return NextResponse.json({
-          answer:
-            response.choices[0].message.content +
-            trainingPrompt(role),
-          source: "General industry guidance",
-        });
-      }
-
-      if (state.step === 1 && !state.dealType) {
-        if (["cash", "finance", "lease"].includes(text)) {
-          state.dealType = text;
-          state.step = 2;
-          fiSessions.set(sessionId, state);
-
-          return NextResponse.json({
-            answer: `Deal type set to ${text.toUpperCase()}.\n\n${getFiStepPrompt(
-              2
-            )}`,
-            source: "F&I process",
-          });
-        }
-
-        return NextResponse.json({
-          answer: "Reply with: cash, finance, or lease.",
-          source: "F&I process",
-        });
-      }
-
-      if (text === "next") {
-        state.step += 1;
-        fiSessions.set(sessionId, state);
-
-        return NextResponse.json({
-          answer: getFiStepPrompt(state.step),
-          source: "F&I process",
-        });
-      }
-
-      const stepQuery = `[F&I STEP ${state.step}] ${message}`;
-      const hits = await retrieveKnowledge(stepQuery, "fi");
-
-      if (hits?.length) {
+      if (rateHits?.length) {
         const response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
               content:
-                "Answer ONLY using the dealership training for this step.\n\n" +
-                hits.join("\n\n"),
+                "Answer ONLY using the active rate sheet content below.\n\n" +
+                rateHits.join("\n\n"),
             },
             { role: "user", content: message },
           ],
-          temperature: 0.3,
+          temperature: 0.2,
         });
 
         return NextResponse.json({
-          answer:
-            response.choices[0].message.content +
-            "\n\nType `next` when complete.",
-          source: "F&I process",
+          answer: response.choices[0].message.content,
+          source: "Rate sheet (active)",
         });
       }
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: message }],
-        temperature: 0.4,
-      });
-
-      return NextResponse.json({
-        answer:
-          response.choices[0].message.content +
-          "\n\nType `next` when complete." +
-          trainingPrompt(role),
-        source: "General industry guidance",
-      });
     }
 
-    /* ================= SALES / GENERAL ================= */
+    /* ================= NORMAL RETRIEVAL ================= */
 
     const hits = await retrieveKnowledge(message, domain);
 
-    if (hits && hits.length) {
+    if (hits?.length) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -408,6 +283,8 @@ COMPLETION CHECK:
       });
     }
 
+    /* ================= FALLBACK ================= */
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: message }],
@@ -415,9 +292,7 @@ COMPLETION CHECK:
     });
 
     return NextResponse.json({
-      answer:
-        response.choices[0].message.content +
-        trainingPrompt(role),
+      answer: response.choices[0].message.content + trainingPrompt(role),
       source: "General industry guidance",
     });
   } catch (err) {
