@@ -1,5 +1,5 @@
 // app/api/chat/route.js
-// DROP-IN REPLACEMENT — USE THIS FILE
+// FULL DROP-IN REPLACEMENT — TRAINING → WEB → ASK TO SAVE
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -85,15 +85,34 @@ function fiContinuation(sessionId) {
   );
 }
 
+/* ================= LIVE WEB SEARCH (TAVILY) ================= */
+
+async function searchWeb(query) {
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: process.env.TAVILY_API_KEY,
+      query,
+      search_depth: "advanced",
+      include_answer: true,
+      max_results: 5,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Tavily search failed");
+  }
+
+  const data = await res.json();
+  return data.answer || "";
+}
+
 /* ================= BRAIN SAVE ================= */
 
 async function saveToBrain({ content, source_file }) {
   const DEALER_ID = process.env.DEALER_ID;
   const CHUNK_SIZE = 800;
-
-  if (!DEALER_ID || !content) {
-    throw new Error("Missing dealer or content");
-  }
 
   await supabase
     .from("sales_training_vectors")
@@ -119,11 +138,7 @@ async function saveToBrain({ content, source_file }) {
     embedding: embeddings.data[i].embedding,
   }));
 
-  const { error } = await supabase
-    .from("sales_training_vectors")
-    .insert(rows);
-
-  if (error) throw error;
+  await supabase.from("sales_training_vectors").insert(rows);
 }
 
 /* ================= HANDLER ================= */
@@ -141,14 +156,13 @@ export async function POST(req) {
     const text = normalize(message);
     const rateIntent = isRateQuestion(text);
 
-    /* ================= F&I DEAL COMMANDS ================= */
+    /* ================= F&I COMMANDS ================= */
 
     if (domain === "fi" && sessionId) {
       let state = fiSessions.get(sessionId);
 
       if (text === "start a deal") {
-        state = { started: true, step: 1 };
-        fiSessions.set(sessionId, state);
+        fiSessions.set(sessionId, { started: true, step: 1 });
         return NextResponse.json({
           answer: "F&I deal started. You are on STEP 1.",
           source: "F&I process",
@@ -162,14 +176,6 @@ export async function POST(req) {
         });
       }
 
-      if (state?.started && text === "restart deal") {
-        fiSessions.set(sessionId, { started: true, step: 1 });
-        return NextResponse.json({
-          answer: "Deal restarted. Back to STEP 1.",
-          source: "F&I process",
-        });
-      }
-
       if (state?.started && text === "next") {
         state.step += 1;
         fiSessions.set(sessionId, state);
@@ -178,19 +184,9 @@ export async function POST(req) {
           source: "F&I process",
         });
       }
-
-      const stepMatch = text.match(/go to step (\d+)/);
-      if (state?.started && stepMatch) {
-        state.step = Number(stepMatch[1]);
-        fiSessions.set(sessionId, state);
-        return NextResponse.json({
-          answer: `Moved to STEP ${state.step}.`,
-          source: "F&I process",
-        });
-      }
     }
 
-    /* ===== TRAINING AUTHORING MODE ===== */
+    /* ================= TRAINING AUTHORING ================= */
 
     if (
       (role === "admin" || role === "manager") &&
@@ -198,14 +194,7 @@ export async function POST(req) {
     ) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are drafting OFFICIAL dealership training content. Output training only.",
-          },
-          { role: "user", content: message },
-        ],
+        messages: [{ role: "user", content: message }],
         temperature: 0.2,
       });
 
@@ -217,85 +206,7 @@ export async function POST(req) {
       });
     }
 
-    /* ===== EXPLICIT BRAIN TRAINING ===== */
-
-    const brainContent = detectBrainTrainingIntent(message);
-
-    if (brainContent) {
-      if (role !== "admin" && role !== "manager") {
-        return NextResponse.json(
-          { answer: "Only managers or admins can train the AI." },
-          { status: 403 }
-        );
-      }
-
-      await saveToBrain({
-        content: brainContent,
-        source_file: `chat:${userId}:${Date.now()}`,
-      });
-
-      return NextResponse.json({
-        answer: "Added to dealership brain.",
-        source: "Brain training",
-      });
-    }
-
-    /* ===== PERSONAL MEMORY ===== */
-
-    const memoryIntent = detectMemoryIntent(message);
-
-    if (memoryIntent === "remember") {
-      await setPersonalMemory(
-        userId,
-        message.replace(/remember this[:]?/i, "").trim()
-      );
-      return NextResponse.json({ answer: "Saved." });
-    }
-
-    if (memoryIntent === "forget") {
-      await clearPersonalMemory(userId);
-      return NextResponse.json({ answer: "Forgotten." });
-    }
-
-    if (memoryIntent === "recall") {
-      return NextResponse.json({
-        answer: (await getPersonalMemory(userId)) || "Nothing saved.",
-      });
-    }
-
-    /* ================= RATE-FIRST RETRIEVAL ================= */
-
-    if (rateIntent) {
-      const rateHits = await retrieveKnowledge(
-        `RATE_SHEET ${message}`,
-        domain
-      );
-
-      if (rateHits?.length) {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "Answer ONLY using the active rate sheet content below.\n\n" +
-                rateHits.join("\n\n"),
-            },
-            { role: "user", content: message },
-          ],
-          temperature: 0.2,
-        });
-
-        return NextResponse.json({
-          answer:
-            response.choices[0].message.content +
-            fiContinuation(sessionId),
-          source: "Rate sheet (active)",
-        });
-      }
-    }
-
-    /* ================= DEALER TRAINING ================= */
+    /* ================= DEALER TRAINING FIRST ================= */
 
     const hits = await retrieveKnowledge(message, domain);
 
@@ -311,7 +222,7 @@ export async function POST(req) {
           },
           { role: "user", content: message },
         ],
-        temperature: 0.4,
+        temperature: 0.3,
       });
 
       return NextResponse.json({
@@ -322,20 +233,36 @@ export async function POST(req) {
       });
     }
 
-    /* ================= LIVE WEB SEARCH (NEW) ================= */
+    /* ================= LIVE WEB FALLBACK ================= */
 
-    const webResponse = await openai.responses.create({
-      model: "gpt-4.1",
-      tools: [{ type: "web_search" }],
-      input: message,
+    const webAnswer = await searchWeb(message);
+
+    if (!webAnswer) {
+      return NextResponse.json({
+        answer:
+          "No internal or external information found." +
+          trainingPrompt(role) +
+          fiContinuation(sessionId),
+        source: "No results",
+      });
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Answer clearly using the external information below.",
+        },
+        { role: "user", content: webAnswer },
+      ],
+      temperature: 0.3,
     });
-
-    const webAnswer =
-      webResponse.output_text || "No external information found.";
 
     return NextResponse.json({
       answer:
-        webAnswer +
+        response.choices[0].message.content +
         trainingPrompt(role) +
         fiContinuation(sessionId),
       source: "External web guidance",
