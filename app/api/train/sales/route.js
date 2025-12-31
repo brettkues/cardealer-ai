@@ -7,37 +7,46 @@ export const runtime = "nodejs";
 
 /* ================= HELPERS ================= */
 
+// Detect document type by intent, not brand
 function detectDocType(filename = "") {
   const name = filename.toLowerCase();
   if (name.includes("rate")) return "RATE_SHEET";
   return "POLICY";
 }
 
-/**
- * Attempt to derive lender name from filename.
- * Returns UPPER_SNAKE_CASE string or null if unclear.
- */
-function deriveLender(filename = "") {
-  const base = filename
-    .replace(/\.[^/.]+$/, "")       // strip extension
-    .replace(/rates?/gi, "")        // remove "rate" / "rates"
-    .replace(/sheet/gi, "")
-    .replace(/finance/gi, "")
-    .replace(/_/g, " ")
-    .replace(/-/g, " ")
+// Extract lender name heuristically from filename
+// Examples:
+// "Altra Rates.pdf"        → ALTRA
+// "Huntington Rate Sheet"  → HUNTINGTON
+// "Stellantis_FI_Rates"    → STELLANTIS
+function extractLender(filename = "") {
+  const cleaned = filename
+    .toLowerCase()
+    .replace(/\.(pdf|docx?|xlsx?)$/i, "")
+    .replace(/[_\-]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 
-  if (!base) return null;
+  const stopWords = [
+    "rate",
+    "rates",
+    "sheet",
+    "program",
+    "auto",
+    "finance",
+    "fi",
+    "retail",
+    "dealer",
+    "lending",
+    "credit",
+    "union",
+  ];
 
-  // Take first meaningful word group
-  const parts = base.split(/\s+/).slice(0, 2);
-  return parts.join("_").toUpperCase();
-}
+  const parts = cleaned.split(" ").filter(p => !stopWords.includes(p));
 
-function buildTaggedName(filename, docType, lender) {
-  let prefix = `[${docType}]`;
-  if (lender) prefix += `[LENDER:${lender}]`;
-  return `${prefix} ${filename}`;
+  if (!parts.length) return "UNKNOWN";
+
+  return parts[0].toUpperCase();
 }
 
 /* ================= HANDLER ================= */
@@ -68,8 +77,8 @@ export async function POST(req) {
     /* ===== CLASSIFICATION ===== */
 
     const docType = detectDocType(filename);
-    const lender = docType === "RATE_SHEET" ? deriveLender(filename) : null;
-    const taggedName = buildTaggedName(filename, docType, lender);
+    const lender =
+      docType === "RATE_SHEET" ? extractLender(filename) : null;
 
     /* ===== RATE SHEET REPLACEMENT ===== */
 
@@ -78,7 +87,8 @@ export async function POST(req) {
         .from("ingest_jobs")
         .update({ status: "superseded" })
         .eq("source", "sales")
-        .ilike("original_name", `[RATE_SHEET][LENDER:${lender}]%`)
+        .eq("doc_type", "RATE_SHEET")
+        .eq("lender", lender)
         .neq("status", "superseded");
     }
 
@@ -101,9 +111,17 @@ export async function POST(req) {
 
     const { error: jobError } = await supabase.from("ingest_jobs").insert({
       file_path: filePath,
-      original_name: taggedName,
+      original_name: filename,
       source: "sales",
       status: "pending",
+
+      doc_type: docType,
+      lender,
+      metadata: {
+        doc_type: docType,
+        lender,
+        uploaded_by: "ui",
+      },
     });
 
     if (jobError) {
