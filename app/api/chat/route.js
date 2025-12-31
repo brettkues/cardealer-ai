@@ -25,11 +25,6 @@ const embedClient = new OpenAIClient({
 
 const fiSessions = new Map();
 
-/* ================= CONFIDENCE ================= */
-
-const HIGH_CONFIDENCE = 0.85;
-const MIN_CONFIDENCE = 0.65;
-
 /* ================= HELPERS ================= */
 
 function normalize(text) {
@@ -52,16 +47,22 @@ function detectBrainTrainingIntent(text) {
   return text.slice(match[0].length).trim();
 }
 
-/*
- TRAINING AUTHORING INTENT
- - Explicitly excludes actual ADD TO BRAIN saves
- - Triggers on requests to WRITE / DRAFT training
-*/
 function detectTrainingAuthoringRequest(text) {
   if (/^(add to brain|add to knowledge)/i.test(text)) return false;
   return /(^|\b)(help me add training|write training|draft training|create training|add training for step)/i.test(
     text
   );
+}
+
+function trainingPrompt(role) {
+  if (role === "admin" || role === "manager") {
+    return (
+      "\n\n—\nThis answer was based on general knowledge, not dealership training.\n" +
+      "If you want to save this for future use, copy it and send:\n" +
+      "ADD TO BRAIN:"
+    );
+  }
+  return "";
 }
 
 /* ================= BRAIN SAVE ================= */
@@ -143,7 +144,6 @@ export async function POST(req) {
       userId = "default",
       role = "sales",
       domain = "sales",
-      allowSearch = false,
       sessionId,
     } = await req.json();
 
@@ -166,7 +166,6 @@ You are drafting OFFICIAL dealership training content.
 OUTPUT RULES (STRICT):
 - Output TRAINING CONTENT ONLY
 - Do NOT save anything
-- Do NOT mention systems, AI, or explanations
 - Follow the template EXACTLY
 
 TEMPLATE:
@@ -253,7 +252,7 @@ COMPLETION CHECK:
       });
     }
 
-    /* ================= F&I DOMAIN (STEP-AWARE RETRIEVAL) ================= */
+    /* ================= F&I DOMAIN ================= */
 
     if (domain === "fi") {
       if (!sessionId) {
@@ -286,7 +285,7 @@ COMPLETION CHECK:
                 role: "system",
                 content:
                   "Answer ONLY using the dealership knowledge below.\n\n" +
-                  hits.map((h) => h.content).join("\n\n"),
+                  hits.join("\n\n"),
               },
               { role: "user", content: message },
             ],
@@ -299,10 +298,17 @@ COMPLETION CHECK:
           });
         }
 
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: message }],
+          temperature: 0.4,
+        });
+
         return NextResponse.json({
           answer:
-            "No active deal. Ask a question or type `start a deal` to begin.",
-          source: "F&I assistant",
+            response.choices[0].message.content +
+            trainingPrompt(role),
+          source: "General industry guidance",
         });
       }
 
@@ -347,7 +353,7 @@ COMPLETION CHECK:
               role: "system",
               content:
                 "Answer ONLY using the dealership training for this step.\n\n" +
-                hits.map((h) => h.content).join("\n\n"),
+                hits.join("\n\n"),
             },
             { role: "user", content: message },
           ],
@@ -364,21 +370,16 @@ COMPLETION CHECK:
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are assisting with F&I Step ${state.step}. Answer carefully. Do not advance steps.`,
-          },
-          { role: "user", content: message },
-        ],
+        messages: [{ role: "user", content: message }],
         temperature: 0.4,
       });
 
       return NextResponse.json({
         answer:
           response.choices[0].message.content +
-          "\n\nType `next` when complete.",
-        source: "F&I process",
+          "\n\nType `next` when complete." +
+          trainingPrompt(role),
+        source: "General industry guidance",
       });
     }
 
@@ -394,7 +395,7 @@ COMPLETION CHECK:
             role: "system",
             content:
               "Answer ONLY using the dealership policy below.\n\n" +
-              hits.map((h) => h.content).join("\n\n"),
+              hits.join("\n\n"),
           },
           { role: "user", content: message },
         ],
@@ -407,8 +408,16 @@ COMPLETION CHECK:
       });
     }
 
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: message }],
+      temperature: 0.4,
+    });
+
     return NextResponse.json({
-      answer: "No dealership guidance exists for this question.",
+      answer:
+        response.choices[0].message.content +
+        trainingPrompt(role),
       source: "General industry guidance",
     });
   } catch (err) {
