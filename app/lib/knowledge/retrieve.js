@@ -19,7 +19,7 @@ const retrievalCache = new Map();
  * Guarantees:
  * - Dealer training is ALWAYS searched first
  * - Rate sheets are prioritized for rate-related questions
- * - Superseded rate sheets are NEVER returned
+ * - Only the MOST RECENT rate sheet per filename is returned
  * - Falls back gracefully when no training exists
  * - No schema changes
  * - No re-ingestion
@@ -36,12 +36,12 @@ export async function retrieveKnowledge(message, domain = "sales") {
   const normalized = message.toLowerCase().trim();
   const cacheKey = `${DEALER_ID}:${domain}:${normalized}`;
 
-  /* ===== FAST PATH: cached retrieval ===== */
+  /* ===== FAST PATH ===== */
   if (retrievalCache.has(cacheKey)) {
     return retrievalCache.get(cacheKey);
   }
 
-  /* ================= INTENT DETECTION ================= */
+  /* ================= INTENT ================= */
 
   const isRateQuestion =
     /\b(rate|rates|term|months|72|84|96|gap|max gap|backend|advance|ltv|year|miles)\b/i.test(
@@ -69,65 +69,82 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
   /* ================= VECTOR SEARCH ================= */
 
-  const { data: vectorData, error: vectorError } = await supabase.rpc(
+  const { data: vectorData, error } = await supabase.rpc(
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
       match_threshold: 0.15,
-      match_count: 8,
+      match_count: 10,
       dealer_id_param: DEALER_ID,
     }
   );
 
-  if (vectorError) {
-    console.error("❌ Vector search error:", vectorError);
+  if (error) {
+    console.error("❌ Vector search error:", error);
   }
 
-  let vectorResults = (vectorData || []).filter(Boolean);
+  let rows = (vectorData || []).filter(Boolean);
 
-  /* ================= POST-FILTERING ================= */
+  /* ================= RATE SHEET SUPPRESSION ================= */
 
-  if (vectorResults.length > 0) {
-    // 1️⃣ Never return superseded rate sheets
-    vectorResults = vectorResults.filter((row) => {
+  if (rows.length > 0) {
+    const newestRateSheets = {};
+    const finalRows = [];
+
+    for (const row of rows) {
       if (row.metadata?.doc_type === "RATE_SHEET") {
-        return row.metadata?.status !== "superseded";
+        const key = row.source_file;
+        if (
+          !newestRateSheets[key] ||
+          new Date(row.created_at) > new Date(newestRateSheets[key].created_at)
+        ) {
+          newestRateSheets[key] = row;
+        }
+      } else {
+        finalRows.push(row);
       }
-      return true;
-    });
+    }
 
-    // 2️⃣ Rate sheet priority
+    // keep only newest rate sheets
+    finalRows.push(...Object.values(newestRateSheets));
+    rows = finalRows;
+  }
+
+  /* ================= PRIORITY LOGIC ================= */
+
+  if (rows.length > 0) {
+    // Rate questions → rate sheets first
     if (isRateQuestion) {
-      const rateSheets = vectorResults.filter(
+      const rateHits = rows.filter(
         (r) => r.metadata?.doc_type === "RATE_SHEET"
       );
 
-      if (rateSheets.length > 0) {
-        const results = rateSheets.map((r) => r.content);
+      if (rateHits.length > 0) {
+        const results = rateHits.map((r) => r.content);
         retrievalCache.set(cacheKey, results);
-        console.log("✅ RATE SHEET MATCH HIT");
+        console.log("✅ RATE SHEET HIT");
         return results;
       }
     }
 
-    // 3️⃣ Step bias (F&I)
+    // F&I step bias
     if (domain === "fi" && step) {
-      const stepHits = vectorResults.filter((r) =>
+      const stepHits = rows.filter((r) =>
         r.content?.includes(`[F&I STEP ${step}]`)
       );
 
       if (stepHits.length > 0) {
         const results = stepHits.map((r) => r.content);
         retrievalCache.set(cacheKey, results);
-        console.log("✅ STEP-SPECIFIC HIT");
+        console.log("✅ STEP HIT");
         return results;
       }
     }
 
-    // 4️⃣ General dealer training fallback
-    const results = vectorResults.map((r) => r.content);
+    // General dealer knowledge
+    const results = rows.map((r) => r.content);
     retrievalCache.set(cacheKey, results);
-    console.log("✅ VECTOR MATCH HIT");
+    console.log("✅ VECTOR HIT");
     return results;
   }
 
@@ -140,34 +157,37 @@ export async function retrieveKnowledge(message, domain = "sales") {
     .slice(0, 6);
 
   for (const word of keywords) {
-    let query = supabase
+    const { data, error } = await supabase
       .from("sales_training_vectors")
-      .select("content, metadata")
+      .select("content, metadata, source_file, created_at")
       .eq("dealer_id", DEALER_ID)
       .ilike("content", `%${word}%`)
-      .limit(5);
+      .limit(10);
 
-    if (isRateQuestion) {
-      query = query.contains("metadata", { doc_type: "RATE_SHEET" });
-    }
+    if (error) continue;
 
-    const { data: keywordHits, error } = await query;
+    if (data?.length) {
+      const newestRateSheets = {};
+      const results = [];
 
-    if (error) {
-      console.error("❌ Keyword fallback error:", error);
-      continue;
-    }
-
-    if (keywordHits && keywordHits.length > 0) {
-      const filtered = keywordHits.filter((row) => {
+      for (const row of data) {
         if (row.metadata?.doc_type === "RATE_SHEET") {
-          return row.metadata?.status !== "superseded";
+          const key = row.source_file;
+          if (
+            !newestRateSheets[key] ||
+            new Date(row.created_at) >
+              new Date(newestRateSheets[key].created_at)
+          ) {
+            newestRateSheets[key] = row;
+          }
+        } else {
+          results.push(row.content);
         }
-        return true;
-      });
+      }
 
-      if (filtered.length > 0) {
-        const results = filtered.map((r) => r.content);
+      results.push(...Object.values(newestRateSheets).map((r) => r.content));
+
+      if (results.length > 0) {
         retrievalCache.set(cacheKey, results);
         console.log("✅ KEYWORD FALLBACK HIT:", word);
         return results;
@@ -177,7 +197,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
   /* ================= NOTHING FOUND ================= */
 
-  console.log("❌ NO DEALER KNOWLEDGE FOUND");
   retrievalCache.set(cacheKey, []);
+  console.log("❌ NO DEALER KNOWLEDGE FOUND");
   return [];
 }
