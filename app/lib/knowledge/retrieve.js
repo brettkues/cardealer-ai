@@ -1,3 +1,6 @@
+// app/lib/knowledge/retrieve.js
+// FIX 1 — EXPLICIT NO-INTERNAL-SIGNAL
+
 import { supabase } from "@/lib/supabaseClient";
 import OpenAI from "openai";
 
@@ -11,22 +14,22 @@ const DEALER_ID = process.env.DEALER_ID;
 const embeddingCache = new Map();
 const retrievalCache = new Map();
 
-// minimum relevance score to trust training
-const MIN_RELEVANCE_SCORE = 0.55;
-
 /**
- * RETRIEVE KNOWLEDGE — PRODUCTION (RELEVANCE SAFE)
+ * RETRIEVE KNOWLEDGE — PRODUCTION
+ *
+ * Returns:
+ * - Array of strings → VALID dealer knowledge
+ * - null → NO relevant dealer knowledge exists
  *
  * Guarantees:
  * - Dealer training searched first
- * - Weak / unrelated training is discarded
- * - Rate sheets prioritized for rate questions
+ * - Rate sheets prioritized
  * - Only newest rate sheet per source_file returned
  * - No schema changes
  * - No writes
  */
 export async function retrieveKnowledge(message, domain = "sales") {
-  if (!DEALER_ID || !message) return [];
+  if (!DEALER_ID || !message) return null;
 
   const normalized = message.toLowerCase().trim();
   const cacheKey = `${DEALER_ID}:${domain}:${normalized}`;
@@ -65,15 +68,15 @@ export async function retrieveKnowledge(message, domain = "sales") {
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.1,
-      match_count: 12,
+      match_threshold: 0.15,
+      match_count: 10,
       dealer_id_param: DEALER_ID,
     }
   );
 
-  if (error || !data?.length) {
-    retrievalCache.set(cacheKey, []);
-    return [];
+  if (error || !data || data.length === 0) {
+    retrievalCache.set(cacheKey, null);
+    return null;
   }
 
   /* ================= RATE SHEET DEDUPE ================= */
@@ -95,31 +98,15 @@ export async function retrieveKnowledge(message, domain = "sales") {
     }
   }
 
-  const candidateRows = [
+  const finalRows = [
     ...Object.values(newestRateSheets),
     ...nonRateRows,
   ];
 
-  /* ================= RELEVANCE FILTER ================= */
-
-  const scored = candidateRows.map((r) => ({
-    ...r,
-    relevance: r.similarity ?? 0,
-  }));
-
-  const strongMatches = scored.filter(
-    (r) => r.relevance >= MIN_RELEVANCE_SCORE
-  );
-
-  if (!strongMatches.length) {
-    retrievalCache.set(cacheKey, []);
-    return [];
-  }
-
   /* ================= PRIORITY ================= */
 
   if (isRateQuestion) {
-    const rateHits = strongMatches.filter(
+    const rateHits = finalRows.filter(
       (r) => r.metadata?.doc_type === "RATE_SHEET"
     );
     if (rateHits.length) {
@@ -130,7 +117,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
   }
 
   if (domain === "fi" && step) {
-    const stepHits = strongMatches.filter((r) =>
+    const stepHits = finalRows.filter((r) =>
       r.content?.includes(`[F&I STEP ${step}]`)
     );
     if (stepHits.length) {
@@ -140,7 +127,14 @@ export async function retrieveKnowledge(message, domain = "sales") {
     }
   }
 
-  const results = strongMatches.map((r) => r.content);
+  // General dealer knowledge
+  const results = finalRows.map((r) => r.content);
+
+  if (!results.length) {
+    retrievalCache.set(cacheKey, null);
+    return null;
+  }
+
   retrievalCache.set(cacheKey, results);
   return results;
 }
