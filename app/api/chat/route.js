@@ -38,38 +38,33 @@ function isRateQuestion(text) {
   );
 }
 
-function detectMemoryIntent(text) {
-  const t = normalize(text);
-  if (t.startsWith("remember this")) return "remember";
-  if (t.startsWith("forget")) return "forget";
-  if (t === "what do you remember about me") return "recall";
-  return null;
-}
+/* ================= F&I STEP GUIDANCE ================= */
 
-function detectBrainTrainingIntent(text) {
-  const match = text.match(
-    /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
-  );
-  if (!match) return null;
-  return text.slice(match[0].length).trim();
-}
-
-function detectTrainingAuthoringRequest(text) {
-  if (/^(add to brain|add to knowledge)/i.test(text)) return false;
-  return /(^|\b)(help me add training|write training|draft training|create training|add training for step)/i.test(
-    text
-  );
-}
-
-function trainingPrompt(role) {
-  if (role === "admin" || role === "manager") {
-    return (
-      "\n\n—\nThis answer was based on external information, not dealership training.\n" +
-      "Would you like to add this to training?\n\n" +
-      "If yes, copy and send:\nADD TO BRAIN:"
-    );
+function getFiStepPrompt(step) {
+  switch (step) {
+    case 1:
+      return "STEP 1: Identify the deal type (cash, finance, or lease).";
+    case 2:
+      return "STEP 2: Enter the deal into the DMS accurately.";
+    case 3:
+      return "STEP 3: Review approvals, stips, backend eligibility, and rate limits.";
+    case 4:
+      return "STEP 4: Build and present the F&I menu.";
+    case 5:
+      return "STEP 5: Build the contract.";
+    case 6:
+      return "STEP 6: Confirm compliance documents.";
+    case 7:
+      return "STEP 7: Add products and rebuild the contract if needed.";
+    case 8:
+      return "STEP 8: Obtain customer signatures.";
+    case 9:
+      return "STEP 9: DMV processing.";
+    case 10:
+      return "STEP 10: Funding and close the deal.";
+    default:
+      return "F&I process complete.";
   }
-  return "";
 }
 
 function fiContinuation(sessionId) {
@@ -77,6 +72,7 @@ function fiContinuation(sessionId) {
   if (!state || !state.started) return "";
   return (
     `\n\n—\nF&I Deal Status: STEP ${state.step}\n` +
+    `${getFiStepPrompt(state.step)}\n\n` +
     "Commands:\n" +
     "- next\n" +
     "- resume deal\n" +
@@ -120,8 +116,7 @@ async function trainingIsRelevant(question, trainingText) {
       },
       {
         role: "user",
-        content:
-          `QUESTION:\n${question}\n\nTRAINING:\n${trainingText}`,
+        content: `QUESTION:\n${question}\n\nTRAINING:\n${trainingText}`,
       },
     ],
   });
@@ -177,7 +172,6 @@ export async function POST(req) {
     } = await req.json();
 
     const text = normalize(message);
-    const rateIntent = isRateQuestion(text);
 
     /* ================= F&I COMMANDS ================= */
 
@@ -185,16 +179,23 @@ export async function POST(req) {
       let state = fiSessions.get(sessionId);
 
       if (text === "start a deal") {
-        fiSessions.set(sessionId, { started: true, step: 1 });
+        state = { started: true, step: 1 };
+        fiSessions.set(sessionId, state);
         return NextResponse.json({
-          answer: "F&I deal started. You are on STEP 1.",
+          answer:
+            "F&I deal started.\n\n" +
+            getFiStepPrompt(1) +
+            fiContinuation(sessionId),
           source: "F&I process",
         });
       }
 
       if (state?.started && text === "resume deal") {
         return NextResponse.json({
-          answer: `Resuming deal at STEP ${state.step}.`,
+          answer:
+            `Resuming deal at STEP ${state.step}.\n\n` +
+            getFiStepPrompt(state.step) +
+            fiContinuation(sessionId),
           source: "F&I process",
         });
       }
@@ -203,7 +204,23 @@ export async function POST(req) {
         state.step += 1;
         fiSessions.set(sessionId, state);
         return NextResponse.json({
-          answer: `Advanced to STEP ${state.step}.`,
+          answer:
+            `Advanced to STEP ${state.step}.\n\n` +
+            getFiStepPrompt(state.step) +
+            fiContinuation(sessionId),
+          source: "F&I process",
+        });
+      }
+
+      const stepMatch = text.match(/go to step (\d+)/);
+      if (state?.started && stepMatch) {
+        state.step = Number(stepMatch[1]);
+        fiSessions.set(sessionId, state);
+        return NextResponse.json({
+          answer:
+            `Moved to STEP ${state.step}.\n\n` +
+            getFiStepPrompt(state.step) +
+            fiContinuation(sessionId),
           source: "F&I process",
         });
       }
@@ -249,7 +266,6 @@ export async function POST(req) {
       return NextResponse.json({
         answer:
           "No internal or external information found." +
-          trainingPrompt(role) +
           fiContinuation(sessionId),
         source: "No results",
       });
@@ -271,7 +287,6 @@ export async function POST(req) {
     return NextResponse.json({
       answer:
         response.choices[0].message.content +
-        trainingPrompt(role) +
         fiContinuation(sessionId),
       source: "External web guidance",
     });
