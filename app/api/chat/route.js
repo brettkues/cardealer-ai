@@ -223,65 +223,29 @@ export async function POST(req) {
 
     /* ================= DEALER TRAINING ================= */
 
-    17:27:26.431 
- 299 | |         answer:
-17:27:26.431 
- 300 | |           response.choices[0].message.content +
-17:27:26.432 
- 301 | |           fiContinuation(sessionId),
-17:27:26.432 
- 302 | |         source: "External web guidance",
-17:27:26.432 
- 303 | `->     });
-17:27:26.432 
- 304 |       } catch (err) {
-17:27:26.432 
- 305 |         console.error(err);
-17:27:26.432 
- 306 |         return NextResponse.json(
-17:27:26.432 
-     `----
-17:27:26.432 
-17:27:26.432 
-  x Expression expected
-17:27:26.432 
-     ,-[/vercel/path0/app/api/chat/route.js:301:1]
-17:27:26.432 
- 301 |         fiContinuation(sessionId),
-17:27:26.432 
- 302 |       source: "External web guidance",
-17:27:26.432 
- 303 |     });
-17:27:26.432 
- 304 |   } catch (err) {
-17:27:26.432 
-     :   ^
-17:27:26.432 
- 305 |     console.error(err);
-17:27:26.432 
- 306 |     return NextResponse.json(
-17:27:26.432 
- 307 |       { answer: "AI failed.", source: "System error" },
-17:27:26.432 
-     `----
-17:27:26.432 
-17:27:26.433 
-Caused by:
-17:27:26.433 
-    Syntax Error
-17:27:26.433 
-17:27:26.433 
-Import trace for requested module:
-17:27:26.433 
-./app/api/chat/route.js
-17:27:26.433 
-17:27:26.433 
-17:27:26.433 
-> Build failed because of webpack errors
-17:27:26.459 
-Error: Command "next build" exited with 1
+    const hits = await retrieveKnowledge(framedQuestion, domain);
 
+if (hits?.length) {
+  const combinedTraining = hits.join("\n\n");
+  const relevant = await trainingIsRelevant(
+    framedQuestion,
+    combinedTraining
+  );
 
+  if (relevant) {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Answer ONLY using the dealership training below.\n\n" +
+            combinedTraining,
+        },
+        { role: "user", content: framedQuestion },
+      ],
+    });
         return NextResponse.json({
           answer:
             response.choices[0].message.content +
