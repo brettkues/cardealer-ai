@@ -15,10 +15,6 @@ function detectDocType(filename = "") {
 }
 
 // Extract lender name heuristically from filename
-// Examples:
-// "Altra Rates.pdf"        → ALTRA
-// "Huntington Rate Sheet"  → HUNTINGTON
-// "Stellantis_FI_Rates"    → STELLANTIS
 function extractLender(filename = "") {
   const cleaned = filename
     .toLowerCase()
@@ -80,15 +76,15 @@ export async function POST(req) {
     const lender =
       docType === "RATE_SHEET" ? extractLender(filename) : null;
 
-    /* ===== RATE SHEET REPLACEMENT ===== */
+    /* ===== RATE SHEET REPLACEMENT (BY FILENAME) ===== */
 
-    if (docType === "RATE_SHEET" && lender) {
+    if (docType === "RATE_SHEET") {
       await supabase
         .from("ingest_jobs")
         .update({ status: "superseded" })
         .eq("source", "sales")
         .eq("doc_type", "RATE_SHEET")
-        .eq("lender", lender)
+        .eq("original_name", filename)
         .neq("status", "superseded");
     }
 
