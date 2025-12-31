@@ -1,5 +1,5 @@
 // app/api/chat/route.js
-// FULL DROP-IN REPLACEMENT — TRAINING → WEB → ASK TO SAVE
+// FULL DROP-IN REPLACEMENT — TRAINING → RELEVANCE CHECK → WEB → ASK TO SAVE
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -100,12 +100,35 @@ async function searchWeb(query) {
     }),
   });
 
-  if (!res.ok) {
-    throw new Error("Tavily search failed");
-  }
+  if (!res.ok) return "";
 
   const data = await res.json();
   return data.answer || "";
+}
+
+/* ================= TRAINING RELEVANCE CHECK ================= */
+
+async function trainingIsRelevant(question, trainingText) {
+  const check = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Answer ONLY yes or no. Does the training content directly answer the user's question?",
+      },
+      {
+        role: "user",
+        content:
+          `QUESTION:\n${question}\n\nTRAINING:\n${trainingText}`,
+      },
+    ],
+  });
+
+  return check.choices[0].message.content
+    .toLowerCase()
+    .includes("yes");
 }
 
 /* ================= BRAIN SAVE ================= */
@@ -186,51 +209,36 @@ export async function POST(req) {
       }
     }
 
-    /* ================= TRAINING AUTHORING ================= */
-
-    if (
-      (role === "admin" || role === "manager") &&
-      detectTrainingAuthoringRequest(message)
-    ) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: message }],
-        temperature: 0.2,
-      });
-
-      return NextResponse.json({
-        answer:
-          response.choices[0].message.content +
-          "\n\nCOPY & PASTE USING:\nADD TO BRAIN:",
-        source: "Training authoring mode",
-      });
-    }
-
-    /* ================= DEALER TRAINING FIRST ================= */
+    /* ================= DEALER TRAINING ================= */
 
     const hits = await retrieveKnowledge(message, domain);
 
     if (hits?.length) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Answer ONLY using the dealership training below.\n\n" +
-              hits.join("\n\n"),
-          },
-          { role: "user", content: message },
-        ],
-        temperature: 0.3,
-      });
+      const combinedTraining = hits.join("\n\n");
+      const relevant = await trainingIsRelevant(message, combinedTraining);
 
-      return NextResponse.json({
-        answer:
-          response.choices[0].message.content +
-          fiContinuation(sessionId),
-        source: "Dealer policy (documented)",
-      });
+      if (relevant) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0.3,
+          messages: [
+            {
+              role: "system",
+              content:
+                "Answer ONLY using the dealership training below.\n\n" +
+                combinedTraining,
+            },
+            { role: "user", content: message },
+          ],
+        });
+
+        return NextResponse.json({
+          answer:
+            response.choices[0].message.content +
+            fiContinuation(sessionId),
+          source: "Dealer policy (documented)",
+        });
+      }
     }
 
     /* ================= LIVE WEB FALLBACK ================= */
@@ -249,6 +257,7 @@ export async function POST(req) {
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0.3,
       messages: [
         {
           role: "system",
@@ -257,7 +266,6 @@ export async function POST(req) {
         },
         { role: "user", content: webAnswer },
       ],
-      temperature: 0.3,
     });
 
     return NextResponse.json({
