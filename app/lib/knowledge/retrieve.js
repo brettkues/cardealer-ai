@@ -1,5 +1,3 @@
-// app/lib/knowledge/retrieve.js
-
 import { supabase } from "@/lib/supabaseClient";
 import OpenAI from "openai";
 
@@ -13,11 +11,15 @@ const DEALER_ID = process.env.DEALER_ID;
 const embeddingCache = new Map();
 const retrievalCache = new Map();
 
+// minimum relevance score to trust training
+const MIN_RELEVANCE_SCORE = 0.55;
+
 /**
- * RETRIEVE KNOWLEDGE — PRODUCTION
+ * RETRIEVE KNOWLEDGE — PRODUCTION (RELEVANCE SAFE)
  *
  * Guarantees:
  * - Dealer training searched first
+ * - Weak / unrelated training is discarded
  * - Rate sheets prioritized for rate questions
  * - Only newest rate sheet per source_file returned
  * - No schema changes
@@ -63,8 +65,8 @@ export async function retrieveKnowledge(message, domain = "sales") {
     "match_sales_training_vectors",
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.15,
-      match_count: 10,
+      match_threshold: 0.1,
+      match_count: 12,
       dealer_id_param: DEALER_ID,
     }
   );
@@ -93,15 +95,31 @@ export async function retrieveKnowledge(message, domain = "sales") {
     }
   }
 
-  const finalRows = [
+  const candidateRows = [
     ...Object.values(newestRateSheets),
     ...nonRateRows,
   ];
 
+  /* ================= RELEVANCE FILTER ================= */
+
+  const scored = candidateRows.map((r) => ({
+    ...r,
+    relevance: r.similarity ?? 0,
+  }));
+
+  const strongMatches = scored.filter(
+    (r) => r.relevance >= MIN_RELEVANCE_SCORE
+  );
+
+  if (!strongMatches.length) {
+    retrievalCache.set(cacheKey, []);
+    return [];
+  }
+
   /* ================= PRIORITY ================= */
 
   if (isRateQuestion) {
-    const rateHits = finalRows.filter(
+    const rateHits = strongMatches.filter(
       (r) => r.metadata?.doc_type === "RATE_SHEET"
     );
     if (rateHits.length) {
@@ -112,7 +130,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
   }
 
   if (domain === "fi" && step) {
-    const stepHits = finalRows.filter((r) =>
+    const stepHits = strongMatches.filter((r) =>
       r.content?.includes(`[F&I STEP ${step}]`)
     );
     if (stepHits.length) {
@@ -122,7 +140,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
     }
   }
 
-  const results = finalRows.map((r) => r.content);
+  const results = strongMatches.map((r) => r.content);
   retrievalCache.set(cacheKey, results);
   return results;
 }
