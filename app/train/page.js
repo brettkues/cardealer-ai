@@ -96,6 +96,10 @@ export default function TrainPage() {
     });
   }, [brain, search, stepFilter]);
 
+  const rateSheets = useMemo(() => {
+    return jobs.filter((j) => j.doc_type === "RATE_SHEET");
+  }, [jobs]);
+
   /* ================= UI ================= */
 
   return (
@@ -113,6 +117,15 @@ export default function TrainPage() {
           }`}
         >
           Documents
+        </button>
+
+        <button
+          onClick={() => setTab("rates")}
+          className={`px-4 py-2 rounded ${
+            tab === "rates" ? "bg-blue-600 text-white" : "bg-gray-200"
+          }`}
+        >
+          Rate Sheets
         </button>
 
         <button
@@ -171,6 +184,51 @@ export default function TrainPage() {
             {!jobs.length && (
               <div className="p-2 text-gray-500">
                 No ingestion jobs yet.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ================= RATE SHEETS TAB ================= */}
+      {tab === "rates" && (
+        <>
+          <h2 className="text-xl font-semibold mb-2">Active & Superseded Rate Sheets</h2>
+
+          <div className="border rounded divide-y text-sm">
+            {rateSheets.map((job) => (
+              <div key={job.id} className="p-3 grid grid-cols-4 gap-2">
+                <div className="font-semibold">
+                  {job.lender || "Unknown"}
+                </div>
+
+                <div className="truncate">
+                  {job.original_name}
+                </div>
+
+                <div
+                  className={
+                    job.status === "superseded"
+                      ? "text-gray-400"
+                      : job.status === "complete"
+                      ? "text-green-600 font-semibold"
+                      : job.status === "failed"
+                      ? "text-red-600 font-semibold"
+                      : "text-yellow-600 font-semibold"
+                  }
+                >
+                  {job.status}
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  {new Date(job.created_at).toLocaleString()}
+                </div>
+              </div>
+            ))}
+
+            {!rateSheets.length && (
+              <div className="p-3 text-gray-500">
+                No rate sheets uploaded yet.
               </div>
             )}
           </div>
