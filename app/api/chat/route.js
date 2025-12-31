@@ -154,6 +154,13 @@ export async function POST(req) {
         });
       }
 
+      if (state?.started && text === "resume deal") {
+        return NextResponse.json({
+          answer: `Resuming deal at STEP ${state.step}.`,
+          source: "F&I process",
+        });
+      }
+
       if (state?.started && text === "restart deal") {
         fiSessions.set(sessionId, { started: true, step: 1 });
         return NextResponse.json({
