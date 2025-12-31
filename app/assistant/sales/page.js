@@ -11,10 +11,11 @@ export default function SalesAssistant() {
   const role = "manager"; // sales | manager | admin
 
   async function sendMessage() {
-    if (!msg || loading) return;
+    if (!msg.trim() || loading) return;
 
     const userMessage = { role: "user", content: msg };
     const newChat = [userMessage, ...chat];
+
     setChat(newChat);
     setMsg("");
     setLoading(true);
@@ -43,7 +44,10 @@ export default function SalesAssistant() {
       setChat([aiMessage, ...newChat]);
     } catch {
       setChat([
-        { role: "assistant", content: "Something went wrong. Please try again." },
+        {
+          role: "assistant",
+          content: "Something went wrong. Please try again.",
+        },
         ...newChat,
       ]);
     } finally {
@@ -107,15 +111,26 @@ export default function SalesAssistant() {
           </ul>
         </div>
 
-        <textarea
-          className="w-full p-3 border rounded mt-3"
-          placeholder="Ask a sales question… (Enter to send)"
-          value={msg}
-          onChange={(e) => setMsg(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={2}
-          disabled={loading}
-        />
+        {/* INPUT + SEND BUTTON */}
+        <div className="flex gap-2 mt-3">
+          <textarea
+            className="flex-1 p-3 border rounded"
+            placeholder="Ask a sales question… (Enter to send)"
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={2}
+            disabled={loading}
+          />
+
+          <button
+            onClick={sendMessage}
+            disabled={loading}
+            className="px-5 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
       </div>
 
       {/* CHAT */}
