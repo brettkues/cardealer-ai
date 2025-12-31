@@ -225,27 +225,27 @@ export async function POST(req) {
 
     const hits = await retrieveKnowledge(framedQuestion, domain);
 
-    if (hits?.length) {
-      const combinedTraining = hits.join("\n\n");
-      const relevant = await trainingIsRelevant(
-        framedQuestion,
-        combinedTraining
-      );
+if (hits?.length) {
+  const combinedTraining = hits.join("\n\n");
+  const relevant = await trainingIsRelevant(
+    framedQuestion,
+    combinedTraining
+  );
 
-      if (relevant) {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          temperature: 0.3,
-          messages: [
-            {
-              role: "system",
-              content:
-                "Answer ONLY using the dealership training below.\n\n" +
-                combinedTraining,
-            },
-            { role: "user", content: framedQuestion },
-          ],
-        });
+  if (relevant) {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Answer ONLY using the dealership training below.\n\n" +
+            combinedTraining,
+        },
+        { role: "user", content: framedQuestion },
+      ],
+    });
 
         return NextResponse.json({
           answer:
