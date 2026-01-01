@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 import { getUserRole } from "@/lib/auth/getUserRole";
+import { adminAuth } from "@/lib/firebaseAdmin";
 
 // LIST USERS (ADMIN ONLY)
 export async function GET(req) {
@@ -11,7 +12,7 @@ export async function GET(req) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // 1️⃣ Get roles from DB
+  // 1️⃣ Get roles (Firebase UID based)
   const { data: roleRows, error: roleError } = await supabase
     .from("user_roles")
     .select("user_id, role");
@@ -20,32 +21,29 @@ export async function GET(req) {
     return NextResponse.json({ users: [] }, { status: 500 });
   }
 
-  // 2️⃣ Get users from Supabase Auth
-  const { data: authData, error: authError } =
-    await supabase.auth.admin.listUsers();
+  // 2️⃣ Get users from Firebase Admin
+  const list = await adminAuth.listUsers(1000);
+  const firebaseUsers = list.users;
 
-  if (authError) {
-    return NextResponse.json({ users: [] }, { status: 500 });
-  }
+  // 3️⃣ Merge Firebase + roles
+  const users = firebaseUsers.map((u) => {
+    const roleRow = roleRows.find((r) => r.user_id === u.uid);
 
-  const authUsers = authData.users || [];
-
-  // 3️⃣ Merge auth + roles
-  const users = authUsers.map((u) => {
-    const roleRow = roleRows.find((r) => r.user_id === u.id);
+    let provider = "password";
+    if (u.providerData?.some((p) => p.providerId === "google.com")) {
+      provider = "google";
+    }
 
     return {
-      user_id: u.id,
+      user_id: u.uid,
       email: u.email,
       role: roleRow?.role || "sales",
-      provider: u.app_metadata?.provider || "password",
-      created_at: u.created_at,
+      provider,
+      created_at: u.metadata.creationTime,
     };
   });
 
-  // Optional: stable sort by email
   users.sort((a, b) => (a.email || "").localeCompare(b.email || ""));
-
   return NextResponse.json({ users });
 }
 
@@ -59,7 +57,6 @@ export async function POST(req) {
   }
 
   const { userId: targetUserId, role: newRole } = await req.json();
-
   if (!targetUserId || !newRole) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
