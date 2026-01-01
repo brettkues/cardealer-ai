@@ -61,6 +61,51 @@ export default function TrainPage() {
     }
   }
 
+  async function uploadRateSheets() {
+    if (!files.length) {
+      alert("No rate sheets selected");
+      return;
+    }
+
+    setLoading(true);
+    setStatus("Uploading rate sheets…");
+
+    try {
+      for (const file of files) {
+        const res = await fetch("/api/train/rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+          }),
+        });
+
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Upload init failed");
+
+        const uploadRes = await fetch(data.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": data.contentType },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Direct upload failed");
+        }
+      }
+
+      setStatus("Rate sheets uploaded. Processing in background.");
+      setFiles([]);
+      fetchStatus();
+    } catch (err) {
+      console.error(err);
+      setStatus("Rate sheet upload failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   /* ================= STATUS ================= */
 
   async function fetchStatus() {
@@ -193,7 +238,27 @@ export default function TrainPage() {
       {/* ================= RATE SHEETS TAB ================= */}
       {tab === "rates" && (
         <>
-          <h2 className="text-xl font-semibold mb-2">Active & Superseded Rate Sheets</h2>
+          <div className="border rounded p-4 space-y-4 mb-8">
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files))}
+            />
+
+            <button
+              onClick={uploadRateSheets}
+              disabled={loading}
+              className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
+            >
+              {loading ? "Uploading…" : "Upload Rate Sheets"}
+            </button>
+
+            {status && <div className="text-sm">{status}</div>}
+          </div>
+
+          <h2 className="text-xl font-semibold mb-2">
+            Active & Superseded Rate Sheets
+          </h2>
 
           <div className="border rounded divide-y text-sm">
             {rateSheets.map((job) => (
