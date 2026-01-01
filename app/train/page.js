@@ -26,81 +26,24 @@ export default function TrainPage() {
     setStatus("Uploading files…");
 
     try {
-      for (const file of files) {
-        const res = await fetch("/api/train/sales", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-          }),
-        });
+      const form = new FormData();
+      files.forEach((f) => form.append("files", f));
 
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Upload init failed");
+      const res = await fetch("/api/train/sales", {
+        method: "POST",
+        body: form,
+      });
 
-        const uploadRes = await fetch(data.uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": data.contentType },
-          body: file,
-        });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Upload failed");
 
-        if (!uploadRes.ok) {
-          throw new Error("Direct upload failed");
-        }
-      }
-
-      setStatus("Files uploaded. Processing in background.");
+      setStatus(`Uploaded ${data.stored} file(s). Processing…`);
       setFiles([]);
       fetchStatus();
+
     } catch (err) {
       console.error(err);
       setStatus("Upload failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function uploadRateSheets() {
-    if (!files.length) {
-      alert("No rate sheets selected");
-      return;
-    }
-
-    setLoading(true);
-    setStatus("Uploading rate sheets…");
-
-    try {
-      for (const file of files) {
-        const res = await fetch("/api/train/rates", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-          }),
-        });
-
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Upload init failed");
-
-        const uploadRes = await fetch(data.uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": data.contentType },
-          body: file,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error("Direct upload failed");
-        }
-      }
-
-      setStatus("Rate sheets uploaded. Processing in background.");
-      setFiles([]);
-      fetchStatus();
-    } catch (err) {
-      console.error(err);
-      setStatus("Rate sheet upload failed.");
     } finally {
       setLoading(false);
     }
@@ -141,10 +84,6 @@ export default function TrainPage() {
     });
   }, [brain, search, stepFilter]);
 
-  const rateSheets = useMemo(() => {
-    return jobs.filter((j) => j.doc_type === "RATE_SHEET");
-  }, [jobs]);
-
   /* ================= UI ================= */
 
   return (
@@ -162,15 +101,6 @@ export default function TrainPage() {
           }`}
         >
           Documents
-        </button>
-
-        <button
-          onClick={() => setTab("rates")}
-          className={`px-4 py-2 rounded ${
-            tab === "rates" ? "bg-blue-600 text-white" : "bg-gray-200"
-          }`}
-        >
-          Rate Sheets
         </button>
 
         <button
@@ -218,6 +148,8 @@ export default function TrainPage() {
                       ? "text-green-600 font-semibold"
                       : job.status === "failed"
                       ? "text-red-600 font-semibold"
+                      : job.status === "skipped"
+                      ? "text-gray-400 font-semibold"
                       : "text-yellow-600 font-semibold"
                   }
                 >
@@ -229,71 +161,6 @@ export default function TrainPage() {
             {!jobs.length && (
               <div className="p-2 text-gray-500">
                 No ingestion jobs yet.
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* ================= RATE SHEETS TAB ================= */}
-      {tab === "rates" && (
-        <>
-          <div className="border rounded p-4 space-y-4 mb-8">
-            <input
-              type="file"
-              multiple
-              onChange={(e) => setFiles(Array.from(e.target.files))}
-            />
-
-            <button
-              onClick={uploadRateSheets}
-              disabled={loading}
-              className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
-            >
-              {loading ? "Uploading…" : "Upload Rate Sheets"}
-            </button>
-
-            {status && <div className="text-sm">{status}</div>}
-          </div>
-
-          <h2 className="text-xl font-semibold mb-2">
-            Active & Superseded Rate Sheets
-          </h2>
-
-          <div className="border rounded divide-y text-sm">
-            {rateSheets.map((job) => (
-              <div key={job.id} className="p-3 grid grid-cols-4 gap-2">
-                <div className="font-semibold">
-                  {job.lender || "Unknown"}
-                </div>
-
-                <div className="truncate">
-                  {job.original_name}
-                </div>
-
-                <div
-                  className={
-                    job.status === "superseded"
-                      ? "text-gray-400"
-                      : job.status === "complete"
-                      ? "text-green-600 font-semibold"
-                      : job.status === "failed"
-                      ? "text-red-600 font-semibold"
-                      : "text-yellow-600 font-semibold"
-                  }
-                >
-                  {job.status}
-                </div>
-
-                <div className="text-xs text-gray-500">
-                  {new Date(job.created_at).toLocaleString()}
-                </div>
-              </div>
-            ))}
-
-            {!rateSheets.length && (
-              <div className="p-3 text-gray-500">
-                No rate sheets uploaded yet.
               </div>
             )}
           </div>
@@ -344,7 +211,6 @@ export default function TrainPage() {
 
                 <div className="whitespace-pre-wrap">
                   {b.preview}
-                  {b.preview.length >= 300 && "…"}
                 </div>
 
                 <div className="text-xs text-gray-500">
