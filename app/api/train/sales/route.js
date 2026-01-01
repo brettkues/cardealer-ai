@@ -1,68 +1,26 @@
-// app/api/train/sales/route.js
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
-/* ================= HELPERS ================= */
-
-// Detect document type by intent, not brand
-function detectDocType(filename = "") {
-  const name = filename.toLowerCase();
-  if (name.includes("rate")) return "RATE_SHEET";
-  return "POLICY";
-}
-
-// Extract lender name heuristically from filename
-function extractLender(filename = "") {
-  const cleaned = filename
-    .toLowerCase()
-    .replace(/\.(pdf|docx?|xlsx?)$/i, "")
-    .replace(/[_\-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const stopWords = [
-    "rate",
-    "rates",
-    "sheet",
-    "program",
-    "auto",
-    "finance",
-    "fi",
-    "retail",
-    "dealer",
-    "lending",
-    "credit",
-    "union",
-  ];
-
-  const parts = cleaned.split(" ").filter(p => !stopWords.includes(p));
-
-  if (!parts.length) return "UNKNOWN";
-
-  return parts[0].toUpperCase();
-}
-
-/* ================= HANDLER ================= */
+/*
+  SALES DOCUMENT UPLOAD INIT
+  - Creates signed upload URL
+  - Inserts ingest_jobs row
+  - NOTHING ELSE
+*/
 
 export async function POST(req) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json(
-        { ok: false, error: "Missing Supabase env vars" },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    const { filename, contentType } = await req.json();
+    const body = await req.json();
+    const filename = body?.filename;
+    const contentType = body?.contentType;
 
     if (!filename) {
       return NextResponse.json(
@@ -71,55 +29,31 @@ export async function POST(req) {
       );
     }
 
-    /* ===== CLASSIFICATION ===== */
-
-    const docType = detectDocType(filename);
-    const lender =
-      docType === "RATE_SHEET" ? extractLender(filename) : null;
-
-    /* ===== RATE SHEET SUPERSEDE ===== */
-
-    if (docType === "RATE_SHEET") {
-      await supabase
-        .from("ingest_jobs")
-        .update({ status: "superseded" })
-        .eq("source", "sales")
-        .eq("doc_type", "RATE_SHEET")
-        .eq("original_name", filename)
-        .neq("status", "superseded");
-    }
-
-    /* ===== STORAGE UPLOAD ===== */
-
     const filePath = `sales-training/${randomUUID()}-${filename}`;
 
     const { data, error } = await supabase.storage
       .from("knowledge")
       .createSignedUploadUrl(filePath, { expiresIn: 600 });
 
-
-    if (error) {
+    if (error || !data?.signedUrl) {
       return NextResponse.json(
-        { ok: false, error: error.message },
+        { ok: false, error: error?.message || "Failed to create upload URL" },
         { status: 500 }
       );
     }
 
-    /* ===== INGEST JOB RECORD ===== */
-
-    const { error: jobError } = await supabase.from("ingest_jobs").insert({
-      file_path: filePath,
-      original_name: filename,
-      source: "sales",
-      status: "pending",
-      doc_type: docType,
-      lender,
-      metadata: {
-        doc_type: docType,
-        lender,
-        uploaded_by: "ui",
-      },
-    });
+    const { error: jobError } = await supabase
+      .from("ingest_jobs")
+      .insert({
+        file_path: filePath,
+        original_name: filename,
+        source: "sales",
+        doc_type: "DOCUMENT",
+        status: "pending",
+        metadata: {
+          uploaded_via: "train_ui",
+        },
+      });
 
     if (jobError) {
       return NextResponse.json(
@@ -133,7 +67,6 @@ export async function POST(req) {
       uploadUrl: data.signedUrl,
       contentType: contentType || "application/octet-stream",
     });
-
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: String(err) },
