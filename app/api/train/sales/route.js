@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -49,7 +50,7 @@ function extractLender(filename = "") {
 
 export async function POST(req) {
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceKey) {
@@ -76,7 +77,7 @@ export async function POST(req) {
     const lender =
       docType === "RATE_SHEET" ? extractLender(filename) : null;
 
-    /* ===== RATE SHEET REPLACEMENT (BY FILENAME) ===== */
+    /* ===== RATE SHEET SUPERSEDE ===== */
 
     if (docType === "RATE_SHEET") {
       await supabase
@@ -110,7 +111,6 @@ export async function POST(req) {
       original_name: filename,
       source: "sales",
       status: "pending",
-
       doc_type: docType,
       lender,
       metadata: {
@@ -132,6 +132,7 @@ export async function POST(req) {
       uploadUrl: data.signedUrl,
       contentType: contentType || "application/octet-stream",
     });
+
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: String(err) },
