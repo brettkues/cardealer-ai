@@ -157,6 +157,39 @@ export async function POST(req) {
       domain = "sales",
       sessionId,
     } = await req.json();
+/* ================= EXPLICIT BRAIN TRAINING ================= */
+
+const brainMatch = message.match(
+  /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
+);
+
+if (brainMatch) {
+  if (role !== "admin" && role !== "manager") {
+    return NextResponse.json(
+      { answer: "Only managers or admins can train the AI." },
+      { status: 403 }
+    );
+  }
+
+  const content = message.slice(brainMatch[0].length).trim();
+
+  if (!content) {
+    return NextResponse.json({
+      answer: "Nothing to save. Please include training content after 'ADD TO BRAIN:'.",
+      source: "Brain training",
+    });
+  }
+
+  await saveToBrain({
+    content,
+    source_file: `chat:${userId}:${Date.now()}`,
+  });
+
+  return NextResponse.json({
+    answer: "Added to dealership brain.",
+    source: "Brain training",
+  });
+}
 
     const normalized = normalize(message);
     const framedQuestion = await frameQuestion(message);
