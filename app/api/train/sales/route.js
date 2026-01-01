@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
+import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -91,7 +91,7 @@ export async function POST(req) {
 
     /* ===== STORAGE UPLOAD ===== */
 
-    const filePath = `sales-training/${crypto.randomUUID()}-${filename}`;
+    const filePath = `sales-training/${randomUUID()}-${filename}`;
 
     const { data, error } = await supabase.storage
       .from("knowledge")
