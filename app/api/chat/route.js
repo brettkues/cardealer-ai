@@ -179,6 +179,10 @@ if (brainMatch) {
       source: "Brain training",
     });
   }
+console.log("TRAINING SAVE", {
+  role,
+  hasDealer: !!process.env.DEALER_ID
+});
 
   await saveToBrain({
     content,
