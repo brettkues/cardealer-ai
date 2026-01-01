@@ -4,11 +4,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
-import {
-  setPersonalMemory,
-  getPersonalMemory,
-  clearPersonalMemory,
-} from "@/lib/memory/personalStore";
 import { supabase } from "@/lib/supabaseClient";
 import OpenAIClient from "openai";
 
@@ -30,12 +25,6 @@ const fiSessions = new Map();
 
 function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
-}
-
-function isRateQuestion(text) {
-  return /\b(rate|rates|term|months|72|84|96|gap|max gap|backend|advance|ltv|year)\b/i.test(
-    text
-  );
 }
 
 /* ================= QUESTION FRAMING ================= */
@@ -64,28 +53,17 @@ async function frameQuestion(originalQuestion) {
 
 function getFiStepPrompt(step) {
   switch (step) {
-    case 1:
-      return "STEP 1: Identify the deal type (cash, finance, or lease).";
-    case 2:
-      return "STEP 2: Enter the deal accurately into the DMS.";
-    case 3:
-      return "STEP 3: Review approvals, stips, backend eligibility, and rate limits.";
-    case 4:
-      return "STEP 4: Build and present the F&I menu.";
-    case 5:
-      return "STEP 5: Build the contract.";
-    case 6:
-      return "STEP 6: Confirm compliance documents.";
-    case 7:
-      return "STEP 7: Add products and rebuild if needed.";
-    case 8:
-      return "STEP 8: Obtain customer signatures.";
-    case 9:
-      return "STEP 9: DMV processing.";
-    case 10:
-      return "STEP 10: Funding and close the deal.";
-    default:
-      return "F&I process complete.";
+    case 1: return "STEP 1: Identify the deal type (cash, finance, or lease).";
+    case 2: return "STEP 2: Enter the deal accurately into the DMS.";
+    case 3: return "STEP 3: Review approvals, stips, backend eligibility, and rate limits.";
+    case 4: return "STEP 4: Build and present the F&I menu.";
+    case 5: return "STEP 5: Build the contract.";
+    case 6: return "STEP 6: Confirm compliance documents.";
+    case 7: return "STEP 7: Add products and rebuild if needed.";
+    case 8: return "STEP 8: Obtain customer signatures.";
+    case 9: return "STEP 9: DMV processing.";
+    case 10: return "STEP 10: Funding and close the deal.";
+    default: return "F&I process complete.";
   }
 }
 
@@ -103,7 +81,7 @@ function fiContinuation(sessionId) {
   );
 }
 
-/* ================= LIVE WEB SEARCH (TAVILY) ================= */
+/* ================= LIVE WEB SEARCH ================= */
 
 async function searchWeb(query) {
   const res = await fetch("https://api.tavily.com/search", {
@@ -119,7 +97,6 @@ async function searchWeb(query) {
   });
 
   if (!res.ok) return "";
-
   const data = await res.json();
   return data.answer || "";
 }
@@ -146,59 +123,88 @@ async function trainingIsRelevant(question, trainingText) {
   return check.choices[0].message.content.toLowerCase().includes("yes");
 }
 
+/* ================= SAVE TO BRAIN (FIXED & REQUIRED) ================= */
+
+async function saveToBrain({ content, source_file }) {
+  const DEALER_ID = process.env.DEALER_ID;
+  if (!DEALER_ID || !content) {
+    throw new Error("Missing dealer ID or content");
+  }
+
+  const CHUNK_SIZE = 800;
+
+  await supabase
+    .from("sales_training_vectors")
+    .delete()
+    .eq("dealer_id", DEALER_ID)
+    .eq("source_file", source_file);
+
+  const chunks = [];
+  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
+    chunks.push(content.slice(i, i + CHUNK_SIZE));
+  }
+
+  const embeddings = await embedClient.embeddings.create({
+    model: "text-embedding-3-small",
+    input: chunks,
+  });
+
+  const rows = chunks.map((chunk, i) => ({
+    dealer_id: DEALER_ID,
+    source_file,
+    chunk_index: i,
+    content: chunk,
+    embedding: embeddings.data[i].embedding,
+  }));
+
+  await supabase.from("sales_training_vectors").insert(rows);
+}
+
 /* ================= HANDLER ================= */
 
 export async function POST(req) {
   try {
-    const {
-      message,
-      userId = "default",
-      role = "sales",
-      domain = "sales",
-      sessionId,
-    } = await req.json();
-/* ================= EXPLICIT BRAIN TRAINING ================= */
+    const { message, userId = "default", role = "sales", domain = "sales", sessionId } =
+      await req.json();
 
-const brainMatch = message.match(
-  /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
-);
+    /* ===== ADD TO BRAIN (FIXED) ===== */
 
-if (brainMatch) {
-  if (role !== "admin" && role !== "manager") {
-    return NextResponse.json(
-      { answer: "Only managers or admins can train the AI." },
-      { status: 403 }
+    const brainMatch = message.match(
+      /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
     );
-  }
 
-  const content = message.slice(brainMatch[0].length).trim();
+    if (brainMatch) {
+      if (role !== "admin" && role !== "manager") {
+        return NextResponse.json(
+          { answer: "Only managers or admins can train the AI." },
+          { status: 403 }
+        );
+      }
 
-  if (!content) {
-    return NextResponse.json({
-      answer: "Nothing to save. Please include training content after 'ADD TO BRAIN:'.",
-      source: "Brain training",
-    });
-  }
-console.log("TRAINING SAVE", {
-  role,
-  hasDealer: !!process.env.DEALER_ID
-});
+      const content = message.slice(brainMatch[0].length).trim();
 
-  await saveToBrain({
-    content,
-    source_file: `chat:${userId}:${Date.now()}`,
-  });
+      if (!content) {
+        return NextResponse.json({
+          answer: "Nothing to save. Please include training content after 'ADD TO BRAIN:'.",
+          source: "Brain training",
+        });
+      }
 
-  return NextResponse.json({
-    answer: "Added to dealership brain.",
-    source: "Brain training",
-  });
-}
+      await saveToBrain({
+        content,
+        source_file: `chat:${userId}:${Date.now()}`,
+      });
+
+      return NextResponse.json({
+        answer: "Added to dealership brain.",
+        source: "Brain training",
+      });
+    }
 
     const normalized = normalize(message);
     const framedQuestion = await frameQuestion(message);
 
-    /* ================= F&I COMMANDS ================= */
+    /* ================= F&I FLOW ================= */
 
     if (domain === "fi" && sessionId) {
       let state = fiSessions.get(sessionId);
@@ -207,20 +213,7 @@ console.log("TRAINING SAVE", {
         state = { started: true, step: 1 };
         fiSessions.set(sessionId, state);
         return NextResponse.json({
-          answer:
-            "F&I deal started.\n\n" +
-            getFiStepPrompt(1) +
-            fiContinuation(sessionId),
-          source: "F&I process",
-        });
-      }
-
-      if (state?.started && normalized === "resume deal") {
-        return NextResponse.json({
-          answer:
-            `Resuming deal at STEP ${state.step}.\n\n` +
-            getFiStepPrompt(state.step) +
-            fiContinuation(sessionId),
+          answer: `F&I deal started.\n\n${getFiStepPrompt(1)}${fiContinuation(sessionId)}`,
           source: "F&I process",
         });
       }
@@ -229,23 +222,7 @@ console.log("TRAINING SAVE", {
         state.step += 1;
         fiSessions.set(sessionId, state);
         return NextResponse.json({
-          answer:
-            `Advanced to STEP ${state.step}.\n\n` +
-            getFiStepPrompt(state.step) +
-            fiContinuation(sessionId),
-          source: "F&I process",
-        });
-      }
-
-      const stepMatch = normalized.match(/go to step (\d+)/);
-      if (state?.started && stepMatch) {
-        state.step = Number(stepMatch[1]);
-        fiSessions.set(sessionId, state);
-        return NextResponse.json({
-          answer:
-            `Moved to STEP ${state.step}.\n\n` +
-            getFiStepPrompt(state.step) +
-            fiContinuation(sessionId),
+          answer: `Advanced to STEP ${state.step}.\n\n${getFiStepPrompt(state.step)}${fiContinuation(sessionId)}`,
           source: "F&I process",
         });
       }
@@ -255,12 +232,9 @@ console.log("TRAINING SAVE", {
 
     const hits = await retrieveKnowledge(framedQuestion, domain);
 
-    if (hits !== null && hits.length) {
+    if (hits && hits.length) {
       const combinedTraining = hits.join("\n\n");
-      const relevant = await trainingIsRelevant(
-        framedQuestion,
-        combinedTraining
-      );
+      const relevant = await trainingIsRelevant(framedQuestion, combinedTraining);
 
       if (relevant) {
         const response = await openai.chat.completions.create({
@@ -271,7 +245,7 @@ console.log("TRAINING SAVE", {
               role: "system",
               content:
                 "You are a senior automotive sales and F&I expert. " +
-                "Answer directly, practically, and persuasively using ONLY the dealership training below.\n\n" +
+                "Answer directly and persuasively using ONLY the dealership training below.\n\n" +
                 combinedTraining,
             },
             { role: "user", content: framedQuestion },
@@ -279,23 +253,19 @@ console.log("TRAINING SAVE", {
         });
 
         return NextResponse.json({
-          answer: `${response.choices[0].message.content}${fiContinuation(
-            sessionId
-          )}`,
+          answer: response.choices[0].message.content + fiContinuation(sessionId),
           source: "Dealer policy (documented)",
         });
       }
     }
 
-    /* ================= LIVE WEB FALLBACK ================= */
+    /* ================= WEB FALLBACK ================= */
 
     const webAnswer = await searchWeb(framedQuestion);
 
     if (!webAnswer) {
       return NextResponse.json({
-        answer: `No internal or external information found.${fiContinuation(
-          sessionId
-        )}`,
+        answer: "No internal or external information found." + fiContinuation(sessionId),
         source: "No results",
       });
     }
@@ -308,17 +278,14 @@ console.log("TRAINING SAVE", {
           role: "system",
           content:
             "You are a senior automotive sales and F&I expert. " +
-            "Answer clearly, directly, and persuasively for a customer-facing conversation. " +
-            "Explain why the answer matters and focus on real-world impact.",
+            "Answer clearly and persuasively for a customer-facing conversation.",
         },
         { role: "user", content: webAnswer },
       ],
     });
 
     return NextResponse.json({
-      answer: `${response.choices[0].message.content}${fiContinuation(
-        sessionId
-      )}`,
+      answer: response.choices[0].message.content + fiContinuation(sessionId),
       source: "External web guidance",
     });
   } catch (err) {
