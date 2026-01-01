@@ -13,7 +13,7 @@ export async function GET(req) {
 
   const { data, error } = await supabase
     .from("user_roles")
-    .select("user_id, role")
+    .select("user_id, email, role")
     .order("user_id");
 
   if (error) {
