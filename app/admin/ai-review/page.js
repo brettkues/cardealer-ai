@@ -7,6 +7,10 @@ export default function AIReviewPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [openSource, setOpenSource] = useState(null);
+  const [fullText, setFullText] = useState("");
+  const [loadingText, setLoadingText] = useState(false);
+
   async function loadBrain() {
     try {
       setLoading(true);
@@ -24,6 +28,29 @@ export default function AIReviewPage() {
     }
   }
 
+  async function viewFile(source_file) {
+    setOpenSource(source_file);
+    setFullText("");
+    setLoadingText(true);
+
+    try {
+      const res = await fetch("/api/admin/ai-review/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_file }),
+      });
+
+      if (!res.ok) throw new Error("Load failed");
+
+      const data = await res.json();
+      setFullText(data.content || "(No content)");
+    } catch {
+      setFullText("Failed to load training content.");
+    } finally {
+      setLoadingText(false);
+    }
+  }
+
   async function deleteFile(source_file) {
     if (!confirm(`Delete all brain data from:\n\n${source_file}?`)) return;
 
@@ -36,6 +63,11 @@ export default function AIReviewPage() {
     if (!res.ok) {
       alert("Delete failed");
       return;
+    }
+
+    if (openSource === source_file) {
+      setOpenSource(null);
+      setFullText("");
     }
 
     loadBrain();
@@ -58,7 +90,8 @@ export default function AIReviewPage() {
             <th className="border px-3 py-2 text-left">Source File</th>
             <th className="border px-3 py-2">Chunks</th>
             <th className="border px-3 py-2">Created</th>
-            <th className="border px-3 py-2">Delete</th>
+            <th className="border px-3 py-2 text-center">View</th>
+            <th className="border px-3 py-2 text-center">Delete</th>
           </tr>
         </thead>
         <tbody>
@@ -73,6 +106,14 @@ export default function AIReviewPage() {
               </td>
               <td className="border px-3 py-2 text-center">
                 <button
+                  onClick={() => viewFile(f.source_file)}
+                  className="text-blue-600 hover:underline"
+                >
+                  View
+                </button>
+              </td>
+              <td className="border px-3 py-2 text-center">
+                <button
                   onClick={() => deleteFile(f.source_file)}
                   className="text-red-600 hover:underline"
                 >
@@ -83,6 +124,38 @@ export default function AIReviewPage() {
           ))}
         </tbody>
       </table>
+
+      {/* FULL TEXT MODAL */}
+      {openSource && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded shadow-xl w-[90%] max-w-4xl max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <div className="font-semibold text-sm break-all">
+                {openSource}
+              </div>
+              <button
+                onClick={() => setOpenSource(null)}
+                className="text-gray-600 hover:text-black"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-4 overflow-auto whitespace-pre-wrap text-sm">
+              {loadingText ? "Loading training content…" : fullText}
+            </div>
+
+            <div className="p-4 border-t text-right">
+              <button
+                onClick={() => deleteFile(openSource)}
+                className="text-red-600 hover:underline"
+              >
+                Delete this training
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
