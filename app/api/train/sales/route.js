@@ -95,7 +95,8 @@ export async function POST(req) {
 
     const { data, error } = await supabase.storage
       .from("knowledge")
-      .createSignedUploadUrl(filePath, 600);
+      .createSignedUploadUrl(filePath, { expiresIn: 600 });
+
 
     if (error) {
       return NextResponse.json(
