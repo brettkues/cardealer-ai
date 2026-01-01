@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
 /*
-  SALES DOCUMENT UPLOAD INIT
-  - Creates signed upload URL
-  - Inserts ingest_jobs row
-  - NOTHING ELSE
+  WORKING, BORING, DIRECT UPLOAD ROUTE
+  - multipart/form-data
+  - supabase.storage.upload
+  - ingest_jobs insert
 */
 
 export async function POST(req) {
@@ -18,58 +17,63 @@ export async function POST(req) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const body = await req.json();
-    const filename = body?.filename;
-    const contentType = body?.contentType;
+    const form = await req.formData();
+    const files = form.getAll("files");
 
-    if (!filename) {
+    if (!files.length) {
       return NextResponse.json(
-        { ok: false, error: "Missing filename" },
+        { ok: false, error: "No files uploaded" },
         { status: 400 }
       );
     }
 
-    const filePath = `sales-training/${randomUUID()}-${filename}`;
+    let uploaded = 0;
 
-    const { data, error } = await supabase.storage
-      .from("knowledge")
-      .createSignedUploadUrl(filePath, { expiresIn: 600 });
+    for (const file of files) {
+      const buffer = Buffer.from(await file.arrayBuffer());
 
-    if (error || !data?.signedUrl) {
-      return NextResponse.json(
-        { ok: false, error: error?.message || "Failed to create upload URL" },
-        { status: 500 }
-      );
-    }
+      const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-    const { error: jobError } = await supabase
-      .from("ingest_jobs")
-      .insert({
-        file_path: filePath,
-        original_name: filename,
-        source: "sales",
-        doc_type: "DOCUMENT",
-        status: "pending",
-        metadata: {
-          uploaded_via: "train_ui",
-        },
-      });
+      // 1️⃣ Upload file directly to storage
+      const { error: uploadError } = await supabase.storage
+        .from("knowledge")
+        .upload(filePath, buffer, {
+          contentType: file.type || "application/octet-stream",
+          upsert: false,
+        });
 
-    if (jobError) {
-      return NextResponse.json(
-        { ok: false, error: jobError.message },
-        { status: 500 }
-      );
+      if (uploadError) {
+        console.error("STORAGE UPLOAD ERROR:", uploadError.message);
+        continue;
+      }
+
+      // 2️⃣ Register ingest job
+      const { error: jobError } = await supabase
+        .from("ingest_jobs")
+        .insert({
+          file_path: filePath,
+          original_name: file.name,
+          source: "sales",
+          status: "pending",
+        });
+
+      if (jobError) {
+        console.error("INGEST JOB ERROR:", jobError.message);
+        continue;
+      }
+
+      uploaded++;
     }
 
     return NextResponse.json({
       ok: true,
-      uploadUrl: data.signedUrl,
-      contentType: contentType || "application/octet-stream",
+      stored: uploaded,
     });
+
   } catch (err) {
+    console.error("UPLOAD ROUTE ERROR:", err);
     return NextResponse.json(
-      { ok: false, error: String(err) },
+      { ok: false, error: String(err.message || err) },
       { status: 500 }
     );
   }
