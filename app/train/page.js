@@ -14,36 +14,48 @@ export default function TrainPage() {
   const [search, setSearch] = useState("");
   const [stepFilter, setStepFilter] = useState("");
 
-  /* ================= FILE UPLOAD ================= */
+  /* ================= UPLOAD HELPERS ================= */
 
-  async function uploadFiles() {
+  async function upload(endpoint, label) {
     if (!files.length) {
-      alert("No files selected");
+      alert(`No ${label} selected`);
       return;
     }
 
     setLoading(true);
-    setStatus("Uploading files…");
+    setStatus(`Uploading ${label}…`);
 
     try {
-      const form = new FormData();
-      files.forEach((f) => form.append("files", f));
+      for (const file of files) {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+          }),
+        });
 
-      const res = await fetch("/api/train/sales", {
-        method: "POST",
-        body: form,
-      });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Upload init failed");
 
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Upload failed");
+        const uploadRes = await fetch(data.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": data.contentType },
+          body: file,
+        });
 
-      setStatus(`Uploaded ${data.stored} file(s). Processing…`);
+        if (!uploadRes.ok) {
+          throw new Error("Direct upload failed");
+        }
+      }
+
       setFiles([]);
+      setStatus(`${label} uploaded. Processing…`);
       fetchStatus();
-
     } catch (err) {
       console.error(err);
-      setStatus("Upload failed.");
+      setStatus(`${label} upload failed.`);
     } finally {
       setLoading(false);
     }
@@ -84,6 +96,8 @@ export default function TrainPage() {
     });
   }, [brain, search, stepFilter]);
 
+  const rateJobs = jobs.filter((j) => j.doc_type === "RATE_SHEET");
+
   /* ================= UI ================= */
 
   return (
@@ -92,82 +106,69 @@ export default function TrainPage() {
 
       {/* ===== TABS ===== */}
       <div className="flex gap-4 mb-6">
-        <button
-          onClick={() => setTab("documents")}
-          className={`px-4 py-2 rounded ${
-            tab === "documents"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-200"
-          }`}
-        >
-          Documents
-        </button>
-
-        <button
-          onClick={() => setTab("chat")}
-          className={`px-4 py-2 rounded ${
-            tab === "chat" ? "bg-blue-600 text-white" : "bg-gray-200"
-          }`}
-        >
-          Chat / Manual Training
-        </button>
+        {["documents", "rates", "chat"].map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 rounded ${
+              tab === t ? "bg-blue-600 text-white" : "bg-gray-200"
+            }`}
+          >
+            {t === "documents"
+              ? "Documents"
+              : t === "rates"
+              ? "Rate Sheets"
+              : "Chat / Manual Training"}
+          </button>
+        ))}
       </div>
 
-      {/* ================= DOCUMENTS TAB ================= */}
+      {/* ================= DOCUMENTS ================= */}
       {tab === "documents" && (
         <>
-          <div className="border rounded p-4 space-y-4 mb-8">
-            <input
-              type="file"
-              multiple
-              onChange={(e) => setFiles(Array.from(e.target.files))}
-            />
+          <UploadBox
+            onUpload={() => upload("/api/train/sales", "documents")}
+            loading={loading}
+            setFiles={setFiles}
+            status={status}
+            label="Upload Documents"
+          />
+          <IngestStatus jobs={jobs} />
+        </>
+      )}
 
-            <button
-              onClick={uploadFiles}
-              disabled={loading}
-              className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
-            >
-              {loading ? "Uploading…" : "Upload Files"}
-            </button>
+      {/* ================= RATE SHEETS ================= */}
+      {tab === "rates" && (
+        <>
+          <UploadBox
+            onUpload={() => upload("/api/train/rates", "rate sheets")}
+            loading={loading}
+            setFiles={setFiles}
+            status={status}
+            label="Upload Rate Sheets"
+          />
 
-            {status && <div className="text-sm">{status}</div>}
-          </div>
-
-          <h2 className="text-xl font-semibold mb-2">Ingestion Status</h2>
+          <h2 className="text-xl font-semibold mb-2">
+            Active & Superseded Rate Sheets
+          </h2>
 
           <div className="border rounded divide-y text-sm">
-            {jobs.map((job) => (
-              <div key={job.id} className="flex justify-between p-2">
-                <span className="truncate max-w-[70%]">
-                  {job.original_name}
-                </span>
-                <span
-                  className={
-                    job.status === "complete"
-                      ? "text-green-600 font-semibold"
-                      : job.status === "failed"
-                      ? "text-red-600 font-semibold"
-                      : job.status === "skipped"
-                      ? "text-gray-400 font-semibold"
-                      : "text-yellow-600 font-semibold"
-                  }
-                >
-                  {job.status}
-                </span>
+            {rateJobs.map((j) => (
+              <div key={j.id} className="p-2 flex justify-between">
+                <span className="truncate">{j.original_name}</span>
+                <span className="font-semibold">{j.status}</span>
               </div>
             ))}
-
-            {!jobs.length && (
+            {!rateJobs.length && (
               <div className="p-2 text-gray-500">
-                No ingestion jobs yet.
+                No rate sheets uploaded yet.
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* ================= CHAT / MANUAL TAB ================= */}
+      {/* ================= CHAT ================= */}
       {tab === "chat" && (
         <>
           <div className="flex gap-4 mb-4">
@@ -195,38 +196,68 @@ export default function TrainPage() {
           <div className="border rounded divide-y text-sm">
             {filteredBrain.map((b) => (
               <div key={b.source_file} className="p-3 space-y-1">
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>
-                    {b.is_chat ? "Human (Chat)" : "Uploaded File"} ·{" "}
-                    {b.source_file}
-                  </span>
-                  <span>{new Date(b.created_at).toLocaleString()}</span>
+                <div className="text-xs text-gray-500">
+                  {b.source_file}
                 </div>
-
                 {b.step && (
                   <div className="text-xs font-semibold text-blue-600">
                     F&I STEP {b.step}
                   </div>
                 )}
-
-                <div className="whitespace-pre-wrap">
-                  {b.preview}
-                </div>
-
+                <div className="whitespace-pre-wrap">{b.preview}</div>
                 <div className="text-xs text-gray-500">
                   Chunks: {b.chunks}
                 </div>
               </div>
             ))}
-
-            {!filteredBrain.length && (
-              <div className="p-3 text-gray-500">
-                No chat/manual training found.
-              </div>
-            )}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/* ================= COMPONENTS ================= */
+
+function UploadBox({ onUpload, loading, setFiles, status, label }) {
+  return (
+    <div className="border rounded p-4 space-y-4 mb-8">
+      <input
+        type="file"
+        multiple
+        onChange={(e) => setFiles(Array.from(e.target.files))}
+      />
+      <button
+        onClick={onUpload}
+        disabled={loading}
+        className="w-full bg-blue-600 text-white p-3 rounded disabled:opacity-50"
+      >
+        {loading ? "Uploading…" : label}
+      </button>
+      {status && <div className="text-sm">{status}</div>}
+    </div>
+  );
+}
+
+function IngestStatus({ jobs }) {
+  return (
+    <>
+      <h2 className="text-xl font-semibold mb-2">Ingestion Status</h2>
+      <div className="border rounded divide-y text-sm">
+        {jobs.map((job) => (
+          <div key={job.id} className="flex justify-between p-2">
+            <span className="truncate max-w-[70%]">
+              {job.original_name}
+            </span>
+            <span className="font-semibold">{job.status}</span>
+          </div>
+        ))}
+        {!jobs.length && (
+          <div className="p-2 text-gray-500">
+            No ingestion jobs yet.
+          </div>
+        )}
+      </div>
+    </>
   );
 }
