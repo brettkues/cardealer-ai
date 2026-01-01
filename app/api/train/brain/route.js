@@ -15,21 +15,22 @@ export async function GET() {
     }
 
     /**
-     * Pull ALL brain content, grouped by source_file.
-     * This includes:
-     * - PDFs / uploads
-     * - Chat-authored ADD TO BRAIN entries
-     *
-     * We do NOT reprocess embeddings.
-     * We do NOT mutate data.
+     * Pull ALL brain content.
+     * RULES:
+     * - Chat entries: always included
+     * - Documents: always included
+     * - Rate sheets: ONLY newest per lender
      */
+
     const { data, error } = await supabase
       .from("sales_training_vectors")
       .select(
         `
         source_file,
         content,
-        created_at
+        created_at,
+        doc_type,
+        metadata
         `
       )
       .eq("dealer_id", DEALER_ID)
@@ -38,8 +39,21 @@ export async function GET() {
     if (error) throw error;
 
     const grouped = {};
+    const latestRateByLender = {};
 
     for (const row of data) {
+      const isChat = row.source_file.startsWith("chat:");
+      const isRate = row.doc_type === "RATE_SHEET";
+      const lender = row.metadata?.lender || null;
+
+      // 🔒 RATE SHEET FILTER — newest per lender only
+      if (isRate && lender) {
+        if (latestRateByLender[lender]) {
+          continue; // older rate sheet → ignored
+        }
+        latestRateByLender[lender] = row.source_file;
+      }
+
       if (!grouped[row.source_file]) {
         grouped[row.source_file] = {
           source_file: row.source_file,
@@ -47,13 +61,15 @@ export async function GET() {
           chunks: 0,
           preview: "",
           step: null,
-          is_chat: row.source_file.startsWith("chat:"),
+          is_chat: isChat,
+          doc_type: row.doc_type || "DOCUMENT",
+          lender,
         };
       }
 
       grouped[row.source_file].chunks += 1;
 
-      // First chunk only → preview
+      // first chunk only → preview
       if (!grouped[row.source_file].preview) {
         grouped[row.source_file].preview = row.content.slice(0, 300);
 
@@ -68,8 +84,9 @@ export async function GET() {
       ok: true,
       items: Object.values(grouped),
     });
+
   } catch (err) {
-    console.error(err);
+    console.error("BRAIN LOAD ERROR:", err);
     return NextResponse.json(
       { ok: false, error: "Failed to load brain content" },
       { status: 500 }
