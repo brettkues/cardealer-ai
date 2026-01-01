@@ -4,10 +4,12 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 
 /*
-  WORKING, BORING, DIRECT UPLOAD ROUTE
+  RESTORED, KNOWN-GOOD UPLOAD ROUTE
   - multipart/form-data
-  - supabase.storage.upload
+  - direct supabase.storage.upload
   - ingest_jobs insert
+  - NO rate logic
+  - NO signed URLs
 */
 
 export async function POST(req) {
@@ -34,7 +36,7 @@ export async function POST(req) {
 
       const filePath = `sales-training/${crypto.randomUUID()}-${file.name}`;
 
-      // 1️⃣ Upload file directly to storage
+      // 1️⃣ Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from("knowledge")
         .upload(filePath, buffer, {
@@ -47,7 +49,7 @@ export async function POST(req) {
         continue;
       }
 
-      // 2️⃣ Register ingest job
+      // 2️⃣ Create ingest job
       const { error: jobError } = await supabase
         .from("ingest_jobs")
         .insert({
