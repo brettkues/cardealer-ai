@@ -1,43 +1,54 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
-import { getUserRole } from "@/lib/auth/getUserRole";
 import { adminAuth } from "@/lib/firebaseAdmin";
+import admin from "@/lib/firebaseAdmin";
+
+// helper: get role from Firestore
+async function getFirestoreUserRole(uid) {
+  const snap = await admin
+    .firestore()
+    .collection("users")
+    .doc(uid)
+    .get();
+
+  if (!snap.exists) return "user";
+  return snap.data()?.role || "user";
+}
 
 // LIST USERS (ADMIN ONLY)
 export async function GET(req) {
   const userId = req.headers.get("x-user-id");
 
-  const role = await getUserRole(userId);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // 🔐 ADMIN CHECK — FIRESTORE IS SOURCE OF TRUTH
+  const role = await getFirestoreUserRole(userId);
   if (role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // 1️⃣ Get roles (Firebase UID based)
-  const { data: roleRows, error: roleError } = await supabase
-    .from("user_roles")
-    .select("user_id, role");
-
-  if (roleError) {
-    return NextResponse.json({ users: [] }, { status: 500 });
-  }
-
-  // 2️⃣ Get users from Firebase Admin
+  // 🔹 Get all Firebase Auth users
   const list = await adminAuth.listUsers(1000);
-  const firebaseUsers = list.users;
 
-  // 3️⃣ Merge Firebase + roles
-  const users = firebaseUsers.map((u) => {
-    const roleRow = roleRows.find((r) => r.user_id === u.uid);
+  // 🔹 Get Firestore roles
+  const roleSnaps = await admin.firestore().collection("users").get();
+  const roleMap = {};
+  roleSnaps.forEach((doc) => {
+    roleMap[doc.id] = doc.data();
+  });
 
-    let provider = "password";
-    if (u.providerData?.some((p) => p.providerId === "google.com")) {
-      provider = "google";
-    }
+  // 🔹 Merge
+  const users = list.users.map((u) => {
+    const fsUser = roleMap[u.uid] || {};
+    const provider = u.providerData?.some(p => p.providerId === "google.com")
+      ? "google"
+      : "password";
 
     return {
       user_id: u.uid,
       email: u.email,
-      role: roleRow?.role || "sales",
+      role: fsUser.role || "user",
       provider,
       created_at: u.metadata.creationTime,
     };
@@ -50,27 +61,17 @@ export async function GET(req) {
 // UPDATE ROLE (ADMIN ONLY)
 export async function POST(req) {
   const userId = req.headers.get("x-user-id");
+  const { userId: targetUid, role } = await req.json();
 
-  const role = await getUserRole(userId);
-  if (role !== "admin") {
+  const currentRole = await getFirestoreUserRole(userId);
+  if (currentRole !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { userId: targetUserId, role: newRole } = await req.json();
-  if (!targetUserId || !newRole) {
-    return NextResponse.json({ ok: false }, { status: 400 });
-  }
-
-  await supabase
-    .from("user_roles")
-    .upsert(
-      {
-        user_id: targetUserId,
-        role: newRole,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
+  await admin.firestore().collection("users").doc(targetUid).set(
+    { role },
+    { merge: true }
+  );
 
   return NextResponse.json({ ok: true });
 }
