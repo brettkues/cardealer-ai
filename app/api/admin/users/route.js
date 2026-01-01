@@ -11,16 +11,42 @@ export async function GET(req) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data, error } = await supabase
+  // 1️⃣ Get roles from DB
+  const { data: roleRows, error: roleError } = await supabase
     .from("user_roles")
-    .select("user_id, role")
-    .order("user_id");
+    .select("user_id, role");
 
-  if (error) {
+  if (roleError) {
     return NextResponse.json({ users: [] }, { status: 500 });
   }
 
-  return NextResponse.json({ users: data || [] });
+  // 2️⃣ Get users from Supabase Auth
+  const { data: authData, error: authError } =
+    await supabase.auth.admin.listUsers();
+
+  if (authError) {
+    return NextResponse.json({ users: [] }, { status: 500 });
+  }
+
+  const authUsers = authData.users || [];
+
+  // 3️⃣ Merge auth + roles
+  const users = authUsers.map((u) => {
+    const roleRow = roleRows.find((r) => r.user_id === u.id);
+
+    return {
+      user_id: u.id,
+      email: u.email,
+      role: roleRow?.role || "sales",
+      provider: u.app_metadata?.provider || "password",
+      created_at: u.created_at,
+    };
+  });
+
+  // Optional: stable sort by email
+  users.sort((a, b) => (a.email || "").localeCompare(b.email || ""));
+
+  return NextResponse.json({ users });
 }
 
 // UPDATE ROLE (ADMIN ONLY)
