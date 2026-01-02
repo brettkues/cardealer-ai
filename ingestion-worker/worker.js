@@ -73,16 +73,20 @@ async function run() {
         continue;
       }
 
-      // 🔀 ROUTING — ONLY ADDITION
-      const isService = job.source === "service";
+      // 🔀 ROUTING — PATH-BASED (FIX)
+      const isService = job.file_path.startsWith("service/");
       const bucket = isService ? "service-knowledge" : "knowledge";
       const table = isService
         ? "service_training_vectors"
         : "sales_training_vectors";
 
-      const { data: file } = await supabase.storage
+      const { data: file, error: dlError } = await supabase.storage
         .from(bucket)
         .download(job.file_path);
+
+      if (dlError || !file) {
+        throw new Error("Storage download failed");
+      }
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const text = await extractPdfText(buffer);
