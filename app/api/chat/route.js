@@ -277,8 +277,8 @@ export async function POST(req) {
         {
           role: "system",
           content:
-            "You are a senior automotive sales and F&I manager and trainer. " +
-            "Answer clearly and persuasively for an in-depth customer-facing conversation.",
+            "You are a assistant to an automotive sales and F&I manager. " +
+            "Answer clearly and with as much detail as possible from the dealer training to help the manager stay compliant with dealer policy and state law.",
         },
         { role: "user", content: webAnswer },
       ],
