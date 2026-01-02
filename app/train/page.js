@@ -86,7 +86,7 @@ export default function TrainPage() {
           onClick={() => setTab("rates")}
           className={`px-4 py-2 rounded border ${
             tab === "rates"
-              ? "bg-gray-600 text-white"
+              ? "bg-green-600 text-white"
               : "bg-green-100 hover:bg-green-200"
           }`}
         >
