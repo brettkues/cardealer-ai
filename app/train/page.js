@@ -1,56 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function TrainPage() {
   const [files, setFiles] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
-  const [jobs, setJobs] = useState([]);
-
   const [tab, setTab] = useState("documents");
-  const [brain, setBrain] = useState([]);
-  const [search, setSearch] = useState("");
 
-  /* ================= DOCUMENT UPLOAD ================= */
+  /* ================= UPLOAD ================= */
 
-  async function uploadDocuments() {
-    if (!files.length) return alert("No files selected");
+  async function upload(endpoint, label) {
+    if (!files.length) {
+      alert(`No ${label} selected`);
+      return;
+    }
+
     setLoading(true);
-    setStatus("Uploading documents…");
+    setStatus(`Uploading ${label}…`);
 
     const form = new FormData();
-    files.forEach(f => form.append("files", f));
+    files.forEach((f) => form.append("files", f));
 
-    const res = await fetch("/api/train/sales", { method: "POST", body: form });
-    const data = await res.json();
+    const res = await fetch(endpoint, {
+      method: "POST",
+      body: form,
+    });
 
-    setLoading(false);
-    if (!data.ok) return setStatus("Upload failed");
-
-    setFiles([]);
-    setStatus("Documents uploaded");
-    fetchStatus();
-  }
-
-  /* ================= RATE SHEET UPLOAD ================= */
-
-  async function uploadRateSheets() {
-    if (!files.length) return alert("No rate sheets selected");
-    setLoading(true);
-    setStatus("Uploading rate sheets…");
-
-    const form = new FormData();
-    files.forEach(f => form.append("files", f));
-
-    const res = await fetch("/api/train/rates", { method: "POST", body: form });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      setLoading(false);
+      setStatus(`${label} upload failed (server error)`);
+      return;
+    }
 
     setLoading(false);
-    if (!data.ok) return setStatus("Rate upload failed");
+
+    if (!res.ok || !data.ok) {
+      setStatus(`${label} upload failed`);
+      return;
+    }
 
     setFiles([]);
-    setStatus("Rate sheets uploaded");
+    setStatus(`${label} uploaded successfully`);
     fetchStatus();
   }
 
@@ -62,87 +57,110 @@ export default function TrainPage() {
     if (data.ok) setJobs(data.jobs);
   }
 
-  async function fetchBrain() {
-    const res = await fetch("/api/train/brain", { cache: "no-store" });
-    const data = await res.json();
-    if (data.ok) setBrain(data.items);
-  }
-
   useEffect(() => {
     fetchStatus();
-    fetchBrain();
     const id = setInterval(fetchStatus, 5000);
     return () => clearInterval(id);
   }, []);
 
-  const filteredBrain = useMemo(() => {
-    if (!search) return brain;
-    return brain.filter(b =>
-      (b.preview || "").toLowerCase().includes(search.toLowerCase())
-    );
-  }, [brain, search]);
-
-  const rateJobs = useMemo(
-    () => jobs.filter(j => j.original_name?.toLowerCase().includes("rate")),
-    [jobs]
-  );
-
   /* ================= UI ================= */
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Train AI</h1>
 
+      {/* Tabs */}
       <div className="flex gap-4 mb-6">
-        <button onClick={() => setTab("documents")}>Documents</button>
-        <button onClick={() => setTab("rates")}>Rate Sheets</button>
-        <button onClick={() => setTab("chat")}>Chat / Manual Training</button>
+        {["documents", "rates", "chat"].map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 rounded border ${
+              tab === t
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 hover:bg-gray-200"
+            }`}
+          >
+            {t === "documents"
+              ? "Documents"
+              : t === "rates"
+              ? "Rate Sheets"
+              : "Chat / Manual Training"}
+          </button>
+        ))}
       </div>
 
+      {/* Documents */}
       {tab === "documents" && (
-        <>
-          <input type="file" multiple onChange={e => setFiles([...e.target.files])} />
-          <button onClick={uploadDocuments} disabled={loading}>
+        <div className="space-y-4">
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setFiles([...e.target.files])}
+          />
+
+          <button
+            onClick={() => upload("/api/train/sales", "documents")}
+            disabled={loading}
+            className="px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
             {loading ? "Uploading…" : "Upload Documents"}
           </button>
-          {status && <div>{status}</div>}
-        </>
+
+          {status && <div className="text-sm">{status}</div>}
+        </div>
       )}
 
+      {/* Rate Sheets */}
       {tab === "rates" && (
-        <>
-          <input type="file" multiple onChange={e => setFiles([...e.target.files])} />
-          <button onClick={uploadRateSheets} disabled={loading}>
+        <div className="space-y-4">
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setFiles([...e.target.files])}
+          />
+
+          <button
+            onClick={() => upload("/api/train/rates", "rate sheets")}
+            disabled={loading}
+            className="px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+          >
             {loading ? "Uploading…" : "Upload Rate Sheets"}
           </button>
 
-          <h3 className="mt-4 font-semibold">Latest Rate Sheets</h3>
-          {rateJobs.map(j => (
-            <div key={j.id}>{j.original_name} — {j.status}</div>
-          ))}
-        </>
+          {status && <div className="text-sm">{status}</div>}
+        </div>
       )}
 
+      {/* Chat */}
       {tab === "chat" && (
-        <>
-          <input
-            placeholder="Search training…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          {filteredBrain.map(b => (
-            <div key={b.source_file}>
-              <div>{b.source_file}</div>
-              <pre>{b.preview}</pre>
-            </div>
-          ))}
-        </>
+        <div className="text-sm text-gray-600">
+          Chat / manual training entries are visible in the AI Review panel.
+        </div>
       )}
 
-      <h2 className="mt-6 font-semibold">Ingestion Status</h2>
-      {jobs.map(j => (
-        <div key={j.id}>{j.original_name} — {j.status}</div>
-      ))}
+      {/* Status */}
+      <h2 className="mt-8 font-semibold">Ingestion Status</h2>
+      <div className="mt-2 space-y-1 text-sm">
+        {jobs.map((j) => (
+          <div key={j.id}>
+            {j.original_name} —{" "}
+            <span
+              className={
+                j.status === "complete"
+                  ? "text-green-600"
+                  : j.status === "failed"
+                  ? "text-red-600"
+                  : j.status === "superseded"
+                  ? "text-gray-400"
+                  : "text-yellow-600"
+              }
+            >
+              {j.status}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
