@@ -43,8 +43,6 @@ async function extractPdfText(buffer) {
 }
 
 async function run() {
-  console.log("🔍 Checking for pending ingest jobs…");
-
   const { data: jobs, error } = await supabase
     .from("ingest_jobs")
     .select("*")
@@ -52,20 +50,17 @@ async function run() {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.error("❌ JOB FETCH ERROR:", error.message);
-    return;
+    console.error("JOB FETCH ERROR", error);
+    process.exit(1);
   }
 
   if (!jobs || jobs.length === 0) {
-    console.log("✅ No pending jobs");
     return;
   }
 
   for (const job of jobs) {
-    console.log("📄 Processing:", job.original_name);
-
     try {
-      if (!job.original_name.toLowerCase().endsWith(".pdf")) {
+      if (!job.file_path || !job.file_path.toLowerCase().endsWith(".pdf")) {
         await supabase
           .from("ingest_jobs")
           .update({ status: "skipped" })
@@ -73,20 +68,18 @@ async function run() {
         continue;
       }
 
-      // 🔀 ROUTING — PATH-BASED (FIX)
       let bucket;
-let table;
+      let table;
 
-if (job.file_path.startsWith("service/")) {
-  bucket = "service-knowledge";
-  table = "service_training_vectors";
-} else if (job.file_path.startsWith("sales-training/")) {
-  bucket = "knowledge";
-  table = "sales_training_vectors";
-} else {
-  throw new Error(`Unknown file_path prefix: ${job.file_path}`);
-}
-
+      if (job.file_path.startsWith("service/")) {
+        bucket = "service-knowledge";
+        table = "service_training_vectors";
+      } else if (job.file_path.startsWith("sales-training/")) {
+        bucket = "knowledge";
+        table = "sales_training_vectors";
+      } else {
+        throw new Error(`Unknown file_path prefix: ${job.file_path}`);
+      }
 
       const { data: file, error: dlError } = await supabase.storage
         .from(bucket)
@@ -97,64 +90,4 @@ if (job.file_path.startsWith("service/")) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const text = await extractPdfText(buffer);
-
-      if (!text || text.length < 200) {
-        await supabase
-          .from("ingest_jobs")
-          .update({ status: "skipped" })
-          .eq("id", job.id);
-        continue;
-      }
-
-      // Replace existing vectors for same file
-      await supabase
-        .from(table)
-        .delete()
-        .eq("dealer_id", DEALER_ID)
-        .eq("source_file", job.original_name);
-
-      const chunks = chunkText(text);
-
-      for (const chunk of chunks) {
-        const emb = await openai.embeddings.create({
-          model: "text-embedding-3-small",
-          input: chunk.content,
-        });
-
-        const { error: insertError } = await supabase.from(table).insert({
-  dealer_id: DEALER_ID,
-  source_file: job.original_name,
-  chunk_index: chunk.index,
-  content: chunk.content,
-  embedding: emb.data[0].embedding,
-});
-
-if (insertError) {
-  throw insertError;
-}
-
-      }
-
-      await supabase
-        .from("ingest_jobs")
-        .update({ status: "complete" })
-        .eq("id", job.id);
-
-      console.log("✅ DONE:", job.original_name);
-    } catch (err) {
-  console.error("❌ FAILED:", job.original_name);
-  console.error(err);
-
-  await supabase
-    .from("ingest_jobs")
-    .update({ status: "failed" })
-    .eq("id", job.id);
-
-  throw err; // 🔴 FORCE GITHUB ACTION TO FAIL
-}
-
-  }
-}
-
-run().catch(console.error);
+      const text = a
