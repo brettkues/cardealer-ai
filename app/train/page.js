@@ -127,7 +127,8 @@ export default function TrainPage() {
           <button
             onClick={() => upload("/api/train/rates", "rate sheets")}
             disabled={loading}
-            className="px-6 py-3 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+            className="px-6 py-3 bg-green-700 text-white rounded border-2 border-green-900 shadow-lg hover:bg-green-800 disabled:opacity-50"
+
           >
             {loading ? "Uploading…" : "Upload Rate Sheets"}
           </button>
