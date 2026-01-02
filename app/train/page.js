@@ -71,23 +71,27 @@ export default function TrainPage() {
 
       {/* Tabs */}
       <div className="flex gap-4 mb-6">
-        {["documents", "rates", "chat"].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded border ${
-              tab === t
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 hover:bg-gray-200"
-            }`}
-          >
-            {t === "documents"
-              ? "Documents"
-              : t === "rates"
-              ? "Rate Sheets"
-              : "Chat / Manual Training"}
-          </button>
-        ))}
+        <button
+          onClick={() => setTab("documents")}
+          className={`px-4 py-2 rounded border ${
+            tab === "documents"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 hover:bg-gray-200"
+          }`}
+        >
+          Documents
+        </button>
+
+        <button
+          onClick={() => setTab("rates")}
+          className={`px-4 py-2 rounded border ${
+            tab === "rates"
+              ? "bg-green-600 text-white"
+              : "bg-gray-100 hover:bg-gray-200"
+          }`}
+        >
+          Rate Sheets
+        </button>
       </div>
 
       {/* Documents */}
@@ -129,13 +133,6 @@ export default function TrainPage() {
           </button>
 
           {status && <div className="text-sm">{status}</div>}
-        </div>
-      )}
-
-      {/* Chat */}
-      {tab === "chat" && (
-        <div className="text-sm text-gray-600">
-          Chat / manual training entries are visible in the AI Review panel.
         </div>
       )}
 
