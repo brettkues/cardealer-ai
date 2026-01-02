@@ -13,8 +13,6 @@ export default function ServiceAssistant() {
 
   const role = "manager";
 
-  /* ================= CHAT ================= */
-
   async function sendMessage() {
     if (!msg.trim() || loading) return;
 
@@ -66,8 +64,6 @@ export default function ServiceAssistant() {
     }
   }
 
-  /* ================= SERVICE TRAINING UPLOAD ================= */
-
   async function uploadServiceTraining() {
     if (!files.length || uploading) return;
 
@@ -76,7 +72,6 @@ export default function ServiceAssistant() {
 
     try {
       for (const file of files) {
-        // INIT
         const init = await fetch("/api/train/service", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -89,7 +84,6 @@ export default function ServiceAssistant() {
         const initData = await init.json();
         if (!init.ok || !initData.ok) throw new Error();
 
-        // DIRECT PUT TO SUPABASE
         const put = await fetch(initData.uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": file.type },
@@ -98,7 +92,6 @@ export default function ServiceAssistant() {
 
         if (!put.ok) throw new Error();
 
-        // FINALIZE
         const fin = await fetch("/api/train/service/finish", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -127,7 +120,7 @@ export default function ServiceAssistant() {
         <h1 className="text-xl font-bold">Service Assistant</h1>
       </div>
 
-      {/* SERVICE TRAINING */}
+      {/* SERVICE TRAINING UPLOAD */}
       <div className="p-4 bg-white border-b">
         <h2 className="font-semibold mb-2">Service Training Upload</h2>
 
@@ -136,11 +129,4 @@ export default function ServiceAssistant() {
           multiple
           accept="application/pdf"
           onChange={(e) => setFiles([...e.target.files])}
-        />
-
-        <button
-          onClick={uploadServiceTraining}
-          disabled={uploading}
-          className="ml-3 px-4 py-2 bg-green-700 text-white rounded disabled:opacity-50"
-        >
-          Upload Service Tr
+        /
