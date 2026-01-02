@@ -135,12 +135,17 @@ if (insertError) {
 
       console.log("✅ DONE:", job.original_name);
     } catch (err) {
-      console.error("❌ FAILED:", job.original_name, err);
-      await supabase
-        .from("ingest_jobs")
-        .update({ status: "failed" })
-        .eq("id", job.id);
-    }
+  console.error("❌ FAILED:", job.original_name);
+  console.error(err);
+
+  await supabase
+    .from("ingest_jobs")
+    .update({ status: "failed" })
+    .eq("id", job.id);
+
+  throw err; // 🔴 FORCE GITHUB ACTION TO FAIL
+}
+
   }
 }
 
