@@ -76,7 +76,7 @@ export default function TrainPage() {
           className={`px-4 py-2 rounded border ${
             tab === "documents"
               ? "bg-blue-600 text-white"
-              : "bg-gray-100 hover:bg-gray-200"
+              : "bg-green-100 hover:bg-green-200"
           }`}
         >
           Documents
@@ -87,7 +87,7 @@ export default function TrainPage() {
           className={`px-4 py-2 rounded border ${
             tab === "rates"
               ? "bg-green-600 text-white"
-              : "bg-gray-100 hover:bg-gray-200"
+              : "bg-green-100 hover:bg-green-200"
           }`}
         >
           Rate Sheets
@@ -149,7 +149,7 @@ export default function TrainPage() {
                   : j.status === "failed"
                   ? "text-red-600"
                   : j.status === "superseded"
-                  ? "text-gray-400"
+                  ? "text-green-400"
                   : "text-yellow-600"
               }
             >
