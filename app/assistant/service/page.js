@@ -115,12 +115,10 @@ export default function ServiceAssistant() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* HEADER */}
       <div className="px-6 py-3 border-b bg-white">
         <h1 className="text-xl font-bold">Service Assistant</h1>
       </div>
 
-      {/* SERVICE TRAINING UPLOAD */}
       <div className="p-4 bg-white border-b">
         <h2 className="font-semibold mb-2">Service Training Upload</h2>
 
@@ -129,4 +127,59 @@ export default function ServiceAssistant() {
           multiple
           accept="application/pdf"
           onChange={(e) => setFiles([...e.target.files])}
-        /
+        />
+
+        <button
+          onClick={uploadServiceTraining}
+          disabled={uploading}
+          className="ml-3 px-4 py-2 bg-green-700 text-white rounded disabled:opacity-50"
+        >
+          Upload Service Training
+        </button>
+
+        {uploadStatus && (
+          <div className="mt-2 text-sm text-gray-600">{uploadStatus}</div>
+        )}
+      </div>
+
+      <div className="p-4 border-b bg-gray-50 flex gap-2">
+        <textarea
+          className="flex-1 p-3 border rounded"
+          placeholder="Ask a service question…"
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={2}
+          disabled={loading}
+        />
+        <button
+          onClick={sendMessage}
+          disabled={loading}
+          className="px-5 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+        >
+          Send
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4">
+        {chat.map((m) => (
+          <div key={m._id} className="mb-4">
+            <div className="font-semibold">
+              {m.role === "user" ? "You" : "Service Assistant"}
+            </div>
+            <div className="whitespace-pre-wrap">{m.content}</div>
+            {m.source && (
+              <div className="text-xs text-gray-500">{m.source}</div>
+            )}
+          </div>
+        ))}
+
+        {loading && (
+          <div className="text-sm text-gray-500">
+            Service Assistant is typing…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
