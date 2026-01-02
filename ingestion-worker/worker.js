@@ -74,11 +74,19 @@ async function run() {
       }
 
       // 🔀 ROUTING — PATH-BASED (FIX)
-      const isService = job.file_path.startsWith("service/");
-      const bucket = isService ? "service-knowledge" : "knowledge";
-      const table = isService
-        ? "service_training_vectors"
-        : "sales_training_vectors";
+      let bucket;
+let table;
+
+if (job.file_path.startsWith("service/")) {
+  bucket = "service-knowledge";
+  table = "service_training_vectors";
+} else if (job.file_path.startsWith("sales-training/")) {
+  bucket = "knowledge";
+  table = "sales_training_vectors";
+} else {
+  throw new Error(`Unknown file_path prefix: ${job.file_path}`);
+}
+
 
       const { data: file, error: dlError } = await supabase.storage
         .from(bucket)
