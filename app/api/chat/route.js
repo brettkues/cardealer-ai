@@ -1,5 +1,5 @@
 // app/api/chat/route.js
-// FULL DROP-IN REPLACEMENT — TRAINING → RELEVANCE GATE → WEB → ASK TO SAVE
+// FULL DROP-IN — ORIGINAL LOGIC PRESERVED + HARD GUARDS ADDED
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -27,6 +27,12 @@ function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
 
+function isRateQuestion(text) {
+  return /\b(rate|rates|term|terms|months|72|84|96|gap|max gap|backend|advance|ltv)\b/i.test(
+    text || ""
+  );
+}
+
 /* ================= QUESTION FRAMING ================= */
 
 async function frameQuestion(originalQuestion) {
@@ -39,13 +45,12 @@ async function frameQuestion(originalQuestion) {
         content:
           "You are an intent interpreter for an automotive sales and F&I assistant. " +
           "Rewrite the user's question into a clear, explicit internal question that removes ambiguity, " +
-          "clarifies comparisons, and preserves important qualifiers (such as new vs used, dealer type, risk, or intent). " +
+          "clarifies comparisons, and preserves important qualifiers. " +
           "Do NOT answer the question. Output ONLY the rewritten question.",
       },
       { role: "user", content: originalQuestion },
     ],
   });
-
   return response.choices[0].message.content.trim();
 }
 
@@ -95,7 +100,6 @@ async function searchWeb(query) {
       max_results: 5,
     }),
   });
-
   if (!res.ok) return "";
   const data = await res.json();
   return data.answer || "";
@@ -119,11 +123,10 @@ async function trainingIsRelevant(question, trainingText) {
       },
     ],
   });
-
   return check.choices[0].message.content.toLowerCase().includes("yes");
 }
 
-/* ================= SAVE TO BRAIN (FIXED & REQUIRED) ================= */
+/* ================= SAVE TO BRAIN ================= */
 
 async function saveToBrain({ content, source_file }) {
   const DEALER_ID = process.env.DEALER_ID;
@@ -164,10 +167,15 @@ async function saveToBrain({ content, source_file }) {
 
 export async function POST(req) {
   try {
-    const { message, userId = "default", role = "sales", domain = "sales", sessionId } =
-      await req.json();
+    const {
+      message,
+      userId = "default",
+      role = "sales",
+      domain = "sales",
+      sessionId,
+    } = await req.json();
 
-    /* ===== ADD TO BRAIN (FIXED) ===== */
+    /* ===== ADD TO BRAIN ===== */
 
     const brainMatch = message.match(
       /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
@@ -182,10 +190,9 @@ export async function POST(req) {
       }
 
       const content = message.slice(brainMatch[0].length).trim();
-
       if (!content) {
         return NextResponse.json({
-          answer: "Nothing to save. Please include training content after 'ADD TO BRAIN:'.",
+          answer: "Nothing to save. Please include training content.",
           source: "Brain training",
         });
       }
@@ -232,9 +239,38 @@ export async function POST(req) {
 
     const hits = await retrieveKnowledge(framedQuestion, domain);
 
+    /* ===== SERVICE HARD STOP (NEW) ===== */
+
+    if (domain === "service") {
+      if (!hits || hits.length < 2) {
+        return NextResponse.json({
+          answer:
+            "I don’t have that information in the Service knowledge library yet. " +
+            "Please upload the relevant manual, warranty bulletin, or claims guide.",
+          source: "service-knowledge",
+        });
+      }
+    }
+
+    /* ===== RATE SHEET HARD STOP (NEW) ===== */
+
+    if ((domain === "sales" || domain === "fi") && isRateQuestion(framedQuestion)) {
+      if (!hits || hits.length === 0) {
+        return NextResponse.json({
+          answer:
+            "I don’t have a valid rate sheet that answers this question. " +
+            "Please upload the current rate sheet.",
+          source: "rate-sheets",
+        });
+      }
+    }
+
     if (hits && hits.length) {
       const combinedTraining = hits.join("\n\n");
-      const relevant = await trainingIsRelevant(framedQuestion, combinedTraining);
+      const relevant = await trainingIsRelevant(
+        framedQuestion,
+        combinedTraining
+      );
 
       if (relevant) {
         const response = await openai.chat.completions.create({
@@ -245,7 +281,7 @@ export async function POST(req) {
               role: "system",
               content:
                 "You are a senior automotive sales and F&I manager and trainer. " +
-                "Answer with details directly and persuasively using ONLY the dealership training below.\n\n" +
+                "Answer using ONLY the dealership training below.\n\n" +
                 combinedTraining,
             },
             { role: "user", content: framedQuestion },
@@ -262,7 +298,6 @@ export async function POST(req) {
     /* ================= WEB FALLBACK ================= */
 
     const webAnswer = await searchWeb(framedQuestion);
-
     if (!webAnswer) {
       return NextResponse.json({
         answer: "No internal or external information found." + fiContinuation(sessionId),
@@ -277,8 +312,7 @@ export async function POST(req) {
         {
           role: "system",
           content:
-            "You are a assistant to an automotive sales and F&I manager. " +
-            "Answer clearly and persuasively for a customer-facing conversation.",
+            "You are an assistant to an automotive sales and F&I manager.",
         },
         { role: "user", content: webAnswer },
       ],
