@@ -114,13 +114,18 @@ async function run() {
           input: chunk.content,
         });
 
-        await supabase.from(table).insert({
-          dealer_id: DEALER_ID,
-          source_file: job.original_name,
-          chunk_index: chunk.index,
-          content: chunk.content,
-          embedding: emb.data[0].embedding,
-        });
+        const { error: insertError } = await supabase.from(table).insert({
+  dealer_id: DEALER_ID,
+  source_file: job.original_name,
+  chunk_index: chunk.index,
+  content: chunk.content,
+  embedding: emb.data[0].embedding,
+});
+
+if (insertError) {
+  throw insertError;
+}
+
       }
 
       await supabase
