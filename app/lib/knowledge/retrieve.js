@@ -73,7 +73,8 @@ export async function retrieveKnowledge(message, domain = "sales") {
     rpcName,
     {
       query_embedding: queryEmbedding,
-      match_threshold: 0.15,
+      match_threshold:
+  domain === "fi" ? 0.25 : 0.15,
       match_count: 10,
       dealer_id_param: DEALER_ID,
     }
