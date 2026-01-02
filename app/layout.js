@@ -78,6 +78,7 @@ export default function RootLayout({ children }) {
               <Link href="/assistant/sales">Sales Assistant</Link>
 
               <Link href="/assistant/fi">F&I Assistant</Link>
+          <Link href="/assistant/service">Service Assistant</Link>
 
               {(role === "manager" || role === "admin") && (
                 <Link href="/train">Train Your AI</Link>
