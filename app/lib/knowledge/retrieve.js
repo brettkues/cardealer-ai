@@ -64,8 +64,13 @@ export async function retrieveKnowledge(message, domain = "sales") {
 
   /* ================= VECTOR SEARCH ================= */
 
+  const rpcName =
+    domain === "service"
+      ? "match_service_training_vectors"
+      : "match_sales_training_vectors";
+
   const { data, error } = await supabase.rpc(
-    "match_sales_training_vectors",
+    rpcName,
     {
       query_embedding: queryEmbedding,
       match_threshold: 0.15,
