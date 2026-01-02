@@ -16,22 +16,18 @@ export default function TrainPage() {
 
   async function uploadDocuments() {
     if (!files.length) return alert("No files selected");
-
     setLoading(true);
     setStatus("Uploading documents…");
 
     const form = new FormData();
     files.forEach(f => form.append("files", f));
 
-    const res = await fetch("/api/train/sales", {
-      method: "POST",
-      body: form,
-    });
-
+    const res = await fetch("/api/train/sales", { method: "POST", body: form });
     const data = await res.json();
-    setLoading(false);
 
+    setLoading(false);
     if (!data.ok) return setStatus("Upload failed");
+
     setFiles([]);
     setStatus("Documents uploaded");
     fetchStatus();
@@ -41,22 +37,18 @@ export default function TrainPage() {
 
   async function uploadRateSheets() {
     if (!files.length) return alert("No rate sheets selected");
-
     setLoading(true);
     setStatus("Uploading rate sheets…");
 
     const form = new FormData();
     files.forEach(f => form.append("files", f));
 
-    const res = await fetch("/api/train/rates", {
-      method: "POST",
-      body: form,
-    });
-
+    const res = await fetch("/api/train/rates", { method: "POST", body: form });
     const data = await res.json();
-    setLoading(false);
 
+    setLoading(false);
     if (!data.ok) return setStatus("Rate upload failed");
+
     setFiles([]);
     setStatus("Rate sheets uploaded");
     fetchStatus();
@@ -86,9 +78,14 @@ export default function TrainPage() {
   const filteredBrain = useMemo(() => {
     if (!search) return brain;
     return brain.filter(b =>
-      b.preview.toLowerCase().includes(search.toLowerCase())
+      (b.preview || "").toLowerCase().includes(search.toLowerCase())
     );
   }, [brain, search]);
+
+  const rateJobs = useMemo(
+    () => jobs.filter(j => j.original_name?.toLowerCase().includes("rate")),
+    [jobs]
+  );
 
   /* ================= UI ================= */
 
@@ -118,7 +115,11 @@ export default function TrainPage() {
           <button onClick={uploadRateSheets} disabled={loading}>
             {loading ? "Uploading…" : "Upload Rate Sheets"}
           </button>
-          {status && <div>{status}</div>}
+
+          <h3 className="mt-4 font-semibold">Latest Rate Sheets</h3>
+          {rateJobs.map(j => (
+            <div key={j.id}>{j.original_name} — {j.status}</div>
+          ))}
         </>
       )}
 
