@@ -1,58 +1,41 @@
-// app/api/train/brain/route.js
-
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
 export async function GET() {
   try {
     const DEALER_ID = process.env.DEALER_ID;
-
     if (!DEALER_ID) {
-      return NextResponse.json(
-        { ok: false, error: "Missing dealer context" },
-        { status: 500 }
-      );
+      return NextResponse.json({ ok: false }, { status: 500 });
     }
 
-    /**
-     * Pull ALL brain content.
-     * RULES:
-     * - Chat entries: always included
-     * - Documents: always included
-     * - Rate sheets: ONLY newest per lender
-     */
+    // 1️⃣ Get allowed rate-sheet source files (newest only)
+    const { data: rateRows, error: rateErr } = await supabase
+      .from("latest_rate_sheets")
+      .select("file_path");
 
+    if (rateErr) throw rateErr;
+
+    const allowedRateSources = new Set(
+      (rateRows || []).map(r => r.file_path)
+    );
+
+    // 2️⃣ Pull all training vectors
     const { data, error } = await supabase
       .from("sales_training_vectors")
-      .select(
-        `
-        source_file,
-        content,
-        created_at,
-        doc_type,
-        metadata
-        `
-      )
+      .select("source_file, content, created_at")
       .eq("dealer_id", DEALER_ID)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
 
     const grouped = {};
-    const latestRateByLender = {};
 
     for (const row of data) {
       const isChat = row.source_file.startsWith("chat:");
-      const isRate = row.doc_type === "RATE_SHEET";
-      const lender = row.metadata?.lender || null;
+      const isRate = row.source_file.toLowerCase().includes("rate");
 
-      // 🔒 RATE SHEET FILTER — newest per lender only
-      if (isRate && lender) {
-        if (latestRateByLender[lender]) {
-          continue; // older rate sheet → ignored
-        }
-        latestRateByLender[lender] = row.source_file;
-      }
+      // 🔒 filter old rate sheets
+      if (isRate && !allowedRateSources.has(row.source_file)) continue;
 
       if (!grouped[row.source_file]) {
         grouped[row.source_file] = {
@@ -60,23 +43,14 @@ export async function GET() {
           created_at: row.created_at,
           chunks: 0,
           preview: "",
-          step: null,
           is_chat: isChat,
-          doc_type: row.doc_type || "DOCUMENT",
-          lender,
         };
       }
 
-      grouped[row.source_file].chunks += 1;
+      grouped[row.source_file].chunks++;
 
-      // first chunk only → preview
       if (!grouped[row.source_file].preview) {
         grouped[row.source_file].preview = row.content.slice(0, 300);
-
-        const stepMatch = row.content.match(/\[F&I STEP\s+(\d+)\]/i);
-        if (stepMatch) {
-          grouped[row.source_file].step = stepMatch[1];
-        }
       }
     }
 
@@ -85,11 +59,7 @@ export async function GET() {
       items: Object.values(grouped),
     });
 
-  } catch (err) {
-    console.error("BRAIN LOAD ERROR:", err);
-    return NextResponse.json(
-      { ok: false, error: "Failed to load brain content" },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
 }
