@@ -244,7 +244,7 @@ export async function POST(req) {
             {
               role: "system",
               content:
-                "You are a senior automotive sales and F&I expert manager and trainer. " +
+                "You are a senior automotive sales and F&I manager and trainer. " +
                 "Answer with details directly and persuasively using ONLY the dealership training below.\n\n" +
                 combinedTraining,
             },
