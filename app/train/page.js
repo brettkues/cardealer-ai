@@ -76,7 +76,7 @@ export default function TrainPage() {
           className={`px-4 py-2 rounded border ${
             tab === "documents"
               ? "bg-blue-600 text-white"
-              : "bg-green-100 hover:bg-green-200"
+              : "bg-gray-100 hover:bg-gray-200"
           }`}
         >
           Documents
@@ -86,7 +86,7 @@ export default function TrainPage() {
           onClick={() => setTab("rates")}
           className={`px-4 py-2 rounded border ${
             tab === "rates"
-              ? "bg-green-600 text-white"
+              ? "bg-gray-600 text-white"
               : "bg-green-100 hover:bg-green-200"
           }`}
         >
@@ -127,7 +127,7 @@ export default function TrainPage() {
           <button
             onClick={() => upload("/api/train/rates", "rate sheets")}
             disabled={loading}
-            className="px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            className="px-6 py-3 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
           >
             {loading ? "Uploading…" : "Upload Rate Sheets"}
           </button>
@@ -145,11 +145,11 @@ export default function TrainPage() {
             <span
               className={
                 j.status === "complete"
-                  ? "text-green-600"
+                  ? "text-gray-600"
                   : j.status === "failed"
                   ? "text-red-600"
                   : j.status === "superseded"
-                  ? "text-green-400"
+                  ? "text-gray-400"
                   : "text-yellow-600"
               }
             >
