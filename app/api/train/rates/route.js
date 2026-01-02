@@ -12,18 +12,21 @@ export async function POST(req) {
 
     const form = await req.formData();
     const files = form.getAll("files");
-
     if (!files.length) {
-      return NextResponse.json(
-        { ok: false, error: "No files uploaded" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false }, { status: 400 });
     }
 
     let uploaded = 0;
 
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer());
+
+      // 🔒 supersede older rate sheets with same filename
+      await supabase
+        .from("ingest_jobs")
+        .update({ status: "superseded" })
+        .ilike("original_name", file.name)
+        .neq("status", "superseded");
 
       const filePath = `rate-sheets/${crypto.randomUUID()}-${file.name}`;
 
@@ -47,11 +50,7 @@ export async function POST(req) {
     }
 
     return NextResponse.json({ ok: true, stored: uploaded });
-
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
 }
