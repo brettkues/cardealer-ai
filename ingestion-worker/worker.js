@@ -73,8 +73,15 @@ async function run() {
         continue;
       }
 
+      // 🔀 ROUTING — ONLY ADDITION
+      const isService = job.source === "service";
+      const bucket = isService ? "service-knowledge" : "knowledge";
+      const table = isService
+        ? "service_training_vectors"
+        : "sales_training_vectors";
+
       const { data: file } = await supabase.storage
-        .from("knowledge")
+        .from(bucket)
         .download(job.file_path);
 
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -90,7 +97,7 @@ async function run() {
 
       // Replace existing vectors for same file
       await supabase
-        .from("sales_training_vectors")
+        .from(table)
         .delete()
         .eq("dealer_id", DEALER_ID)
         .eq("source_file", job.original_name);
@@ -103,7 +110,7 @@ async function run() {
           input: chunk.content,
         });
 
-        await supabase.from("sales_training_vectors").insert({
+        await supabase.from(table).insert({
           dealer_id: DEALER_ID,
           source_file: job.original_name,
           chunk_index: chunk.index,
