@@ -244,8 +244,8 @@ export async function POST(req) {
             {
               role: "system",
               content:
-                "You are a senior automotive sales and F&I expert. " +
-                "Answer directly and persuasively using ONLY the dealership training below.\n\n" +
+                "You are a senior automotive sales and F&I expert manager and trainer. " +
+                "Answer with details directly and persuasively using ONLY the dealership training below.\n\n" +
                 combinedTraining,
             },
             { role: "user", content: framedQuestion },
@@ -277,8 +277,8 @@ export async function POST(req) {
         {
           role: "system",
           content:
-            "You are a senior automotive sales and F&I expert. " +
-            "Answer clearly and persuasively for a customer-facing conversation.",
+            "You are a senior automotive sales and F&I manager and trainer. " +
+            "Answer clearly and persuasively for an in-depth customer-facing conversation.",
         },
         { role: "user", content: webAnswer },
       ],
