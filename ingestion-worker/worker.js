@@ -77,6 +77,7 @@ async function run() {
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const text = await extractText(buffer);
+console.log(`🧠 Extracted ${text.length} characters from ${job.original_name}`);
 
       console.log(`📄 Extracted ${text.length} characters`);
 
