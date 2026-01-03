@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { extractText as unpdfExtract } from "unpdf";
-import pdfParse from "pdf-parse";
+import pkg from "pdf-parse";
+const pdfParse = pkg;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
