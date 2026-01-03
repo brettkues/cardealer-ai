@@ -70,7 +70,7 @@ async function run() {
 
       const { data: file, error: dlError } = await supabase.storage
         .from(bucket)
-        .download(job.file_path.replace(`${prefix}/`, ""));
+        .download(job.file_path); // ✅ FIXED: use full path without replace()
 
       if (dlError || !file) {
         console.error("❌ File download failed");
