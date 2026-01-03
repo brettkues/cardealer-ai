@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import OpenAI from "openai";
+import { extractText } from "unpdf";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -29,31 +29,30 @@ function chunkText(text, size = 800, overlap = 100) {
   return chunks;
 }
 
-async function extractPdfText(buffer) {
-  const uint8 = new Uint8Array(buffer);
-  const pdf = await pdfjsLib.getDocument({ data: uint8 }).promise;
-  let text = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(it => it.str).join(" ") + "\n";
-  }
-  return text;
-}
-
 async function run() {
-  const { data: jobs } = await supabase
+  console.log("🔍 Checking for pending ingest jobs…");
+
+  const { data: jobs, error } = await supabase
     .from("ingest_jobs")
     .select("*")
     .eq("status", "pending")
     .order("created_at", { ascending: true });
 
-  if (!jobs || jobs.length === 0) return;
+  if (error) {
+    console.error("❌ JOB FETCH ERROR:", error.message);
+    return;
+  }
+
+  if (!jobs || jobs.length === 0) {
+    console.log("✅ No pending jobs");
+    return;
+  }
 
   for (const job of jobs) {
+    console.log("📄 Processing:", job.original_name);
+
     try {
-      if (!job.file_path || !job.file_path.toLowerCase().endsWith(".pdf")) {
+      if (!job.original_name.toLowerCase().endsWith(".pdf")) {
         await supabase
           .from("ingest_jobs")
           .update({ status: "skipped" })
@@ -61,17 +60,25 @@ async function run() {
         continue;
       }
 
-      // 🔥 FORCE DOWNLOAD — FULL PATH, NO PREFIX LOGIC
-      const { data: file, error } = await supabase.storage
-        .from("knowledge")
-        .download(job.file_path);
+      const prefix = job.file_path.split("/")[0];
+      const bucket = prefix;
+      const table =
+        prefix === "service"
+          ? "service_training_vectors"
+          : "sales_training_vectors";
 
-      if (error || !file) {
-        throw new Error("PDF download failed");
+      const { data: file, error: dlError } = await supabase.storage
+        .from(bucket)
+        .download(job.file_path.replace(`${prefix}/`, ""));
+
+      if (dlError || !file) {
+        throw new Error("Storage download failed");
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const text = await extractPdfText(buffer);
+      const text = await extractText(buffer);
+
+      console.log(`📄 Extracted ${text.length} characters`);
 
       if (!text || text.length < 200) {
         await supabase
@@ -82,7 +89,7 @@ async function run() {
       }
 
       await supabase
-        .from("sales_training_vectors")
+        .from(table)
         .delete()
         .eq("dealer_id", DEALER_ID)
         .eq("source_file", job.original_name);
@@ -95,15 +102,13 @@ async function run() {
           input: chunk.content,
         });
 
-        const { error: insertError } = await supabase
-          .from("sales_training_vectors")
-          .insert({
-            dealer_id: DEALER_ID,
-            source_file: job.original_name,
-            chunk_index: chunk.index,
-            content: chunk.content,
-            embedding: emb.data[0].embedding,
-          });
+        const { error: insertError } = await supabase.from(table).insert({
+          dealer_id: DEALER_ID,
+          source_file: job.original_name,
+          chunk_index: chunk.index,
+          content: chunk.content,
+          embedding: emb.data[0].embedding,
+        });
 
         if (insertError) throw insertError;
       }
@@ -113,16 +118,17 @@ async function run() {
         .update({ status: "complete" })
         .eq("id", job.id);
 
+      console.log("✅ DONE:", job.original_name);
     } catch (err) {
+      console.error("❌ FAILED:", job.original_name);
+      console.error(err);
       await supabase
         .from("ingest_jobs")
         .update({ status: "failed" })
         .eq("id", job.id);
-
-      console.error("INGEST FAILED", err);
-      process.exit(1);
+      throw err;
     }
   }
 }
 
-run();
+run().catch(console.error);
