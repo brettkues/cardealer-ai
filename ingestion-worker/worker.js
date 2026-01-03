@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
-import { extractText } from "unpdf";
+import { extractText as unpdfExtract } from "unpdf";
+import pdfParse from "pdf-parse";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -27,6 +28,22 @@ function chunkText(text, size = 800, overlap = 100) {
     pos += size - overlap;
   }
   return chunks;
+}
+
+async function extractPdfText(buffer) {
+  try {
+    const unpdfResult = await unpdfExtract(buffer);
+    if (unpdfResult && typeof unpdfResult === "string" && unpdfResult.length > 100) {
+      console.log("🔍 Used unpdf");
+      return unpdfResult;
+    }
+  } catch (err) {
+    console.warn("⚠️ unpdf failed, falling back");
+  }
+
+  const parsed = await pdfParse(buffer);
+  console.log("🔍 Used pdf-parse fallback");
+  return parsed.text;
 }
 
 async function run() {
@@ -62,29 +79,26 @@ async function run() {
       }
 
       const bucket = job.file_path.startsWith("service/")
-  ? "service-knowledge"
-  : "knowledge";
+        ? "service-knowledge"
+        : "knowledge";
 
-      const table =
-        bucket === "service"
-          ? "service_training_vectors"
-          : "sales_training_vectors";
+      const table = bucket === "service-knowledge"
+        ? "service_training_vectors"
+        : "sales_training_vectors";
 
       const { data: file, error: dlError } = await supabase.storage
         .from(bucket)
-        .download(job.file_path); // ✅ FIXED: use full path without replace()
+        .download(job.file_path);
 
       if (dlError || !file) {
         console.error("❌ File download failed");
         throw new Error("Storage download failed");
       }
 
-     const buffer = new Uint8Array(await file.arrayBuffer());
-     const text = (await extractText(buffer)) || "";
-console.log("🧠 Raw extractText result:", text?.slice?.(0, 300));
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      const text = (await extractPdfText(buffer)) || "";
 
       console.log(`🧠 Extracted ${text.length} characters`);
-
       if (!text || text.length < 200) {
         console.log("⚠️ Text too short, skipping");
         await supabase
