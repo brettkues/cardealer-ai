@@ -1,7 +1,8 @@
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
-import * as pdfParse from "pdf-parse";
 import OpenAI from "openai";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -13,125 +14,132 @@ const openai = new OpenAI({
 });
 
 const DEALER_ID = process.env.DEALER_ID;
-if (!DEALER_ID) throw new Error("Missing DEALER_ID");
+if (!DEALER_ID) throw new Error("DEALER_ID missing from env");
 
-function chunkText(text, size = 800, overlap = 100) {
+function chunkText(text, maxTokens = 800, overlap = 100) {
   const chunks = [];
-  let pos = 0;
+  const sentences = text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+(?=[A-Z])/);
+
+  let chunk = "";
   let index = 0;
 
-  while (pos < text.length) {
-    const chunk = text.slice(pos, pos + size).trim();
-    if (chunk.length > 50) {
-      chunks.push({ index, content: chunk });
-      index++;
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
+    if ((chunk + sentence).length > maxTokens) {
+      if (chunk.length > 50) {
+        chunks.push({ index, content: chunk.trim() });
+        index++;
+      }
+      const overlapText = chunk
+        .split(" ")
+        .slice(-overlap)
+        .join(" ");
+      chunk = overlapText + " " + sentence;
+    } else {
+      chunk += " " + sentence;
     }
-    pos += size - overlap;
   }
+
+  if (chunk.trim().length > 50) {
+    chunks.push({ index, content: chunk.trim() });
+  }
+
   return chunks;
 }
 
-async function extractPdfText(buffer) {
-  const data = await pdfParse(buffer);
-  return data.text;
+export async function extractPdfText(buffer) {
+  let text = "";
+  try {
+    const pdfParse = require("pdf-parse");
+    const result = await pdfParse(buffer);
+    text = result.text || "";
+  } catch {}
+
+  if (!text || text.trim().length === 0) {
+    try {
+      const { getDocumentProxy, extractText } = await import("unpdf");
+      const pdf = await getDocumentProxy(new Uint8Array(buffer));
+      const { text: unpdfText } = await extractText(pdf, { mergePages: true });
+      text = unpdfText || "";
+    } catch {}
+  }
+
+  return text;
 }
 
 async function run() {
   console.log("🔍 Checking for pending ingest jobs…");
 
-  const { data: jobs, error } = await supabase
+  const { data: jobs, error: jobError } = await supabase
     .from("ingest_jobs")
     .select("*")
     .eq("status", "pending")
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(1);
 
-  if (error) {
-    console.error("❌ JOB FETCH ERROR:", error.message);
-    return;
-  }
-
-  if (!jobs || jobs.length === 0) {
+  if (jobError || !jobs || jobs.length === 0) {
     console.log("✅ No pending jobs");
     return;
   }
 
-  for (const job of jobs) {
-    console.log("📄 Processing:", job.original_name);
+  const job = jobs[0];
+  console.log("📄 Processing:", job.original_name);
 
-    try {
-      if (!job.original_name.toLowerCase().endsWith(".pdf")) {
-        await supabase
-          .from("ingest_jobs")
-          .update({ status: "skipped" })
-          .eq("id", job.id);
-        continue;
-      }
+  const bucket = job.file_path.split("/")[0];
+  const table = bucket === "service" ? "service_training_vectors" : "sales_training_vectors";
 
-      const isService = job.source === "service";
-      const bucket = isService ? "service-knowledge" : "knowledge";
-      const table = isService ? "service_training_vectors" : "sales_training_vectors";
+  const { data: file, error: dlError } = await supabase.storage
+    .from(bucket)
+    .download(job.file_path);
 
-      const { data: file, error: dlError } = await supabase.storage
-        .from(bucket)
-        .download(job.file_path);
-
-      if (dlError || !file) throw new Error("Storage download failed");
-
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const text = await extractPdfText(buffer);
-
-      if (!text || text.length < 200) {
-        await supabase
-          .from("ingest_jobs")
-          .update({ status: "skipped" })
-          .eq("id", job.id);
-        continue;
-      }
-
-      await supabase
-        .from(table)
-        .delete()
-        .eq("dealer_id", DEALER_ID)
-        .eq("source_file", job.original_name);
-
-      const chunks = chunkText(text);
-      console.log("🧩 Chunks created:", chunks.length);
-
-      for (const chunk of chunks) {
-        const emb = await openai.embeddings.create({
-          model: "text-embedding-3-small",
-          input: chunk.content,
-        });
-
-        const { error: insertError } = await supabase.from(table).insert({
-          dealer_id: DEALER_ID,
-          source_file: job.original_name,
-          chunk_index: chunk.index,
-          content: chunk.content,
-          embedding: emb.data[0].embedding,
-        });
-
-        if (insertError) throw insertError;
-      }
-
-      await supabase
-        .from("ingest_jobs")
-        .update({ status: "complete" })
-        .eq("id", job.id);
-
-      console.log("✅ DONE:", job.original_name);
-    } catch (err) {
-      console.error("❌ FAILED:", job.original_name);
-      console.error(err);
-
-      await supabase
-        .from("ingest_jobs")
-        .update({ status: "failed" })
-        .eq("id", job.id);
-
-      throw err;
-    }
+  if (dlError || !file) {
+    console.error("❌ File download failed", dlError?.message);
+    await supabase.from("ingest_jobs").update({ status: "failed" }).eq("id", job.id);
+    return;
   }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const text = await extractPdfText(buffer);
+
+  if (!text || text.length < 200) {
+    console.log("⚠️ Not enough extractable text");
+    await supabase.from("ingest_jobs").update({ status: "skipped" }).eq("id", job.id);
+    return;
+  }
+
+  await supabase
+    .from(table)
+    .delete()
+    .eq("dealer_id", DEALER_ID)
+    .eq("source_file", job.original_name);
+
+  const chunks = chunkText(text);
+  console.log("🧩 Chunks created:", chunks.length);
+
+  for (const chunk of chunks) {
+    const emb = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: chunk.content,
+    });
+
+    const { error: insertError } = await supabase.from(table).insert({
+      dealer_id: DEALER_ID,
+      source_file: job.original_name,
+      chunk_index: chunk.index,
+      content: chunk.content,
+      embedding: emb.data[0].embedding,
+    });
+
+    if (insertError) console.error("❌ INSERT ERROR:", insertError.message);
+  }
+
+  await supabase.from("ingest_jobs").update({ status: "complete" }).eq("id", job.id);
+  console.log("✅ DONE:", job.original_name);
 }
 
-run().catch(console.error);
+run().catch(err => {
+  console.error("❌ WORKER FAILED:");
+  console.error(err);
+});
