@@ -61,7 +61,9 @@ async function run() {
         continue;
       }
 
-      const bucket = job.file_path.split("/")[0];
+      const bucket = job.file_path.startsWith("service/")
+  ? "service-knowledge"
+  : "knowledge";
 
       const table =
         bucket === "service"
