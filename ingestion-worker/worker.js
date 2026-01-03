@@ -43,16 +43,11 @@ async function extractPdfText(buffer) {
 }
 
 async function run() {
-  const { data: jobs, error } = await supabase
+  const { data: jobs } = await supabase
     .from("ingest_jobs")
     .select("*")
     .eq("status", "pending")
     .order("created_at", { ascending: true });
-
-  if (error) {
-    console.error("JOB FETCH ERROR", error);
-    process.exit(1);
-  }
 
   if (!jobs || jobs.length === 0) return;
 
@@ -66,22 +61,13 @@ async function run() {
         continue;
       }
 
-      // 🔑 GENERIC ROUTING (FINAL FIX)
-      const prefix = job.file_path.split("/")[0];
-      const relativePath = job.file_path.replace(`${prefix}/`, "");
+      // 🔥 FORCE DOWNLOAD — FULL PATH, NO PREFIX LOGIC
+      const { data: file, error } = await supabase.storage
+        .from("knowledge")
+        .download(job.file_path);
 
-      const bucket = prefix;
-      const table =
-        prefix === "service"
-          ? "service_training_vectors"
-          : "sales_training_vectors";
-
-      const { data: file, error: dlError } = await supabase.storage
-        .from(bucket)
-        .download(relativePath);
-
-      if (dlError || !file) {
-        throw new Error(`Storage download failed from ${bucket}/${relativePath}`);
+      if (error || !file) {
+        throw new Error("PDF download failed");
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -96,7 +82,7 @@ async function run() {
       }
 
       await supabase
-        .from(table)
+        .from("sales_training_vectors")
         .delete()
         .eq("dealer_id", DEALER_ID)
         .eq("source_file", job.original_name);
@@ -109,13 +95,15 @@ async function run() {
           input: chunk.content,
         });
 
-        const { error: insertError } = await supabase.from(table).insert({
-          dealer_id: DEALER_ID,
-          source_file: job.original_name,
-          chunk_index: chunk.index,
-          content: chunk.content,
-          embedding: emb.data[0].embedding,
-        });
+        const { error: insertError } = await supabase
+          .from("sales_training_vectors")
+          .insert({
+            dealer_id: DEALER_ID,
+            source_file: job.original_name,
+            chunk_index: chunk.index,
+            content: chunk.content,
+            embedding: emb.data[0].embedding,
+          });
 
         if (insertError) throw insertError;
       }
@@ -131,7 +119,7 @@ async function run() {
         .update({ status: "failed" })
         .eq("id", job.id);
 
-      console.error("INGEST FAILED", job.original_name, err);
+      console.error("INGEST FAILED", err);
       process.exit(1);
     }
   }
