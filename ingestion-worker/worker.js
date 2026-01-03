@@ -54,9 +54,7 @@ async function run() {
     process.exit(1);
   }
 
-  if (!jobs || jobs.length === 0) {
-    return;
-  }
+  if (!jobs || jobs.length === 0) return;
 
   for (const job of jobs) {
     try {
@@ -68,25 +66,22 @@ async function run() {
         continue;
       }
 
-      let bucket;
-      let table;
+      // 🔑 GENERIC ROUTING (FINAL FIX)
+      const prefix = job.file_path.split("/")[0];
+      const relativePath = job.file_path.replace(`${prefix}/`, "");
 
-      if (job.file_path.startsWith("service/")) {
-        bucket = "service-knowledge";
-        table = "service_training_vectors";
-      } else if (job.file_path.startsWith("sales-training/")) {
-        bucket = "knowledge";
-        table = "sales_training_vectors";
-      } else {
-        throw new Error(`Unknown file_path prefix: ${job.file_path}`);
-      }
+      const bucket = prefix;
+      const table =
+        prefix === "service"
+          ? "service_training_vectors"
+          : "sales_training_vectors";
 
       const { data: file, error: dlError } = await supabase.storage
         .from(bucket)
-        .download(job.file_path);
+        .download(relativePath);
 
       if (dlError || !file) {
-        throw new Error("Storage download failed");
+        throw new Error(`Storage download failed from ${bucket}/${relativePath}`);
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -122,9 +117,7 @@ async function run() {
           embedding: emb.data[0].embedding,
         });
 
-        if (insertError) {
-          throw insertError;
-        }
+        if (insertError) throw insertError;
       }
 
       await supabase
