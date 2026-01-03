@@ -64,7 +64,7 @@ async function run() {
       const bucket = job.file_path.split("/")[0];
 
       const table =
-        prefix === "service"
+        bucket === "service"
           ? "service_training_vectors"
           : "sales_training_vectors";
 
