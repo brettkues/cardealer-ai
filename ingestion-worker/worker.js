@@ -53,6 +53,7 @@ async function run() {
 
     try {
       if (!job.original_name.toLowerCase().endsWith(".pdf")) {
+        console.log("⏩ Skipping non-PDF file");
         await supabase
           .from("ingest_jobs")
           .update({ status: "skipped" })
@@ -72,16 +73,16 @@ async function run() {
         .download(job.file_path.replace(`${prefix}/`, ""));
 
       if (dlError || !file) {
+        console.error("❌ File download failed");
         throw new Error("Storage download failed");
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const text = await extractText(buffer);
-console.log(`🧠 Extracted ${text.length} characters from ${job.original_name}`);
-
-      console.log(`📄 Extracted ${text.length} characters`);
+      console.log(`🧠 Extracted ${text.length} characters`);
 
       if (!text || text.length < 200) {
+        console.log("⚠️ Text too short, skipping");
         await supabase
           .from("ingest_jobs")
           .update({ status: "skipped" })
@@ -96,6 +97,12 @@ console.log(`🧠 Extracted ${text.length} characters from ${job.original_name}`
         .eq("source_file", job.original_name);
 
       const chunks = chunkText(text);
+      console.log(`🔪 Chunked into ${chunks.length} pieces`);
+
+      if (chunks[0]) {
+        console.log("🧩 First chunk preview:");
+        console.log(chunks[0].content.slice(0, 200));
+      }
 
       for (const chunk of chunks) {
         const emb = await openai.embeddings.create({
@@ -111,7 +118,10 @@ console.log(`🧠 Extracted ${text.length} characters from ${job.original_name}`
           embedding: emb.data[0].embedding,
         });
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("❌ INSERT FAILED:", insertError.message);
+          throw insertError;
+        }
       }
 
       await supabase
