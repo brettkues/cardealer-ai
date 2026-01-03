@@ -1,7 +1,7 @@
-import "dotenv/config";
+""import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
+import * as pdfParse from "pdf-parse";
 import OpenAI from "openai";
-import pdfParse from "pdf-parse";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -19,6 +19,7 @@ function chunkText(text, size = 800, overlap = 100) {
   const chunks = [];
   let pos = 0;
   let index = 0;
+
   while (pos < text.length) {
     const chunk = text.slice(pos, pos + size).trim();
     if (chunk.length > 50) {
@@ -74,13 +75,10 @@ async function run() {
         .from(bucket)
         .download(job.file_path);
 
-      if (dlError || !file) {
-        throw new Error("Storage download failed");
-      }
+      if (dlError || !file) throw new Error("Storage download failed");
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const text = await extractPdfText(buffer);
-      console.log("🧩 Chunks created:", text.length);
 
       if (!text || text.length < 200) {
         await supabase
@@ -90,13 +88,14 @@ async function run() {
         continue;
       }
 
-      const chunks = chunkText(text);
-
       await supabase
         .from(table)
         .delete()
         .eq("dealer_id", DEALER_ID)
         .eq("source_file", job.original_name);
+
+      const chunks = chunkText(text);
+      console.log("🧩 Chunks created:", chunks.length);
 
       for (const chunk of chunks) {
         const emb = await openai.embeddings.create({
@@ -129,6 +128,8 @@ async function run() {
         .from("ingest_jobs")
         .update({ status: "failed" })
         .eq("id", job.id);
+
+      throw err;
     }
   }
 }
