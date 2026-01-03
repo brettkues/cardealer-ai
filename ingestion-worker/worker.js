@@ -88,7 +88,10 @@ async function run() {
   console.log("📄 Processing:", job.original_name);
 
   const bucket = job.file_path.split("/")[0];
-  const table = bucket === "service" ? "service_training_vectors" : "sales_training_vectors";
+  const table = job.file_path.startsWith("service/") || bucket === "service-knowledge"
+  ? "service_training_vectors"
+  : "sales_training_vectors";
+
 
   const { data: file, error: dlError } = await supabase.storage
     .from(bucket)
