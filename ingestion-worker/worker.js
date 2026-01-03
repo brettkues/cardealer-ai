@@ -79,7 +79,7 @@ async function run() {
         throw new Error("Storage download failed");
       }
 
-      const buffer = Buffer.from(await file.arrayBuffer());
+     const buffer = new Uint8Array(await file.arrayBuffer());
       const text = await extractText(buffer);
       console.log(`🧠 Extracted ${text.length} characters`);
 
