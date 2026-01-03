@@ -90,4 +90,58 @@ async function run() {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const text = a
+      const text = await extractPdfText(buffer);
+
+      if (!text || text.length < 200) {
+        await supabase
+          .from("ingest_jobs")
+          .update({ status: "skipped" })
+          .eq("id", job.id);
+        continue;
+      }
+
+      await supabase
+        .from(table)
+        .delete()
+        .eq("dealer_id", DEALER_ID)
+        .eq("source_file", job.original_name);
+
+      const chunks = chunkText(text);
+
+      for (const chunk of chunks) {
+        const emb = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: chunk.content,
+        });
+
+        const { error: insertError } = await supabase.from(table).insert({
+          dealer_id: DEALER_ID,
+          source_file: job.original_name,
+          chunk_index: chunk.index,
+          content: chunk.content,
+          embedding: emb.data[0].embedding,
+        });
+
+        if (insertError) {
+          throw insertError;
+        }
+      }
+
+      await supabase
+        .from("ingest_jobs")
+        .update({ status: "complete" })
+        .eq("id", job.id);
+
+    } catch (err) {
+      await supabase
+        .from("ingest_jobs")
+        .update({ status: "failed" })
+        .eq("id", job.id);
+
+      console.error("INGEST FAILED", job.original_name, err);
+      process.exit(1);
+    }
+  }
+}
+
+run();
