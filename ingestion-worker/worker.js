@@ -80,7 +80,9 @@ async function run() {
       }
 
      const buffer = new Uint8Array(await file.arrayBuffer());
-      const text = await extractText(buffer);
+     const text = (await extractText(buffer)) || "";
+console.log("🧠 Raw extractText result:", text?.slice?.(0, 300));
+
       console.log(`🧠 Extracted ${text.length} characters`);
 
       if (!text || text.length < 200) {
