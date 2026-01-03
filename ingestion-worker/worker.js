@@ -61,8 +61,8 @@ async function run() {
         continue;
       }
 
-      const prefix = job.file_path.split("/")[0];
-      const bucket = prefix;
+      const bucket = job.file_path.split("/")[0];
+
       const table =
         prefix === "service"
           ? "service_training_vectors"
