@@ -24,19 +24,23 @@ export default function ServiceAssistant() {
     setLoading(true);
 
     try {
+      // ✅ FIX: include USER + ASSISTANT messages (last ~5 exchanges)
+      const context = newChat
+        .slice(0, 10)
+        .map(
+          m =>
+            `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`
+        );
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-  message: userMessage.content,
-  role,
-  domain: "service",
-  context: chat
-    .filter(m => m.role === "user")
-    .slice(0, 5)
-    .map(m => m.content),
-}),
-
+          message: userMessage.content,
+          role,
+          domain: "service",
+          context, // 👈 FIXED
+        }),
       });
 
       if (!res.ok) throw new Error();
