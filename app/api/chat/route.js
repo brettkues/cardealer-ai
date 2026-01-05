@@ -1,40 +1,30 @@
 // app/api/chat/route.js
-// FULL DROP-IN — ORIGINAL LOGIC PRESERVED + HARD GUARDS ADDED
+// FULL DROP-IN — ORIGINAL LOGIC PRESERVED + ROLLING CONTEXT (5 TURNS)
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
-import { supabase } from "@/lib/supabaseClient";
-import OpenAIClient from "openai";
 
 /* ================= OPENAI ================= */
-
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const embedClient = new OpenAIClient({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 /* ================= F&I SESSION STATE ================= */
-
 const fiSessions = new Map();
 
 /* ================= HELPERS ================= */
-
 function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
 
 function isRateQuestion(text) {
-  return /\b(rate|rates|term|terms|months|72|84|96|gap|max gap|backend|advance|ltv)\b/i.test(
+  return /\b(rate|rates|term|terms|months|72|84|96|gap|max gap|backend|advance|ltv|year|miles)\b/i.test(
     text || ""
   );
 }
 
 /* ================= QUESTION FRAMING ================= */
-
 async function frameQuestion(originalQuestion) {
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -51,11 +41,11 @@ async function frameQuestion(originalQuestion) {
       { role: "user", content: originalQuestion },
     ],
   });
+
   return response.choices[0].message.content.trim();
 }
 
 /* ================= F&I STEP GUIDANCE ================= */
-
 function getFiStepPrompt(step) {
   switch (step) {
     case 1: return "STEP 1: Identify the deal type (cash, finance, or lease).";
@@ -87,7 +77,6 @@ function fiContinuation(sessionId) {
 }
 
 /* ================= LIVE WEB SEARCH ================= */
-
 async function searchWeb(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -100,13 +89,13 @@ async function searchWeb(query) {
       max_results: 5,
     }),
   });
+
   if (!res.ok) return "";
   const data = await res.json();
   return data.answer || "";
 }
 
 /* ================= TRAINING RELEVANCE CHECK ================= */
-
 async function trainingIsRelevant(question, trainingText) {
   const check = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -123,52 +112,11 @@ async function trainingIsRelevant(question, trainingText) {
       },
     ],
   });
+
   return check.choices[0].message.content.toLowerCase().includes("yes");
 }
 
-/* ================= SAVE TO BRAIN ================= */
-async function saveToBrain({ content, source_file, domain }) {
-  const DEALER_ID = process.env.DEALER_ID;
-  if (!DEALER_ID || !content) {
-    throw new Error("Missing dealer ID or content");
-  }
-
-  const table =
-    domain === "service"
-      ? "service_training_vectors"
-      : "sales_training_vectors";
-
-  const CHUNK_SIZE = 800;
-
-  await supabase
-    .from(table)
-    .delete()
-    .eq("dealer_id", DEALER_ID)
-    .eq("source_file", source_file);
-
-  const chunks = [];
-  for (let i = 0; i < content.length; i += CHUNK_SIZE) {
-    chunks.push(content.slice(i, i + CHUNK_SIZE));
-  }
-
-  const embeddings = await embedClient.embeddings.create({
-    model: "text-embedding-3-small",
-    input: chunks,
-  });
-
-  const rows = chunks.map((chunk, i) => ({
-    dealer_id: DEALER_ID,
-    source_file,
-    chunk_index: i,
-    content: chunk,
-    embedding: embeddings.data[i].embedding,
-  }));
-
-  await supabase.from(table).insert(rows);
-}
-
 /* ================= HANDLER ================= */
-
 export async function POST(req) {
   try {
     const {
@@ -177,11 +125,10 @@ export async function POST(req) {
       role = "sales",
       domain = "sales",
       sessionId,
-      context = [],
+      context = [], // last 5 USER messages from frontend
     } = await req.json();
 
     /* ===== ADD TO BRAIN ===== */
-
     const brainMatch = message.match(
       /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
     );
@@ -202,15 +149,24 @@ export async function POST(req) {
         });
       }
 
-      await saveToBrain({
-  content,
-  source_file: `chat:${userId}:${Date.now()}`,
-  domain,
-});
+      const saveRes = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/train/brain/save`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content,
+            source_file: `chat:${userId}:${Date.now()}`,
+            domain,
+          }),
+        }
+      );
+
+      if (!saveRes.ok) throw new Error("Failed to save training");
 
       return NextResponse.json({
         answer: "Added to dealership brain.",
-        source: "Brain training",
+        source: `Brain training (${domain})`,
       });
     }
 
@@ -218,7 +174,6 @@ export async function POST(req) {
     const framedQuestion = await frameQuestion(message);
 
     /* ================= F&I FLOW ================= */
-
     if (domain === "fi" && sessionId) {
       let state = fiSessions.get(sessionId);
 
@@ -241,37 +196,25 @@ export async function POST(req) {
       }
     }
 
-    /* ================= DEALER TRAINING ================= */
+    /* ================= ROLLING CONTEXT RETRIEVAL ================= */
+    const retrievalQuery =
+      Array.isArray(context) && context.length
+        ? context.join(". ") + ". " + framedQuestion
+        : framedQuestion;
 
-    let retrievalQuery = framedQuestion;
+    const hits = await retrieveKnowledge(retrievalQuery, domain);
 
+    /* ===== SERVICE HARD STOP (FIXED) ===== */
+    if (domain === "service" && (!hits || hits.length === 0)) {
+      return NextResponse.json({
+        answer:
+          "I don’t have that information in the Service knowledge library yet. " +
+          "Please upload the relevant manual, warranty bulletin, or claims guide.",
+        source: "service-knowledge",
+      });
+    }
 
-const contextBlock =
-  Array.isArray(context) && context.length
-    ? context.join(". ") + ". "
-    : "";
-
-const retrievalQuery = contextBlock + framedQuestion;
-
-const hits = await retrieveKnowledge(retrievalQuery, domain);
-
-
-
-    /* ===== SERVICE HARD STOP (NEW) ===== */
-
-    if (domain === "service") {
-  if (!hits || hits.length === 0) {
-    return NextResponse.json({
-      answer:
-        "I don’t have that information in the Service knowledge library yet. " +
-        "Please upload the relevant manual, warranty bulletin, or claims guide.",
-      source: "service-knowledge",
-    });
-  }
-}
-
-    /* ===== RATE SHEET HARD STOP (NEW) ===== */
-
+    /* ===== RATE SHEET HARD STOP ===== */
     if ((domain === "sales" || domain === "fi") && isRateQuestion(framedQuestion)) {
       if (!hits || hits.length === 0) {
         return NextResponse.json({
@@ -314,8 +257,8 @@ const hits = await retrieveKnowledge(retrievalQuery, domain);
     }
 
     /* ================= WEB FALLBACK ================= */
-
     const webAnswer = await searchWeb(framedQuestion);
+
     if (!webAnswer) {
       return NextResponse.json({
         answer: "No internal or external information found." + fiContinuation(sessionId),
@@ -327,11 +270,7 @@ const hits = await retrieveKnowledge(retrievalQuery, domain);
       model: "gpt-4o-mini",
       temperature: 0.3,
       messages: [
-        {
-          role: "system",
-          content:
-            "You are an assistant to an automotive sales and F&I manager.",
-        },
+        { role: "system", content: "You are an assistant to an automotive sales and F&I manager." },
         { role: "user", content: webAnswer },
       ],
     });
