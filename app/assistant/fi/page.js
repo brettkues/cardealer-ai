@@ -144,20 +144,30 @@ How the user knows this step is complete.
   async function sendMessage() {
     if (!msg.trim() || loading) return;
 
-    setChat(c => [{ role: "user", content: msg }, ...c]);
+    const userMessage = { role: "user", content: msg };
+    const newChat = [userMessage, ...chat];
+
+    setChat(newChat);
     setMsg("");
     setLoading(true);
 
     try {
+      const context = newChat
+        .slice(0, 10) // last 5 exchanges (user + assistant)
+        .map(m =>
+          `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`
+        );
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: msg,
+          message: userMessage.content,
           role,
           domain: "fi",
           userId: auth.currentUser?.uid || "fi-user",
           sessionId,
+          context, // ✅ ONLY ADDITION
         }),
       });
 
@@ -181,10 +191,8 @@ How the user knows this step is complete.
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-
       {/* ===== TOP GRID ===== */}
       <div className="grid grid-cols-4 gap-4 p-4 bg-white border-b">
-
         {/* NAV */}
         <div>
           <h2 className="font-bold mb-2">Navigation</h2>
@@ -198,7 +206,6 @@ How the user knows this step is complete.
         {/* TRAINING */}
         <div>
           <h2 className="font-bold mb-2">Training</h2>
-
           <button
             onClick={insertTrainingTemplate}
             className="mb-2 px-3 py-1 bg-green-600 text-white rounded text-sm"
@@ -215,71 +222,18 @@ How the user knows this step is complete.
 
           {showHowTo && (
             <div className="text-xs whitespace-pre-wrap text-gray-700 border p-2 rounded bg-gray-50">
-{`You can TRAIN this assistant — safely and intentionally.
-
-HOW IT WORKS:
-• You may ask the assistant to HELP WRITE training
-  (example: "help me add training for step 3")
-• The assistant will DRAFT training text for you
-• NOTHING is saved automatically
-
-ONLY messages that START WITH:
+{`ONLY messages that START WITH:
 ADD TO BRAIN:
 
-will be saved to the dealership brain.
-
-RECOMMENDED FLOW:
-1. Ask the assistant to help write training
-2. Review and edit the draft
-3. Copy & paste it back using ADD TO BRAIN:
-
-EXAMPLE OF A PROPER TRAINING ENTRY:
-
-ADD TO BRAIN:
-F&I PROCESS – STEP 3 – Deal Screen Location
-
-PURPOSE:
-Explain how to access the correct deal screen in DealerTrack.
-
-PROCEDURE:
-- Open DealerTrack DMS
-- Search by stock number OR Function 20
-- Select the correct customer and vehicle
-
-WARNINGS / COMMON ERRORS:
-- Do not proceed if VIN does not match the vehicle
-- Incorrect deal selection causes funding delays
-
-COMPLETION CHECK:
-Deal screen matches customer, vehicle, and lender approval.`}
+will be saved.`}
             </div>
           )}
         </div>
 
-        {/* STEPS 1–5 */}
+        {/* STEPS */}
         <div>
           <h2 className="font-bold mb-2">F&I Steps</h2>
-          {FI_STEPS.filter(s => s.step <= 5).map(s => (
-            <div key={s.step} className="mb-2">
-              <button
-                onClick={() => toggleStep(s.step)}
-                className="text-sm font-semibold underline"
-              >
-                Step {s.step}: {s.title}
-              </button>
-              {openSteps[s.step] && (
-                <div className="text-xs whitespace-pre-wrap mt-1">
-                  <b>{s.summary}</b>
-                  <div>{s.content}</div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* STEPS 6–11 */}
-        <div>
-          {FI_STEPS.filter(s => s.step > 5).map(s => (
+          {FI_STEPS.map(s => (
             <div key={s.step} className="mb-2">
               <button
                 onClick={() => toggleStep(s.step)}
