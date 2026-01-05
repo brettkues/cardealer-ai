@@ -177,6 +177,7 @@ export async function POST(req) {
       role = "sales",
       domain = "sales",
       sessionId,
+      context = [],
     } = await req.json();
 
     /* ===== ADD TO BRAIN ===== */
