@@ -247,15 +247,15 @@ export async function POST(req) {
     /* ===== SERVICE HARD STOP (NEW) ===== */
 
     if (domain === "service") {
-      if (!hits || hits.length < 2) {
-        return NextResponse.json({
-          answer:
-            "I don’t have that information in the Service knowledge library yet. " +
-            "Please upload the relevant manual, warranty bulletin, or claims guide.",
-          source: "service-knowledge",
-        });
-      }
-    }
+  if (!hits || hits.length === 0) {
+    return NextResponse.json({
+      answer:
+        "I don’t have that information in the Service knowledge library yet. " +
+        "Please upload the relevant manual, warranty bulletin, or claims guide.",
+      source: "service-knowledge",
+    });
+  }
+}
 
     /* ===== RATE SHEET HARD STOP (NEW) ===== */
 
