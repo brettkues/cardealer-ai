@@ -28,10 +28,15 @@ export default function ServiceAssistant() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMessage.content,
-          role,
-          domain: "service",
-        }),
+  message: userMessage.content,
+  role,
+  domain: "service",
+  context: chat
+    .filter(m => m.role === "user")
+    .slice(0, 5)
+    .map(m => m.content),
+}),
+
       });
 
       if (!res.ok) throw new Error();
