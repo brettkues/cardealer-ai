@@ -21,12 +21,22 @@ export default function SalesAssistant() {
     setLoading(true);
 
     try {
+      // 🔴 ONLY ADDITION: build conversational context (last 5 exchanges)
+      const context = newChat
+        .slice(0, 10) // ≈ 5 turns (user + assistant)
+        .map(
+          (m) =>
+            `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`
+        );
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage.content,
           role,
+          domain: "sales", // explicit
+          context,         // 👈 added
         }),
       });
 
