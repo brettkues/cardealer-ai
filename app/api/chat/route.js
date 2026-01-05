@@ -242,7 +242,21 @@ export async function POST(req) {
 
     /* ================= DEALER TRAINING ================= */
 
-    const hits = await retrieveKnowledge(framedQuestion, domain);
+    let retrievalQuery = framedQuestion;
+
+// carry forward last user question if this looks like a follow-up
+if (
+  chat?.length &&
+  framedQuestion.split(" ").length <= 6
+) {
+  const lastUser = chat.find(m => m.role === "user");
+  if (lastUser) {
+    retrievalQuery = `${lastUser.content}. ${framedQuestion}`;
+  }
+}
+
+const hits = await retrieveKnowledge(retrievalQuery, domain);
+
 
     /* ===== SERVICE HARD STOP (NEW) ===== */
 
