@@ -255,7 +255,15 @@ if (
   }
 }
 
+const contextBlock =
+  Array.isArray(context) && context.length
+    ? context.join(". ") + ". "
+    : "";
+
+const retrievalQuery = contextBlock + framedQuestion;
+
 const hits = await retrieveKnowledge(retrievalQuery, domain);
+
 
 
     /* ===== SERVICE HARD STOP (NEW) ===== */
