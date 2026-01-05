@@ -202,9 +202,10 @@ export async function POST(req) {
       }
 
       await saveToBrain({
-        content,
-        source_file: `chat:${userId}:${Date.now()}`,
-      });
+  content,
+  source_file: `chat:${userId}:${Date.now()}`,
+  domain,
+});
 
       return NextResponse.json({
         answer: "Added to dealership brain.",
