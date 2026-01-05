@@ -41,11 +41,11 @@ export async function retrieveKnowledge(message, domain = "sales") {
     : "match_sales_training_vectors";
 
   const { data, error } = await supabase.rpc(rpcName, {
-    query_embedding: queryEmbedding,
-    match_threshold: 0.2,
-    match_count: 15,
-    dealer_id_param: DEALER_ID,
-  });
+  query_embedding: queryEmbedding,
+  match_threshold: domain === "service" ? 0.1 : 0.2,
+  match_count: 15,
+  dealer_id_param: DEALER_ID,
+});
 
   if (error || !data || data.length === 0) {
     retrievalCache.set(cacheKey, null);
