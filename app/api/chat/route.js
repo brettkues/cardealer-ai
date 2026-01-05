@@ -127,17 +127,21 @@ async function trainingIsRelevant(question, trainingText) {
 }
 
 /* ================= SAVE TO BRAIN ================= */
-
-async function saveToBrain({ content, source_file }) {
+async function saveToBrain({ content, source_file, domain }) {
   const DEALER_ID = process.env.DEALER_ID;
   if (!DEALER_ID || !content) {
     throw new Error("Missing dealer ID or content");
   }
 
+  const table =
+    domain === "service"
+      ? "service_training_vectors"
+      : "sales_training_vectors";
+
   const CHUNK_SIZE = 800;
 
   await supabase
-    .from("sales_training_vectors")
+    .from(table)
     .delete()
     .eq("dealer_id", DEALER_ID)
     .eq("source_file", source_file);
@@ -160,7 +164,7 @@ async function saveToBrain({ content, source_file }) {
     embedding: embeddings.data[i].embedding,
   }));
 
-  await supabase.from("sales_training_vectors").insert(rows);
+  await supabase.from(table).insert(rows);
 }
 
 /* ================= HANDLER ================= */
