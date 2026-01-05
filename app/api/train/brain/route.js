@@ -1,65 +1,69 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET() {
+export const runtime = "nodejs";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+const DEALER_ID = process.env.DEALER_ID;
+
+async function getEmbedding(text) {
+  const CHUNK_SIZE = 800;
+  const chunks = [];
+
+  for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+    const chunk = text.slice(i, i + CHUNK_SIZE);
+    if (chunk.length > 50) chunks.push(chunk);
+  }
+
+  const { data } = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: chunks,
+  });
+
+  return chunks.map((chunk, i) => ({
+    content: chunk,
+    embedding: data[i].embedding,
+    chunk_index: i,
+  }));
+}
+
+export async function POST(req) {
   try {
-    const DEALER_ID = process.env.DEALER_ID;
-    if (!DEALER_ID) {
-      return NextResponse.json({ ok: false }, { status: 500 });
+    const { content, source_file, domain = "sales" } = await req.json();
+    if (!DEALER_ID || !content || !source_file) {
+      return NextResponse.json({ ok: false, error: "Missing required input" }, { status: 400 });
     }
 
-    // 1️⃣ Get allowed rate-sheet source files (newest only)
-    const { data: rateRows, error: rateErr } = await supabase
-      .from("latest_rate_sheets")
-      .select("file_path");
+    const table =
+      domain === "service" ? "service_training_vectors" : "sales_training_vectors";
 
-    if (rateErr) throw rateErr;
-
-    const allowedRateSources = new Set(
-      (rateRows || []).map(r => r.file_path)
-    );
-
-    // 2️⃣ Pull all training vectors
-    const { data, error } = await supabase
-      .from("sales_training_vectors")
-      .select("source_file, content, created_at")
+    await supabase
+      .from(table)
+      .delete()
       .eq("dealer_id", DEALER_ID)
-      .order("created_at", { ascending: false });
+      .eq("source_file", source_file);
 
+    const chunks = await getEmbedding(content);
+
+    const payload = chunks.map((chunk) => ({
+      dealer_id: DEALER_ID,
+      source_file,
+      ...chunk,
+    }));
+
+    const { error } = await supabase.from(table).insert(payload);
     if (error) throw error;
 
-    const grouped = {};
-
-    for (const row of data) {
-      const isChat = row.source_file.startsWith("chat:");
-      const isRate = row.source_file.toLowerCase().includes("rate");
-
-      // 🔒 filter old rate sheets
-      if (isRate && !allowedRateSources.has(row.source_file)) continue;
-
-      if (!grouped[row.source_file]) {
-        grouped[row.source_file] = {
-          source_file: row.source_file,
-          created_at: row.created_at,
-          chunks: 0,
-          preview: "",
-          is_chat: isChat,
-        };
-      }
-
-      grouped[row.source_file].chunks++;
-
-      if (!grouped[row.source_file].preview) {
-        grouped[row.source_file].preview = row.content.slice(0, 300);
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      items: Object.values(grouped),
-    });
-
-  } catch {
-    return NextResponse.json({ ok: false }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("❌ SAVE TO BRAIN ERROR:", err);
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
 }
