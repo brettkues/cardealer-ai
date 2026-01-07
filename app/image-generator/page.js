@@ -108,6 +108,7 @@ export default function ImageGeneratorPage() {
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [shareId, setShareId] = useState(null);
   const [error, setError] = useState("");
   const [openLogos, setOpenLogos] = useState(false);
 
@@ -199,7 +200,22 @@ const { ribbonImage } = await ribbonRes.json();
       });
 
       if (!uploadRes.ok) throw new Error("Image upload failed.");
-      setFinalImage(urlData.publicUrl);
+
+const id = crypto.randomUUID();
+
+await fetch("/api/saveImageShare", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    id,
+    image_url: urlData.publicUrl,
+    vehicle_url: vehicleUrl,
+  }),
+});
+
+setFinalImage(urlData.publicUrl);
+setShareId(id);
+
     } catch (err) {
       setError(err.message || "Image build failed.");
     } finally {
@@ -240,15 +256,18 @@ const { ribbonImage } = await ribbonRes.json();
   }
 
   function handleFacebookShare() {
-    if (!finalImage) return;
-    window.open(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-        finalImage
-      )}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  }
+  if (!shareId) return;
+
+  const shareUrl = `${window.location.origin}/share/${shareId}`;
+
+  window.open(
+    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+      shareUrl
+    )}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
 
   function resetAll() {
     setVehicleUrl("");
