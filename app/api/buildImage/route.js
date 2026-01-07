@@ -5,12 +5,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function fetchImage(url) {
-  // Handle base64 data URLs
   if (url.startsWith("data:image")) {
-    return Buffer.from(
-      url.replace(/^data:image\/\w+;base64,/, ""),
-      "base64"
-    );
+    return sharp(
+      Buffer.from(
+        url.replace(/^data:image\/\w+;base64,/, ""),
+        "base64"
+      )
+    ).png().toBuffer();
   }
 
   const res = await fetch(url, {
@@ -23,7 +24,9 @@ async function fetchImage(url) {
     throw new Error(`Image fetch failed: ${res.status}`);
   }
 
-  return Buffer.from(await res.arrayBuffer());
+  return sharp(Buffer.from(await res.arrayBuffer()))
+    .png()
+    .toBuffer();
 }
 
 export async function POST(req) {
@@ -75,22 +78,16 @@ export async function POST(req) {
       { input: vehicleBuffers[1], left: IMG_W, top: 0 },
       { input: vehicleBuffers[2], left: 0, top: CANVAS - IMG_H },
       { input: vehicleBuffers[3], left: IMG_W, top: CANVAS - IMG_H },
+      {
+        input: await fetchImage(ribbonImage),
+        left: 0,
+        top: RIBBON_TOP,
+      },
     ];
 
-    layers.push({
-      input: await fetchImage(ribbonImage),
-      left: 0,
-      top: RIBBON_TOP,
-    });
-
     if (captionImage) {
-      const resized = await sharp(await fetchImage(captionImage))
-        .resize({ width: CANVAS, height: 64, fit: "inside" })
-        .png()
-        .toBuffer();
-
       layers.push({
-        input: resized,
+        input: await fetchImage(captionImage),
         left: 0,
         top: CAPTION_Y,
       });
@@ -122,25 +119,17 @@ export async function POST(req) {
     }
 
     if (disclosureImage) {
-      const resized = await sharp(await fetchImage(disclosureImage))
-        .resize({ width: CANVAS, height: 15, fit: "inside" })
-        .png()
-        .toBuffer();
-
       layers.push({
-        input: resized,
+        input: await fetchImage(disclosureImage),
         left: 0,
         top: DISCLOSURE_Y,
       });
     }
 
-    const finalPng = await base.composite(layers).png().toBuffer();
+    const final = await base.composite(layers).png().toBuffer();
 
-    return new NextResponse(finalPng, {
-      headers: {
-        "Content-Type": "image/png",
-        "Content-Length": finalPng.length.toString(),
-      },
+    return NextResponse.json({
+      output: `data:image/png;base64,${final.toString("base64")}`,
     });
   } catch (err) {
     console.error("BUILD IMAGE ERROR:", err);
