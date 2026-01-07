@@ -186,6 +186,8 @@ const { ribbonImage } = await ribbonRes.json();
 
       const built = await buildRes.json();
       if (!buildRes.ok) throw new Error(built.error);
+setFinalImage(built.output);
+setShareId(null);
 
       const blob = await (await fetch(built.output)).blob();
 
