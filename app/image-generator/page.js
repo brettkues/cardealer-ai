@@ -213,7 +213,7 @@ await fetch("/api/saveImageShare", {
   }),
 });
 
-setFinalImage(urlData.publicUrl);
+setFinalImage(`/shared/${urlData.filename}`);
 setShareId(id);
 
     } catch (err) {
