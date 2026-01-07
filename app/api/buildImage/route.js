@@ -16,17 +16,14 @@ async function fetchImage(url) {
   const res = await fetch(url, {
     cache: "no-store",
     redirect: "follow",
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-    },
+    headers: { "User-Agent": "Mozilla/5.0" },
   });
 
   if (!res.ok) {
     throw new Error(`Image fetch failed: ${res.status}`);
   }
 
-  const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 export async function POST(req) {
@@ -45,11 +42,11 @@ export async function POST(req) {
     while (images.length < 4) images.push(images[0]);
     images.length = 4;
 
-    const canvas = 850;
-    const imgW = 425;
-    const imgH = 319;
+    const CANVAS = 850;
+    const IMG_W = 425;
+    const IMG_H = 319;
 
-    const RIBBON_TOP = imgH;
+    const RIBBON_TOP = IMG_H;
     const CAPTION_Y = RIBBON_TOP;
     const LOGO_TOP = RIBBON_TOP + 64;
     const LOGO_BOTTOM = RIBBON_TOP + 197;
@@ -57,94 +54,93 @@ export async function POST(req) {
 
     const base = sharp({
       create: {
-        width: canvas,
-        height: canvas,
+        width: CANVAS,
+        height: CANVAS,
         channels: 4,
         background: "#ffffff",
       },
     });
 
-    /* ===== VEHICLE IMAGES ===== */
     const vehicleBuffers = await Promise.all(
       images.map(async (url) =>
         sharp(await fetchImage(url))
-          .resize(imgW, imgH, { fit: "cover" })
+          .resize(IMG_W, IMG_H, { fit: "cover" })
+          .png()
           .toBuffer()
       )
     );
 
     const layers = [
       { input: vehicleBuffers[0], left: 0, top: 0 },
-      { input: vehicleBuffers[1], left: imgW, top: 0 },
-      { input: vehicleBuffers[2], left: 0, top: canvas - imgH },
-      { input: vehicleBuffers[3], left: imgW, top: canvas - imgH },
+      { input: vehicleBuffers[1], left: IMG_W, top: 0 },
+      { input: vehicleBuffers[2], left: 0, top: CANVAS - IMG_H },
+      { input: vehicleBuffers[3], left: IMG_W, top: CANVAS - IMG_H },
     ];
 
-    /* ===== RIBBON ===== */
     layers.push({
       input: await fetchImage(ribbonImage),
       left: 0,
       top: RIBBON_TOP,
     });
 
-    /* ===== CAPTION ===== */
     if (captionImage) {
-      const buf = await fetchImage(captionImage);
-      const resized = await sharp(buf)
-        .resize({ width: canvas, height: 64, fit: "inside" })
+      const resized = await sharp(await fetchImage(captionImage))
+        .resize({ width: CANVAS, height: 64, fit: "inside" })
+        .png()
         .toBuffer();
 
-      const meta = await sharp(resized).metadata();
       layers.push({
         input: resized,
-        left: Math.floor((canvas - meta.width) / 2),
+        left: 0,
         top: CAPTION_Y,
       });
     }
 
-    /* ===== LOGOS ===== */
     if (logos.length) {
       const logoBuffers = await Promise.all(logos.map(fetchImage));
       const zoneH = LOGO_BOTTOM - LOGO_TOP;
       const maxH = Math.floor(zoneH * 0.9);
-      const spacing = Math.floor(canvas / logos.length);
+      const spacing = Math.floor(CANVAS / logos.length);
 
       for (let i = 0; i < logos.length; i++) {
         const resized = await sharp(logoBuffers[i])
           .resize({ height: maxH, fit: "inside" })
+          .png()
           .toBuffer();
 
         const meta = await sharp(resized).metadata();
+
         layers.push({
           input: resized,
           left:
             logos.length === 1
-              ? Math.floor((canvas - meta.width) / 2)
+              ? Math.floor((CANVAS - meta.width) / 2)
               : Math.floor(spacing * i + (spacing - meta.width) / 2),
           top: LOGO_TOP + Math.floor((zoneH - meta.height) / 2),
         });
       }
     }
 
-    /* ===== DISCLOSURE ===== */
     if (disclosureImage) {
-      const buf = await fetchImage(disclosureImage);
-      const resized = await sharp(buf)
-        .resize({ width: canvas, height: 15, fit: "inside" })
+      const resized = await sharp(await fetchImage(disclosureImage))
+        .resize({ width: CANVAS, height: 15, fit: "inside" })
+        .png()
         .toBuffer();
 
-      const meta = await sharp(resized).metadata();
       layers.push({
         input: resized,
-        left: Math.floor((canvas - meta.width) / 2),
+        left: 0,
         top: DISCLOSURE_Y,
       });
     }
 
-    const final = await base.composite(layers).png().toBuffer();
+    const finalPng = await base.composite(layers).png().toBuffer();
 
-    return NextResponse.json({
-      output: `data:image/png;base64,${final.toString("base64")}`,
+    return new NextResponse(finalPng, {
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": finalPng.length.toString(),
+      },
     });
   } catch (err) {
     console.error("BUILD IMAGE ERROR:", err);
