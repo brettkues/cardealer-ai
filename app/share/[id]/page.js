@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -9,28 +8,47 @@ const supabase = createClient(
 );
 
 export default async function SharePage({ params }) {
-  const { id } = params;
+  const id = params?.id;
 
-  const { data } = await supabase
-    .from("image_shares")
-    .select("*")
-    .eq("id", id)
-    .single();
+  let imageUrl = "";
+  let vehicleUrl = "/";
 
-  if (!data) notFound();
+  try {
+    const { data } = await supabase
+      .from("image_shares")
+      .select("image_url, vehicle_url")
+      .eq("id", id)
+      .single();
+
+    if (data) {
+      imageUrl = data.image_url;
+      vehicleUrl = data.vehicle_url;
+    }
+  } catch (err) {
+    console.error("Share page lookup failed:", err);
+  }
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://cardealership-ai.com";
 
   return (
     <html>
       <head>
         <title>Vehicle Listing</title>
 
+        {/* Open Graph (Facebook SAFE) */}
         <meta property="og:type" content="website" />
         <meta property="og:title" content="Vehicle Listing" />
-        <meta property="og:image" content={data.image_url} />
-        <meta property="og:url" content={`${process.env.NEXT_PUBLIC_SITE_URL}/share/${id}`} />
-        <meta property="og:description" content="View this vehicle listing." />
+        {imageUrl && <meta property="og:image" content={imageUrl} />}
+        <meta property="og:url" content={`${siteUrl}/share/${id}`} />
+        <meta
+          property="og:description"
+          content="View this vehicle listing."
+        />
 
-        <meta httpEquiv="refresh" content={`0; url=${data.vehicle_url}`} />
+        {/* Human redirect */}
+        <meta httpEquiv="refresh" content={`0; url=${vehicleUrl}`} />
       </head>
       <body>Redirecting…</body>
     </html>
