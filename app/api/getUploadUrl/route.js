@@ -5,13 +5,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    // Force Node + lazy import
     const { Storage } = await import("@google-cloud/storage");
 
     const base64 = process.env.GCP_SERVICE_ACCOUNT_BASE64;
-    if (!base64) {
-      throw new Error("Missing GCP_SERVICE_ACCOUNT_BASE64");
-    }
+    if (!base64) throw new Error("Missing GCP_SERVICE_ACCOUNT_BASE64");
 
     const credentials = JSON.parse(
       Buffer.from(base64, "base64").toString("utf8")
@@ -23,31 +20,25 @@ export async function POST() {
     });
 
     const bucketName = process.env.GCP_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new Error("Missing GCP_STORAGE_BUCKET");
-    }
+    if (!bucketName) throw new Error("Missing GCP_STORAGE_BUCKET");
 
     const bucket = storage.bucket(bucketName);
 
+    // ✅ FINAL, CORRECT PATH
     const filename = `${Date.now()}.png`;
-const storagePath = `generated/${filename}`;
+    const filePath = `generated/${filename}`;
+    const file = bucket.file(filePath);
 
-    const file = bucket.file(filename);
-
-    // 1-day signed upload URL
+    // Signed upload URL (WRITE only)
     const [uploadUrl] = await file.getSignedUrl({
       version: "v4",
       action: "write",
-      expires: Date.now() + 1000 * 60 * 60 * 24,
+      expires: Date.now() + 1000 * 60 * 60, // 1 hour
       contentType: "image/png",
     });
 
-    // 1-day signed read URL
-    const [publicUrl] = await file.getSignedUrl({
-      version: "v4",
-      action: "read",
-      expires: Date.now() + 1000 * 60 * 60 * 24,
-    });
+    // 🔓 PUBLIC URL (NO TOKEN, FACEBOOK SAFE)
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
 
     return NextResponse.json({
       uploadUrl,
