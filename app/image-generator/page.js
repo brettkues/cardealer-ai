@@ -261,12 +261,10 @@ setShareId(id);
   const shareUrl = `${window.location.origin}/share/${shareId}`;
 
   window.open(
-    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-      shareUrl
-    )}`,
-    "_blank",
-    "noopener,noreferrer"
-  );
+  `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(finalImage)}`,
+  "_blank",
+  "noopener,noreferrer"
+);
 }
 
   function resetAll() {
