@@ -29,7 +29,9 @@ export async function POST() {
 
     const bucket = storage.bucket(bucketName);
 
-    const filename = `generated/${Date.now()}.png`;
+    const filename = `${Date.now()}.png`;
+const storagePath = `generated/${filename}`;
+
     const file = bucket.file(filename);
 
     // 1-day signed upload URL
