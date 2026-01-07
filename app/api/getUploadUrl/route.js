@@ -24,21 +24,20 @@ export async function POST() {
 
     const bucket = storage.bucket(bucketName);
 
-    // ✅ FINAL, CORRECT PATH
-    const filename = `${Date.now()}.png`;
-    const filePath = `generated/${filename}`;
-    const file = bucket.file(filePath);
+    // 🔒 upload path
+    const filename = `generated/${Date.now()}.png`;
+    const file = bucket.file(filename);
 
-    // Signed upload URL (WRITE only)
+    // SIGNED UPLOAD (temporary)
     const [uploadUrl] = await file.getSignedUrl({
       version: "v4",
       action: "write",
-      expires: Date.now() + 1000 * 60 * 60, // 1 hour
+      expires: Date.now() + 1000 * 60 * 10, // 10 minutes
       contentType: "image/png",
     });
 
-    // 🔓 PUBLIC URL (NO TOKEN, FACEBOOK SAFE)
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+    // 🔓 PUBLIC READ URL (NO TOKEN, NEVER EXPIRES)
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${filename}`;
 
     return NextResponse.json({
       uploadUrl,
