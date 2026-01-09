@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { auth } from "@/lib/firebaseClient"; // ✅ Firebase auth import
 
 export default function ServiceAssistant() {
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
-
+  const [sessionId] = useState(() => crypto.randomUUID()); // ✅ session ID for F&I style tracking
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -35,6 +36,8 @@ export default function ServiceAssistant() {
           message: userMessage.content,
           role,
           domain: "service",
+          userId: auth.currentUser?.uid || "service-user",
+          sessionId,
           context,
         }),
       });
@@ -52,18 +55,6 @@ export default function ServiceAssistant() {
         },
         ...newChat,
       ]);
-
-      if (userMessage.content.toLowerCase().startsWith("add to brain:")) {
-        await fetch("/api/train/brain", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: userMessage.content,
-            source_file: `chat:${Date.now()}`,
-            domain: "service",
-          }),
-        });
-      }
     } catch {
       setChat([
         { role: "assistant", content: "Service assistant failed." },
