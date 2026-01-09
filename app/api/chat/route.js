@@ -5,15 +5,12 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 
-/* ================= OPENAI ================= */
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ================= F&I SESSION STATE ================= */
 const fiSessions = new Map();
 
-/* ================= HELPERS ================= */
 function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
@@ -24,7 +21,6 @@ function isRateQuestion(text) {
   );
 }
 
-/* ================= QUESTION FRAMING ================= */
 async function frameQuestion(originalQuestion) {
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -45,7 +41,6 @@ async function frameQuestion(originalQuestion) {
   return response.choices[0].message.content.trim();
 }
 
-/* ================= F&I STEP GUIDANCE ================= */
 function getFiStepPrompt(step) {
   switch (step) {
     case 1: return "STEP 1: Identify the deal type (cash, finance, or lease).";
@@ -76,7 +71,6 @@ function fiContinuation(sessionId) {
   );
 }
 
-/* ================= LIVE WEB SEARCH ================= */
 async function searchWeb(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -95,7 +89,6 @@ async function searchWeb(query) {
   return data.answer || "";
 }
 
-/* ================= TRAINING RELEVANCE CHECK ================= */
 async function trainingIsRelevant(question, trainingText) {
   const check = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -116,7 +109,6 @@ async function trainingIsRelevant(question, trainingText) {
   return check.choices[0].message.content.toLowerCase().includes("yes");
 }
 
-/* ================= HANDLER ================= */
 export async function POST(req) {
   try {
     const {
@@ -125,10 +117,9 @@ export async function POST(req) {
       role = "sales",
       domain = "sales",
       sessionId,
-      context = [], // last 5 USER messages from frontend
+      context = [],
     } = await req.json();
 
-    /* ===== ADD TO BRAIN ===== */
     const brainMatch = message.match(
       /^(add to brain|add to knowledge|train the ai with this|save to dealership brain)[,:-]?\s*/i
     );
@@ -150,7 +141,7 @@ export async function POST(req) {
       }
 
       const saveRes = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/train/brain/save`,
+        `${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/train/brain`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -173,7 +164,6 @@ export async function POST(req) {
     const normalized = normalize(message);
     const framedQuestion = await frameQuestion(message);
 
-    /* ================= F&I FLOW ================= */
     if (domain === "fi" && sessionId) {
       let state = fiSessions.get(sessionId);
 
@@ -196,7 +186,6 @@ export async function POST(req) {
       }
     }
 
-    /* ================= ROLLING CONTEXT RETRIEVAL ================= */
     const retrievalQuery =
       Array.isArray(context) && context.length
         ? context.join(". ") + ". " + framedQuestion
@@ -204,7 +193,6 @@ export async function POST(req) {
 
     const hits = await retrieveKnowledge(retrievalQuery, domain);
 
-    /* ===== SERVICE HARD STOP (FIXED) ===== */
     if (domain === "service" && (!hits || hits.length === 0)) {
       return NextResponse.json({
         answer:
@@ -214,7 +202,6 @@ export async function POST(req) {
       });
     }
 
-    /* ===== RATE SHEET HARD STOP ===== */
     if ((domain === "sales" || domain === "fi") && isRateQuestion(framedQuestion)) {
       if (!hits || hits.length === 0) {
         return NextResponse.json({
@@ -256,7 +243,6 @@ export async function POST(req) {
       }
     }
 
-    /* ================= WEB FALLBACK ================= */
     const webAnswer = await searchWeb(framedQuestion);
 
     if (!webAnswer) {
