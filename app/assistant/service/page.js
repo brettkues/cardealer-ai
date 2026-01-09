@@ -24,13 +24,9 @@ export default function ServiceAssistant() {
     setLoading(true);
 
     try {
-      // ✅ FIX: include USER + ASSISTANT messages (last ~5 exchanges)
       const context = newChat
         .slice(0, 10)
-        .map(
-          m =>
-            `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`
-        );
+        .map(m => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`);
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -39,7 +35,7 @@ export default function ServiceAssistant() {
           message: userMessage.content,
           role,
           domain: "service",
-          context, // 👈 FIXED
+          context,
         }),
       });
 
@@ -56,6 +52,18 @@ export default function ServiceAssistant() {
         },
         ...newChat,
       ]);
+
+      if (userMessage.content.toLowerCase().startsWith("add to brain:")) {
+        await fetch("/api/train/brain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: userMessage.content,
+            source_file: `chat:${Date.now()}`,
+            domain: "service",
+          }),
+        });
+      }
     } catch {
       setChat([
         { role: "assistant", content: "Service assistant failed." },
@@ -84,10 +92,7 @@ export default function ServiceAssistant() {
         const init = await fetch("/api/train/service", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-          }),
+          body: JSON.stringify({ filename: file.name, contentType: file.type }),
         });
 
         const initData = await init.json();
@@ -130,14 +135,12 @@ export default function ServiceAssistant() {
 
       <div className="p-4 bg-white border-b">
         <h2 className="font-semibold mb-2">Service Training Upload</h2>
-
         <input
           type="file"
           multiple
           accept="application/pdf"
           onChange={(e) => setFiles([...e.target.files])}
         />
-
         <button
           onClick={uploadServiceTraining}
           disabled={uploading}
@@ -145,7 +148,6 @@ export default function ServiceAssistant() {
         >
           Upload Service Training
         </button>
-
         {uploadStatus && (
           <div className="mt-2 text-sm text-gray-600">{uploadStatus}</div>
         )}
