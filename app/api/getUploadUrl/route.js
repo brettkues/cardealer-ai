@@ -1,55 +1,35 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export async function POST() {
   try {
-    // Force Node + lazy import
-    const { Storage } = await import("@google-cloud/storage");
+    const bucketName = process.env.SUPABASE_IMAGE_BUCKET || "image-shares";
+    const filename = `generated/${Date.now()}-${Math.random()
+      .toString(16)
+      .slice(2)}.png`;
 
-    const base64 = process.env.GCP_SERVICE_ACCOUNT_BASE64;
-    if (!base64) {
-      throw new Error("Missing GCP_SERVICE_ACCOUNT_BASE64");
-    }
+    const { data: uploadData, error: uploadError } =
+      await supabase.storage
+        .from(bucketName)
+        .createSignedUploadUrl(filename, 60 * 10);
 
-    const credentials = JSON.parse(
-      Buffer.from(base64, "base64").toString("utf8")
-    );
+    if (uploadError) throw uploadError;
 
-    const storage = new Storage({
-      projectId: process.env.GCP_PROJECT_ID,
-      credentials,
-    });
-
-    const bucketName = process.env.GCP_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new Error("Missing GCP_STORAGE_BUCKET");
-    }
-
-    const bucket = storage.bucket(bucketName);
-
-    const filename = `generated/${Date.now()}.png`;
-    const file = bucket.file(filename);
-
-    // 1-day signed upload URL
-    const [uploadUrl] = await file.getSignedUrl({
-      version: "v4",
-      action: "write",
-      expires: Date.now() + 1000 * 60 * 60 * 24,
-      contentType: "image/png",
-    });
-
-    // 1-day signed read URL
-    const [publicUrl] = await file.getSignedUrl({
-      version: "v4",
-      action: "read",
-      expires: Date.now() + 1000 * 60 * 60 * 24,
-    });
+    const { data: publicData } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(filename);
 
     return NextResponse.json({
-       uploadUrl,
-      publicUrl,
+      uploadUrl: uploadData.signedUrl,
+      publicUrl: publicData.publicUrl,
     });
   } catch (err) {
     console.error("UPLOAD URL ERROR:", err);
@@ -58,4 +38,4 @@ export async function POST() {
       { status: 500 }
     );
   }
-}     
+}
