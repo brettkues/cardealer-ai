@@ -6,11 +6,13 @@ import LogoPicker from "./LogoPicker";
 
 /* ===== CAPTION PNG SETTINGS ===== */
 const CANVAS_W = 850;
+const RIBBON_H = 212;
+
 // ZONE SPLITS (ABSOLUTE, NOT RELATIVE)
 const CAPTION_TOP = 0;
-const CAPTION_BOTTOM = 64; // ~30% of ribbon
+const CAPTION_BOTTOM = 64;          // ~30% of ribbon
 const LOGO_TOP = 64;
-const LOGO_BOTTOM = 197; // leaves room for disclosure
+const LOGO_BOTTOM = 197;            // leaves room for disclosure
 const DISCLOSURE_TOP = 197;
 const DISCLOSURE_BOTTOM = 212;
 
@@ -46,7 +48,7 @@ function captionToPng(text) {
       const test = line ? line + " " + w : w;
       if (ctx.measureText(test).width > CANVAS_W - 80) {
         lines.push(line);
-        line = w;
+                   line = w;
       } else {
         line = test;
       }
@@ -105,7 +107,6 @@ export default function ImageGeneratorPage() {
   const [images, setImages] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
-  const [shareUrl, setShareUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openLogos, setOpenLogos] = useState(false);
@@ -115,7 +116,6 @@ export default function ImageGeneratorPage() {
     setImages([]);
     setSelectedImages([]);
     setFinalImage(null);
-    setShareUrl("");
 
     if (!vehicleUrl) {
       setError("Vehicle URL is required.");
@@ -149,7 +149,7 @@ export default function ImageGeneratorPage() {
   }
 
   async function handleFinishBuild() {
-    setError("");
+     setError("");
 
     if (selectedImages.length !== 4) {
       setError("Select exactly 4 images.");
@@ -164,13 +164,12 @@ export default function ImageGeneratorPage() {
       // 🔒 SEPARATE PNGs — NO MIXING
       const captionImage = captionToPng(cappedCaption);
       const disclosureImage = disclosureToPng();
+      
+const ribbonRes = await fetch("/api/ribbon", {
+  method: "POST",
+});
+const { ribbonImage } = await ribbonRes.json();
 
-      const ribbonRes = await fetch("/api/ribbon", {
-        method: "POST",
-      });
-      const ribbonData = await ribbonRes.json();
-      if (!ribbonRes.ok) throw new Error(ribbonData.error || "Ribbon failed.");
-      const { ribbonImage } = ribbonData;
 
       const buildRes = await fetch("/api/buildImage", {
         method: "POST",
@@ -180,7 +179,7 @@ export default function ImageGeneratorPage() {
           logos: logoUrls,
           captionImage,
           disclosureImage,
-          ribbonImage,
+          ribbonImage
         }),
       });
 
@@ -199,35 +198,14 @@ export default function ImageGeneratorPage() {
         body: blob,
       });
 
-      if (!uploadRes.ok) throw new Error("Image upload failed.");
-      setFinalImage(urlData.publicUrl);
-
-      const shareId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      const shareRes = await fetch("/api/saveImage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: shareId,
-          image_url: urlData.publicUrl,
-          vehicle_url: vehicleUrl,
-        }),
-      });
-
-      if (shareRes.ok) {
-        const baseUrl = window.location.origin;
-        setShareUrl(`${baseUrl}/share/${shareId}`);
-      } else {
-        setShareUrl("");
-      }
+      if (!uploadRes.ok) throw new Error("Image upload failed.")
+                 setFinalImage(urlData.publicUrl);
     } catch (err) {
       setError(err.message || "Image build failed.");
     } finally {
       setLoading(false);
     }
-  }
+}
 
   async function handleDownload() {
     if (!finalImage) return;
@@ -262,18 +240,15 @@ export default function ImageGeneratorPage() {
   }
 
   function handleFacebookShare() {
-    if (!shareUrl) {
-      setError("Share link is not ready yet. Please try again.");
-      return;
-    }
+    if (!finalImage) return;
     window.open(
       `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-        shareUrl
+        finalImage
       )}`,
       "_blank",
       "noopener,noreferrer"
     );
-  }
+      }
 
   function resetAll() {
     setVehicleUrl("");
@@ -283,7 +258,6 @@ export default function ImageGeneratorPage() {
     setSelectedImages([]);
     setFinalImage(null);
     setError("");
-    setShareUrl("");
   }
 
   return (
@@ -324,7 +298,7 @@ export default function ImageGeneratorPage() {
               <button
                 onClick={() => setOpenLogos(true)}
                 className="px-4 py-2 bg-gray-700 text-white rounded"
-              >
+                          >
                 Select Logos ({logos.length}/3)
               </button>
 
@@ -374,8 +348,8 @@ export default function ImageGeneratorPage() {
                     <div
                       key={src}
                       onClick={() => toggleImage(src)}
-                      className={`relative cursor-pointer border rounded ${
-                        selected ? "ring-4 ring-blue-300" : ""
+                               className={`relative cursor-pointer border rounded ${
+                                       selected ? "ring-4 ring-blue-300" : ""
                       }`}
                     >
                       {selected && (
@@ -421,11 +395,10 @@ export default function ImageGeneratorPage() {
 
             <button
               onClick={handleFacebookShare}
-              disabled={!shareUrl}
               className="px-6 py-3 bg-blue-700 text-white rounded"
             >
               Share on Facebook
-            </button>
+                         </button>
 
             <button
               onClick={resetAll}
