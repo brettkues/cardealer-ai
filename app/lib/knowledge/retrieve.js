@@ -48,7 +48,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
 });
 
   if (error || !data || data.length === 0) {
-    retrievalCache.set(cacheKey, null);
+   retrievalCache.set(cacheKey, null);
     return null;
   }
 
@@ -98,7 +98,7 @@ export async function retrieveKnowledge(message, domain = "sales") {
   if (domain === "fi" && step) {
     const stepHits = final.filter(r =>
       r.content?.includes(`[F&I STEP ${step}]`)
-    );
+   );
     if (stepHits.length) {
       const results = stepHits.map(r => r.content);
       retrievalCache.set(cacheKey, results);
