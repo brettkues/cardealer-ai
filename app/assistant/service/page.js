@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "@/lib/firebaseClient"; // ✅ Firebase auth import
 
 export default function ServiceAssistant() {
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sessionId] = useState(() => crypto.randomUUID()); // ✅ session ID for F&I style tracking
+
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -25,21 +24,19 @@ export default function ServiceAssistant() {
     setLoading(true);
 
     try {
-      const context = newChat
-        .slice(0, 10)
-        .map(m => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`);
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMessage.content,
-          role,
-          domain: "service",
-          userId: auth.currentUser?.uid || "service-user",
-          sessionId,
-          context,
-        }),
+  message: userMessage.content,
+  role,
+  domain: "service",
+  context: chat
+    .filter(m => m.role === "user")
+    .slice(0, 5)
+    .map(m => m.content),
+}),
+
       });
 
       if (!res.ok) throw new Error();
@@ -51,7 +48,7 @@ export default function ServiceAssistant() {
           role: "assistant",
           content: data.answer,
           source: data.source || null,
-          _id: crypto.randomUUID(),
+           _id: crypto.randomUUID(),
         },
         ...newChat,
       ]);
@@ -83,7 +80,10 @@ export default function ServiceAssistant() {
         const init = await fetch("/api/train/service", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: file.name, contentType: file.type }),
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+          }),
         });
 
         const initData = await init.json();
@@ -98,7 +98,7 @@ export default function ServiceAssistant() {
         if (!put.ok) throw new Error();
 
         const fin = await fetch("/api/train/service/finish", {
-          method: "POST",
+         method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             filePath: initData.filePath,
@@ -126,12 +126,14 @@ export default function ServiceAssistant() {
 
       <div className="p-4 bg-white border-b">
         <h2 className="font-semibold mb-2">Service Training Upload</h2>
+
         <input
           type="file"
           multiple
           accept="application/pdf"
           onChange={(e) => setFiles([...e.target.files])}
         />
+
         <button
           onClick={uploadServiceTraining}
           disabled={uploading}
@@ -139,13 +141,14 @@ export default function ServiceAssistant() {
         >
           Upload Service Training
         </button>
+
         {uploadStatus && (
           <div className="mt-2 text-sm text-gray-600">{uploadStatus}</div>
         )}
       </div>
 
       <div className="p-4 border-b bg-gray-50 flex gap-2">
-        <textarea
+          <textarea
           className="flex-1 p-3 border rounded"
           placeholder="Ask a service question…"
           value={msg}
