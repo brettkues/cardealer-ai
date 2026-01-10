@@ -227,7 +227,7 @@ const { ribbonImage } = await ribbonRes.json();
     try {
       const res = await fetch(finalImage);
       const blob = await res.blob();
-      const file = new File([blob], "vehicle-image.png", {    const a = document.createElement("a");
+      const file = new File([blob], "vehicle-image.png", {
          type: "image/png",
       });
 
