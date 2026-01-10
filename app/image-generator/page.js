@@ -48,7 +48,7 @@ function captionToPng(text) {
       const test = line ? line + " " + w : w;
       if (ctx.measureText(test).width > CANVAS_W - 80) {
         lines.push(line);
-        line = w;
+             line = w;
       } else {
         line = test;
       }
@@ -149,7 +149,7 @@ export default function ImageGeneratorPage() {
   }
 
   async function handleFinishBuild() {
-    setError("");
+   setError("");
 
     if (selectedImages.length !== 4) {
       setError("Select exactly 4 images.");
@@ -198,8 +198,8 @@ const { ribbonImage } = await ribbonRes.json();
         body: blob,
       });
 
-      if (!uploadRes.ok) throw new Error("Image upload failed.");
-      setFinalImage(urlData.publicUrl);
+      if (!uploadRes.ok) throw new Error("Image upload failed.")
+           setFinalImage(urlData.publicUrl);
     } catch (err) {
       setError(err.message || "Image build failed.");
     } finally {
@@ -228,7 +228,7 @@ const { ribbonImage } = await ribbonRes.json();
       const res = await fetch(finalImage);
       const blob = await res.blob();
       const file = new File([blob], "vehicle-image.png", {
-         type: "image/png",
+        type: "image/png",
       });
 
       await navigator.share({
@@ -248,7 +248,7 @@ const { ribbonImage } = await ribbonRes.json();
       "_blank",
       "noopener,noreferrer"
     );
-  }
+     }
 
   function resetAll() {
     setVehicleUrl("");
@@ -257,7 +257,7 @@ const { ribbonImage } = await ribbonRes.json();
     setImages([]);
     setSelectedImages([]);
     setFinalImage(null);
-    setError("");  window.open(
+    setError("");
   }
 
   return (
@@ -298,7 +298,7 @@ const { ribbonImage } = await ribbonRes.json();
               <button
                 onClick={() => setOpenLogos(true)}
                 className="px-4 py-2 bg-gray-700 text-white rounded"
-             >
+                    >
                 Select Logos ({logos.length}/3)
               </button>
 
@@ -348,8 +348,8 @@ const { ribbonImage } = await ribbonRes.json();
                     <div
                       key={src}
                       onClick={() => toggleImage(src)}
-             className={`relative cursor-pointer border rounded ${
-                        selected ? "ring-4 ring-blue-300" : ""
+                      className={`relative cursor-pointer border rounded ${
+                                       selected ? "ring-4 ring-blue-300" : ""
                       }`}
                     >
                       {selected && (
@@ -398,7 +398,7 @@ const { ribbonImage } = await ribbonRes.json();
               className="px-6 py-3 bg-blue-700 text-white rounded"
             >
               Share on Facebook
-            </button>
+                   </button>
 
             <button
               onClick={resetAll}
