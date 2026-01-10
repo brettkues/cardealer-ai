@@ -48,7 +48,7 @@ APR:
 • Save after each
 • Print menu
 • DO NOT close MenuSys
-},
+`},
   { step: 5, title: "Build Contract", summary: "DealerTrack contracting", content: `
 • DealerTrack → correct approval → Start Contracting
 • Verify name, address, VIN (critical)
@@ -149,7 +149,7 @@ How the user knows this step is complete.
     setLoading(true);
 
     try {
-     const res = await fetch("/api/chat", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -198,7 +198,7 @@ How the user knows this step is complete.
         {/* TRAINING */}
         <div>
           <h2 className="font-bold mb-2">Training</h2>
-           
+
           <button
             onClick={insertTrainingTemplate}
             className="mb-2 px-3 py-1 bg-green-600 text-white rounded text-sm"
