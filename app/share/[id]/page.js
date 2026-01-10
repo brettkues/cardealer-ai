@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,27 @@ export default async function SharePage({ params }) {
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     "https://cardealership-ai.com";
+  const shareUrl = `${siteUrl}/share/${id}`;
+  const resolvedVehicleUrl = vehicleUrl?.startsWith("http")
+    ? vehicleUrl
+    : `${siteUrl}${vehicleUrl?.startsWith("/") ? "" : "/"}${vehicleUrl}`;
+
+  const userAgent = headers().get("user-agent") || "";
+  const isFacebookCrawler = /facebookexternalhit|facebot/i.test(userAgent);
+
+  if (!isFacebookCrawler) {
+    redirect(resolvedVehicleUrl);
+  }
+
+  const imageType = imageUrl?.endsWith(".png")
+    ? "image/png"
+    : imageUrl?.endsWith(".webp")
+      ? "image/webp"
+      : imageUrl?.endsWith(".gif")
+        ? "image/gif"
+        : "image/jpeg";
+  const imageWidth = 1200;
+  const imageHeight = 630;
 
   return (
     <html>
@@ -41,16 +64,30 @@ export default async function SharePage({ params }) {
         <meta property="og:type" content="website" />
         <meta property="og:title" content="Vehicle Listing" />
         {imageUrl && <meta property="og:image" content={imageUrl} />}
-        <meta property="og:url" content={`${siteUrl}/share/${id}`} />
+        {imageUrl && (
+          <meta property="og:image:secure_url" content={imageUrl} />
+        )}
+        {imageUrl && (
+          <meta property="og:image:type" content={imageType} />
+        )}
+        {imageUrl && (
+          <meta property="og:image:width" content={imageWidth} />
+        )}
+        {imageUrl && (
+          <meta property="og:image:height" content={imageHeight} />
+        )}
+        <meta property="og:url" content={shareUrl} />
         <meta
           property="og:description"
           content="View this vehicle listing."
         />
 
-        {/* Human redirect */}
-        <meta httpEquiv="refresh" content={`0; url=${vehicleUrl}`} />
+        <link rel="canonical" href={shareUrl} />
       </head>
-      <body>Redirecting…</body>
+      <body>
+        <p>View this vehicle listing:</p>
+        <a href={resolvedVehicleUrl}>{resolvedVehicleUrl}</a>
+      </body>
     </html>
   );
 }
