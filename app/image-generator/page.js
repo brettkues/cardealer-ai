@@ -108,7 +108,6 @@ export default function ImageGeneratorPage() {
   const [selectedImages, setSelectedImages] = useState([]);
   const [finalImage, setFinalImage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [shareId, setShareId] = useState(null);
   const [error, setError] = useState("");
   const [openLogos, setOpenLogos] = useState(false);
 
@@ -186,8 +185,6 @@ const { ribbonImage } = await ribbonRes.json();
 
       const built = await buildRes.json();
       if (!buildRes.ok) throw new Error(built.error);
-setFinalImage(built.output);
-setShareId(null);
 
       const blob = await (await fetch(built.output)).blob();
 
@@ -202,22 +199,7 @@ setShareId(null);
       });
 
       if (!uploadRes.ok) throw new Error("Image upload failed.");
-
-const id = crypto.randomUUID();
-
-await fetch("/api/saveImageShare", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    id,
-    image_url: urlData.publicUrl,
-    vehicle_url: vehicleUrl,
-  }),
-});
-
-setFinalImage(`/shared/${urlData.filename}`);
-setShareId(id);
-
+      setFinalImage(urlData.publicUrl);
     } catch (err) {
       setError(err.message || "Image build failed.");
     } finally {
@@ -245,8 +227,8 @@ setShareId(id);
     try {
       const res = await fetch(finalImage);
       const blob = await res.blob();
-      const file = new File([blob], "vehicle-image.png", {
-        type: "image/png",
+      const file = new File([blob], "vehicle-image.png", {    const a = document.createElement("a");
+         type: "image/png",
       });
 
       await navigator.share({
@@ -258,16 +240,15 @@ setShareId(id);
   }
 
   function handleFacebookShare() {
-  if (!shareId) return;
-
-  const shareUrl = `${window.location.origin}/share/${shareId}`;
-
-  window.open(
-  `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(finalImage)}`,
-  "_blank",
-  "noopener,noreferrer"
-);
-}
+    if (!finalImage) return;
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+        finalImage
+      )}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
 
   function resetAll() {
     setVehicleUrl("");
@@ -276,7 +257,7 @@ setShareId(id);
     setImages([]);
     setSelectedImages([]);
     setFinalImage(null);
-    setError("");
+    setError("");  window.open(
   }
 
   return (
@@ -317,7 +298,7 @@ setShareId(id);
               <button
                 onClick={() => setOpenLogos(true)}
                 className="px-4 py-2 bg-gray-700 text-white rounded"
-              >
+             >
                 Select Logos ({logos.length}/3)
               </button>
 
@@ -367,7 +348,7 @@ setShareId(id);
                     <div
                       key={src}
                       onClick={() => toggleImage(src)}
-                      className={`relative cursor-pointer border rounded ${
+             className={`relative cursor-pointer border rounded ${
                         selected ? "ring-4 ring-blue-300" : ""
                       }`}
                     >
