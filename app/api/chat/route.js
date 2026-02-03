@@ -20,7 +20,9 @@ const fiSessions = new Map();
 function normalize(text) {
   return (text || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
-
+function wantsTraining(text = "") {
+  return /(train me|teach me|explain|why|help me understand|walk me through)/i.test(text);
+}
 function isRateQuestion(text) {
   return /\b(rate|rates|term|terms|months|72|84|96|gap|max gap|backend|advance|ltv)\b/i.test(
     text || ""
