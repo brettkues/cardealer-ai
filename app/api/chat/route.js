@@ -289,8 +289,8 @@ export async function POST(req) {
             {
               role: "system",
               content:
-                "You are a senior automotive sales and F&I manager and trainer. " +
-                "Answer using ONLY the dealership training below.\n\n" +
+                "You are a senior automotive sales assistant. " +
+                "Answer using primarily the dealership training below.\n\n" +
                 combinedTraining,
             },
             { role: "user", content: framedQuestion },
